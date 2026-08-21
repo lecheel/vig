@@ -168,6 +168,7 @@ func DefaultKeyMap() wig.ModeKeyMap {
 			"b":      wig.CmdBackwardWord,
 			"x":      wig.CmdDeleteCharForward,
 			"X":      wig.CmdDeleteCharBackward,
+			"Delete": wig.CmdDeleteCharForward,
 			"^":      wig.CmdCursorFirstNonBlank,
 			"$":      wig.CmdGotoLineEnd,
 			"0":      wig.CmdCursorBeginningOfTheLine,
@@ -385,6 +386,7 @@ func DefaultKeyMap() wig.ModeKeyMap {
 			"End":    wig.CmdGotoLineEnd,
 			"PgUp":   wig.CmdScrollUpPage,
 			"PgDn":   wig.CmdScrollDownPage,
+			"Delete": wig.CmdDeleteCharForward,
 		},
 	}
 }

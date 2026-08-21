@@ -64,6 +64,28 @@ insertChar:
 		return
 	}
 
+	if ev.Key() == tcell.KeyDelete {
+		if ctx.Buf.TxStart() {
+			defer ctx.Buf.TxEnd()
+		}
+		line := CursorLine(ctx.Buf, cur)
+		if line == nil {
+			return
+		}
+		if cur.Char < len(line.Value)-1 {
+			TextDelete(ctx.Buf, &Selection{
+				Start: Cursor{Line: cur.Line, Char: cur.Char},
+				End:   Cursor{Line: cur.Line, Char: cur.Char + 1},
+			})
+		} else if line.Next() != nil {
+			TextDelete(ctx.Buf, &Selection{
+				Start: Cursor{Line: cur.Line, Char: cur.Char},
+				End:   Cursor{Line: cur.Line + 1, Char: 0},
+			})
+		}
+		return
+	}
+
 	if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
 		start := *cur
 		start.Char--
