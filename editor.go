@@ -145,7 +145,21 @@ func (e *Editor) OpenFile(path string) (*Buffer, error) {
 		buf.FilePath = path
 	}
 
-	e.Buffers = append(e.Buffers, buf)
+	// Replace the initial empty "[No Name]" buffer if it's unmodified.
+	// This prevents a useless [No Name] buffer from lingering in the
+	// background after the user opens a real file.
+	if len(e.Buffers) == 1 && e.Buffers[0].FilePath == "[No Name]" && !e.Buffers[0].Dirty {
+		e.Buffers[0] = buf
+		// Update any windows that were showing the old [No Name] buffer
+		for _, win := range e.Windows {
+			if win.buf != nil && win.buf.FilePath == "[No Name]" {
+				win.ShowBuffer(buf)
+			}
+		}
+	} else {
+		e.Buffers = append(e.Buffers, buf)
+	}
+
 	e.Lsp.DidOpen(buf)
 
 	hl := TreeSitterHighlighterInitBuffer(e, buf)
