@@ -165,6 +165,63 @@ func (h *TreeSitterHighlighter) ForRange(lineStart, lineEnd uint32) *Highlighter
 	}
 }
 
+func (h *TreeSitterHighlighter) ListFunctions() []Location {
+	tslock.Lock()
+	defer tslock.Unlock()
+
+	if h.tree == nil {
+		return nil
+	}
+
+	var queryStr string
+	var treeSitterLang unsafe.Pointer
+
+	switch {
+	case strings.HasSuffix(h.buf.FilePath, ".go"):
+		queryStr = "(function_declaration name: (identifier) @name) (method_declaration name: (field_identifier) @name)"
+		treeSitterLang = golang.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".rs"):
+		queryStr = "(function_item name: (identifier) @name)"
+		treeSitterLang = rust.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".py"):
+		queryStr = "(function_definition name: (identifier) @name)"
+		treeSitterLang = python.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".c"), strings.HasSuffix(h.buf.FilePath, ".h"):
+		queryStr = "(function_definition declarator: (function_declarator declarator: (identifier) @name))"
+		treeSitterLang = clang.Language()
+	default:
+		return nil
+	}
+
+	q, err := sitter.NewQuery(sitter.NewLanguage(treeSitterLang), queryStr)
+	if err != nil {
+		return nil
+	}
+	defer q.Close()
+
+	qc := sitter.NewQueryCursor()
+	defer qc.Close()
+
+	matches := qc.Matches(q, h.tree.RootNode(), h.sourceCode)
+
+	var funcs []Location
+	for match := matches.Next(); match != nil; match = matches.Next() {
+		for _, cap := range match.Captures {
+			node := cap.Node
+			startByte := node.StartByte()
+			endByte := node.EndByte()
+			text := string(h.sourceCode[startByte:endByte])
+			funcs = append(funcs, Location{
+				Text: text,
+				Line: int(node.StartPosition().Row),
+				Char: 0,
+			})
+		}
+	}
+
+	return funcs
+}
+
 func (h *TreeSitterHighlighter) editEditInput(event EventTextChange) (r sitter.InputEdit) {
 	pointToByte := func(buf *Buffer, line, char int) int {
 		size := 0

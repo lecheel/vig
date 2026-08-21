@@ -140,6 +140,7 @@ func DefaultKeyMap() wig.ModeKeyMap {
 			"F2":     commands.CmdFormatBufferAndSave,
 			"F3":     commands.CmdMakeTest,
 			"F5":     commands.CmdMakeBuild,
+			"F8":     commands.CmdFunctionList,
 			"F11":    commands.CmdOpenSavedSearch,
 			"ctrl+b": commands.CmdMRUBufferPicker,
 			"ctrl+e": wig.CmdScrollDownLine,
