@@ -139,22 +139,44 @@ func ComputeGitSigns(diff string) map[int]rune {
 			continue
 		}
 
-		if line[0] == '+' {
+		switch line[0] {
+		case '-':
+			// Count the whole contiguous run of '-' lines.
+			removedStart := i
+			for i < len(lines) && len(lines[i]) > 0 && lines[i][0] == '-' {
+				i++
+			}
+			removedCount := i - removedStart
+
+			// Count the contiguous run of '+' lines immediately after it.
+			addedStart := i
+			for i < len(lines) && len(lines[i]) > 0 && lines[i][0] == '+' {
+				i++
+			}
+			addedCount := i - addedStart
+			i-- // outer for-loop will i++ again
+
+			changed := min(removedCount, addedCount)
+			for k := 0; k < changed; k++ {
+				signs[currentNewLine] = '~'
+				currentNewLine++
+			}
+			if addedCount > removedCount {
+				for k := 0; k < addedCount-removedCount; k++ {
+					signs[currentNewLine] = '+'
+					currentNewLine++
+				}
+			} else if removedCount > addedCount {
+				markLine := currentNewLine - 1
+				if markLine < 1 {
+					markLine = currentNewLine
+				}
+				signs[markLine] = '-'
+			}
+		case '+':
 			signs[currentNewLine] = '+'
 			currentNewLine++
-		} else if line[0] == '-' {
-			if i+1 < len(lines) && len(lines[i+1]) > 0 && lines[i+1][0] == '+' {
-				signs[currentNewLine] = '~'
-				i++ // skip the next '+' line since we merged it into a modification
-				currentNewLine++
-			} else {
-				if currentNewLine == 1 {
-					signs[currentNewLine] = '-'
-				} else {
-					signs[currentNewLine-1] = '-'
-				}
-			}
-		} else {
+		default:
 			currentNewLine++
 		}
 	}

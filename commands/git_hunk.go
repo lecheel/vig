@@ -85,10 +85,23 @@ func hunkFirstChangeLine(hunk GitHunk) int {
 		case '+':
 			return currentNewLine
 		case '-':
-			if i+1 < len(hunk.Lines) && len(hunk.Lines[i+1]) > 0 && hunk.Lines[i+1][0] == '+' {
+			// Count the contiguous run of '-' lines, then the contiguous
+			// run of '+' lines that follows, mirroring ComputeGitSigns.
+			for i < len(hunk.Lines) && len(hunk.Lines[i]) > 0 && hunk.Lines[i][0] == '-' {
+				i++
+			}
+			addedStart := i
+			for i < len(hunk.Lines) && len(hunk.Lines[i]) > 0 && hunk.Lines[i][0] == '+' {
+				i++
+			}
+			if i > addedStart {
+				// There's a following '+' block: first change is the '~'
+				// (or leftover '+') line at currentNewLine.
 				return currentNewLine
 			}
-			if currentNewLine == 1 {
+			// Pure deletion: marker sits on the line above (or the
+			// current line if the deletion is at the very start).
+			if currentNewLine == hunk.NewStart {
 				return currentNewLine
 			}
 			return currentNewLine - 1
