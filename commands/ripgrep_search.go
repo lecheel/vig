@@ -177,7 +177,7 @@ func rgDoSearch(ctx wig.Context, pat string) {
 	)
 
 	p.SetInput(pat)
-	p.SetTitle("Search Project")
+	p.SetTitle("Search Project (Ctrl-r) ...")
 
 	p.OnChange(func() {
 		p.SetItems(searchFn(p.GetInput()))

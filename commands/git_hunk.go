@@ -19,7 +19,7 @@ type GitHunk struct {
 }
 
 func getGitHunks(ctx wig.Context) ([]GitHunk, error) {
-	stdout, err := getBufferDiff(ctx.Editor, ctx.Buf)
+	stdout, err := getBufferDiff(ctx.Editor, ctx.Buf, ctx.Buf.String())
 	if err != nil {
 		return nil, err
 	}

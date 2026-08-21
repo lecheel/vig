@@ -82,44 +82,39 @@ func NewLspManager(e *Editor) *LspManager {
 
 func (l *LspManager) DidOpen(buf *Buffer) {
 	root, _ := l.e.Projects.FindRoot(buf)
-
+	l.rw.Lock()
 	_, ignore := l.ignore[root]
+	client, ok := l.conns[root]
+	l.rw.Unlock()
 	if ignore {
 		return
 	}
-
-	var client *lspConn
-	var err error
-
-	client, ok := l.conns[root]
-
 	// initialize
 	if !ok {
 		go func() {
 			conf, ok := LspConfigByFileName(buf.FilePath)
 			if !ok {
+				l.rw.Lock()
 				l.ignore[root] = true
+				l.rw.Unlock()
 				return
 			}
-
 			// starts server and returns client conn
-			client, err = l.startAndInitializeServer(conf, buf)
+			newClient, err := l.startAndInitializeServer(conf, buf)
 			if err != nil {
 				l.e.LogMessage("failed to start tcp server")
 				l.e.EchoMessage("failed to start tcp server")
 				return
 			}
-
-			l.conns[root] = client
-			client.didOpen(buf)
+			l.rw.Lock()
+			l.conns[root] = newClient
+			l.rw.Unlock()
+			newClient.didOpen(buf)
 		}()
-
 		return
 	}
-
 	client.didOpen(buf)
 }
-
 func (l *lspConn) didOpen(buf *Buffer) {
 	didOpen := protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
@@ -137,20 +132,17 @@ func (l *lspConn) didOpen(buf *Buffer) {
 
 func (l *LspManager) DidSave(buf *Buffer) {
 	root, _ := l.e.Projects.FindRoot(buf)
-
+	l.rw.Lock()
 	_, ignore := l.ignore[root]
+	client, ok := l.conns[root]
+	l.rw.Unlock()
 	if ignore {
 		return
 	}
-
-	var client *lspConn
 	var err error
-
-	client, ok := l.conns[root]
 	if !ok {
 		return
 	}
-
 	// todo export text only if required by server
 	didSave := protocol.DidSaveTextDocumentParams{
 		Text: buf.String(),
@@ -166,17 +158,16 @@ func (l *LspManager) DidSave(buf *Buffer) {
 
 func (l *LspManager) DidChange(event EventTextChange) {
 	root, _ := l.e.Projects.FindRoot(event.Buf)
-
+	l.rw.Lock()
 	_, ignore := l.ignore[root]
+	client, ok := l.conns[root]
+	l.rw.Unlock()
 	if ignore {
 		return
 	}
-
-	client, ok := l.conns[root]
 	if !ok {
 		return
 	}
-
 	rrange := &protocol.Range{
 		Start: protocol.Position{Line: uint32(event.Start.Line), Character: uint32(event.Start.Char)},
 		End:   protocol.Position{Line: uint32(event.End.Line), Character: uint32(event.End.Char)},
@@ -205,17 +196,16 @@ func (l *LspManager) DidChange(event EventTextChange) {
 
 func (l *LspManager) DidClose(buf *Buffer) {
 	root, _ := l.e.Projects.FindRoot(buf)
-
+	l.rw.Lock()
 	_, ignore := l.ignore[root]
+	client, ok := l.conns[root]
+	l.rw.Unlock()
 	if ignore {
 		return
 	}
-
-	client, ok := l.conns[root]
 	if !ok {
 		return
 	}
-
 	req := protocol.DidCloseTextDocumentParams{
 		TextDocument: protocol.TextDocumentIdentifier{
 			URI: uri.URI(fmt.Sprintf("file://%s", buf.FilePath)),
@@ -230,17 +220,16 @@ func (l *LspManager) DidClose(buf *Buffer) {
 
 func (l *LspManager) Signature(buf *Buffer, cursor Cursor) (sign string) {
 	root, _ := l.e.Projects.FindRoot(buf)
-
+	l.rw.Lock()
 	_, ignore := l.ignore[root]
+	client, ok := l.conns[root]
+	l.rw.Unlock()
 	if ignore {
 		return
 	}
-
-	client, ok := l.conns[root]
 	if !ok {
 		return
 	}
-
 	cur := CursorGet(EditorInst, buf)
 	srReq := protocol.SignatureHelpParams{
 		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
@@ -273,17 +262,16 @@ func (l *LspManager) Signature(buf *Buffer, cursor Cursor) (sign string) {
 
 func (l *LspManager) Hover(buf *Buffer, cursor Cursor) (sign string) {
 	root, _ := l.e.Projects.FindRoot(buf)
-
+	l.rw.Lock()
 	_, ignore := l.ignore[root]
+	client, ok := l.conns[root]
+	l.rw.Unlock()
 	if ignore {
 		return
 	}
-
-	client, ok := l.conns[root]
 	if !ok {
 		return
 	}
-
 	cur := CursorGet(EditorInst, buf)
 	srReq := protocol.HoverParams{
 		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
@@ -312,17 +300,16 @@ func (l *LspManager) Hover(buf *Buffer, cursor Cursor) (sign string) {
 
 func (l *LspManager) Definition(buf *Buffer, cursor Cursor) (filePath string, cur Cursor) {
 	root, _ := l.e.Projects.FindRoot(buf)
-
+	l.rw.Lock()
 	_, ignore := l.ignore[root]
+	client, ok := l.conns[root]
+	l.rw.Unlock()
 	if ignore {
 		return
 	}
-
-	client, ok := l.conns[root]
 	if !ok {
 		return
 	}
-
 	currentCur := CursorGet(EditorInst, buf)
 	pos := protocol.Position{
 		Line:      uint32(currentCur.Line),
@@ -375,17 +362,16 @@ func (l *LspManager) Definition(buf *Buffer, cursor Cursor) (filePath string, cu
 
 func (l *LspManager) Completion(buf *Buffer) (res CompletionItems) {
 	root, _ := l.e.Projects.FindRoot(buf)
-
+	l.rw.Lock()
 	_, ignore := l.ignore[root]
+	client, ok := l.conns[root]
+	l.rw.Unlock()
 	if ignore {
 		return
 	}
-
-	client, ok := l.conns[root]
 	if !ok {
 		return
 	}
-
 	cur := CursorGet(EditorInst, buf)
 	req := protocol.CompletionParams{
 		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
