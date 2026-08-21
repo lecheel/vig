@@ -18,6 +18,7 @@ type EditorConfig struct {
 	GitStatusView       string // "full" or "split"
 	GitBlameView        string // "full" or "split"
 	IndentGuides        bool
+	LspEnabled          bool // If false, LSP servers are never started and all LSP features are no-ops
 }
 
 type View interface {
@@ -118,6 +119,7 @@ func (e *Editor) ReadConfigFile() {
 		GitStatusView:       "full",
 		GitBlameView:        "split",
 		IndentGuides:        true,
+		LspEnabled:          true,
 	}
 }
 

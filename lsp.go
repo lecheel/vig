@@ -81,6 +81,9 @@ func NewLspManager(e *Editor) *LspManager {
 }
 
 func (l *LspManager) DidOpen(buf *Buffer) {
+	if !l.e.Config.LspEnabled {
+		return
+	}
 	root, _ := l.e.Projects.FindRoot(buf)
 	l.rw.Lock()
 	_, ignore := l.ignore[root]

@@ -24,6 +24,7 @@ type EditorSettings struct {
 	GitStatusView       *string `toml:"git_status_view"`
 	GitBlameView        *string `toml:"git_blame_view"`
 	IndentGuides        *bool   `toml:"indent_guides"`
+	LspEnabled          *bool   `toml:"lsp_enabled"`
 }
 
 type UserKeysConfig struct {
@@ -45,6 +46,7 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		GitStatusView:       "full",
 		GitBlameView:        "split",
 		IndentGuides:        true,
+		LspEnabled:          true,
 	}
 	userMap := wig.ModeKeyMap{
 		wig.MODE_NORMAL:       wig.KeyMap{},
@@ -92,7 +94,9 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	if cfg.Editor.IndentGuides != nil {
 		editorCfg.IndentGuides = *cfg.Editor.IndentGuides
 	}
-
+	if cfg.Editor.LspEnabled != nil {
+		editorCfg.LspEnabled = *cfg.Editor.LspEnabled
+	}
 	resolve := func(name string) any {
 		if def, ok := wig.AllCommands[name]; ok {
 			return def.Fn
