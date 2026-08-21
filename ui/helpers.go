@@ -16,12 +16,36 @@ func truncate(s string, maxLen int) string {
 	return string(runes[0:maxLen-3]) + "..."
 }
 
-// drawBox is a thin wrapper around wig.DrawBox so existing callers in
-// the ui package keep working. The real implementation lives in package
-// wig (see draw.go) so it can be shared with code that lives in package
-// wig itself (e.g. the WhichKey popup) without an import cycle.
 func drawBox(s wig.View, x1, y1, x2, y2 int, style tcell.Style) {
-	wig.DrawBox(s, x1, y1, x2, y2, style)
+	if y2 < y1 {
+		y1, y2 = y2, y1
+	}
+	if x2 < x1 {
+		x1, x2 = x2, x1
+	}
+
+	for col := x1; col <= x2; col++ {
+		s.SetContent(col, y1, string(tcell.RuneHLine), style)
+		s.SetContent(col, y2, string(tcell.RuneHLine), style)
+	}
+	for row := y1 + 1; row < y2; row++ {
+		s.SetContent(x1, row, string(tcell.RuneVLine), style)
+		s.SetContent(x2, row, string(tcell.RuneVLine), style)
+	}
+	if y1 != y2 && x1 != x2 {
+		// Only add corners if we need to
+		s.SetContent(x1, y1, "╭", style)
+		s.SetContent(x2, y1, "╮", style)
+		s.SetContent(x1, y2, "╰", style)
+		s.SetContent(x2, y2, "╯", style)
+	}
+
+	// fill bg
+	for row := y1 + 1; row < y2; row++ {
+		for col := x1 + 1; col < x2; col++ {
+			s.SetContent(col, row, " ", style)
+		}
+	}
 }
 
 func drawBox2(s wig.View, x, y, width, height int, style tcell.Style) {

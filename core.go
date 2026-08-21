@@ -1,7 +1,6 @@
 package wig
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"text/scanner"
@@ -546,43 +545,6 @@ func CmdUndo(ctx Context) {
 func CmdRedo(ctx Context) {
 	ctx.Buf.UndoRedo.Redo()
 	EditorInst.Events.Broadcast(EventBufferReloaded{Buf: ctx.Buf})
-}
-
-func CmdExit(ctx Context) {
-	checkDirtyAndExit(ctx, 0)
-}
-
-func CmdForceExit(ctx Context) {
-	ctx.Editor.ExitCh <- 1
-}
-
-func checkDirtyAndExit(ctx Context, startIndex int) {
-	buffers := ctx.Editor.Buffers
-	for i := startIndex; i < len(buffers); i++ {
-		b := buffers[i]
-		if b.FilePath != "" && !strings.HasPrefix(b.FilePath, "[") && b.Dirty {
-			// Buffer is dirty, prompt for confirmation
-			prompt := fmt.Sprintf("Save changes to \"%s\"? (y/n/c)", b.GetName())
-			ConfirmInit(ctx, prompt, func() {
-				// Yes: Save the file and continue checking the rest
-				if err := b.Save(); err != nil {
-					ctx.Editor.EchoMessage(err.Error())
-					return
-				}
-				checkDirtyAndExit(ctx, i+1)
-			}, func() {
-				// No: Discard changes and continue checking the rest
-				checkDirtyAndExit(ctx, i+1)
-			}, func() {
-				// Cancel: Abort exit
-				ctx.Editor.EchoMessage("Exit cancelled")
-			})
-			return
-		}
-	}
-
-	// No dirty buffers found, safe to exit
-	ctx.Editor.ExitCh <- 1
 }
 
 func CmdEnterInsertMode(ctx Context) {

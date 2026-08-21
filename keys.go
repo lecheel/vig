@@ -14,6 +14,13 @@ type ModeKeyMap map[Mode]KeyMap
 type KeyMap map[string]any
 type KeyFallbackFn func(ctx Context, ev *tcell.EventKey)
 
+type WhichKeyUI interface {
+	Update(items KeyMap)
+	Close()
+}
+
+type WhichKeyFactory func(e *Editor, k *KeyHandler, mode Mode, items KeyMap) WhichKeyUI
+
 type KeyHandler struct {
 	keymap ModeKeyMap
 
@@ -24,8 +31,13 @@ type KeyHandler struct {
 	waitingForInput any
 	times           []string
 
-	Macros   *MacrosManager
-	whichKey *WhichKey
+	Macros          *MacrosManager
+	whichKey        WhichKeyUI
+	whichKeyFactory WhichKeyFactory
+}
+
+func (k *KeyHandler) SetWhichKeyFactory(f WhichKeyFactory) {
+	k.whichKeyFactory = f
 }
 
 func DefaultKeyHandler(mergeKeys ModeKeyMap) *KeyHandler {
@@ -117,9 +129,9 @@ func (k *KeyHandler) HandleKey(editor *Editor, ev *tcell.EventKey, mode Mode) {
 		switch action := action.(type) {
 		case KeyMap:
 			k.waitingForInput = action
-			if k.whichKey == nil {
-				k.whichKey = WhichKeyInit(editor, k, mode, action)
-			} else {
+			if k.whichKey == nil && k.whichKeyFactory != nil {
+				k.whichKey = k.whichKeyFactory(editor, k, mode, action)
+			} else if k.whichKey != nil {
 				k.whichKey.Update(action)
 			}
 		case func(Context):

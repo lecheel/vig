@@ -230,7 +230,7 @@ func DefaultKeyMap() wig.ModeKeyMap {
 			},
 			"ctrl+c": wig.KeyMap{
 				"ctrl+c": commands.CmdExecute,
-				"ctrl+x": wig.CmdExit,
+				"ctrl+x": commands.CmdExit,
 			},
 			"ctrl+w": wig.KeyMap{
 				"v":      wig.CmdWindowVSplit,

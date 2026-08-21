@@ -13,7 +13,7 @@ func init() {
 	wig.AllCommands["CmdJumpForward"] = wig.CmdDefinition{Desc: "Jump forward", Fn: wig.CmdJumpForward}
 	wig.AllCommands["CmdReloadBuffer"] = wig.CmdDefinition{Desc: "Reload buffer", Fn: CmdReloadBuffer}
 	wig.AllCommands["CmdNewBuffer"] = wig.CmdDefinition{Desc: "New buffer", Fn: wig.CmdNewBuffer}
-	wig.AllCommands["CmdExit"] = wig.CmdDefinition{Desc: "Quit editor", Fn: wig.CmdExit}
+	wig.AllCommands["CmdExit"] = wig.CmdDefinition{Desc: "Quit editor", Fn: CmdExit}
 	wig.AllCommands["CmdCommandPalettePicker"] = wig.CmdDefinition{Desc: "Command palette", Fn: CmdCommandPalettePicker}
 	wig.AllCommands["CmdFindProjectFilePicker"] = wig.CmdDefinition{Desc: "Find file", Fn: CmdFindProjectFilePicker}
 	wig.AllCommands["CmdBufferPicker"] = wig.CmdDefinition{Desc: "Buffer picker", Fn: CmdBufferPicker}
@@ -33,12 +33,12 @@ func init() {
 	wig.AllCommands["checkhealth"] = wig.CmdDefinition{Desc: "Check health of dependencies", Fn: CmdCheckHealth}
 
 	// Command-line basics
-	wig.AllCommands["q"] = wig.CmdDefinition{Desc: "Quit", Fn: wig.CmdExit}
-	wig.AllCommands["q!"] = wig.CmdDefinition{Desc: "Quit without saving", Fn: wig.CmdForceExit}
+	wig.AllCommands["q"] = wig.CmdDefinition{Desc: "Quit", Fn: CmdExit}
+	wig.AllCommands["q!"] = wig.CmdDefinition{Desc: "Quit without saving", Fn: CmdForceExit}
 	wig.AllCommands["w"] = wig.CmdDefinition{Desc: "Save", Fn: wig.CmdSaveFile}
 	wig.AllCommands["wq"] = wig.CmdDefinition{Desc: "Save and quit", Fn: func(ctx wig.Context) {
 		wig.CmdSaveFile(ctx)
-		wig.CmdExit(ctx)
+		CmdExit(ctx)
 	}}
 	wig.AllCommands["bd"] = wig.CmdDefinition{Desc: "Delete buffer", Fn: wig.CmdKillBuffer}
 	wig.AllCommands["bn"] = wig.CmdDefinition{Desc: "Next buffer", Fn: wig.CmdBufferNext}

@@ -1,5 +1,4 @@
-// whichkey.go
-package wig
+package ui
 
 import (
 	"reflect"
@@ -8,18 +7,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/firstrow/wig"
 	"github.com/gdamore/tcell/v2"
 )
 
 type WhichKey struct {
-	e         *Editor
-	keymap    *KeyHandler
-	mode      Mode
-	items     KeyMap
+	e         *wig.Editor
+	keymap    *wig.KeyHandler
+	mode      wig.Mode
+	items     wig.KeyMap
 	startTime time.Time
 }
 
-func WhichKeyInit(e *Editor, keymap *KeyHandler, mode Mode, items KeyMap) *WhichKey {
+func WhichKeyInit(e *wig.Editor, keymap *wig.KeyHandler, mode wig.Mode, items wig.KeyMap) *WhichKey {
 	w := &WhichKey{
 		e:         e,
 		keymap:    keymap,
@@ -29,9 +29,6 @@ func WhichKeyInit(e *Editor, keymap *KeyHandler, mode Mode, items KeyMap) *Which
 	}
 	e.PushUi(w)
 
-	// Schedule a redraw after 300ms. If the user types faster than that,
-	// the popup will be closed or updated before this redraw matters.
-	// If the popup is closed by then, Redraw simply renders the editor normally.
 	go func() {
 		time.Sleep(300 * time.Millisecond)
 		w.e.Redraw()
@@ -46,13 +43,13 @@ func (w *WhichKey) Close() {
 	w.e.Redraw()
 }
 
-func (w *WhichKey) Plane() RenderPlane  { return PlaneEditor }
-func (w *WhichKey) Mode() Mode          { return w.mode }
-func (w *WhichKey) Keymap() *KeyHandler { return w.keymap }
+func (w *WhichKey) Plane() wig.RenderPlane  { return wig.PlaneEditor }
+func (w *WhichKey) Mode() wig.Mode          { return w.mode }
+func (w *WhichKey) Keymap() *wig.KeyHandler { return w.keymap }
 
-func (w *WhichKey) Update(items KeyMap) {
+func (w *WhichKey) Update(items wig.KeyMap) {
 	w.items = items
-	w.startTime = time.Now() // Reset timer on each key press
+	w.startTime = time.Now()
 
 	go func() {
 		time.Sleep(300 * time.Millisecond)
@@ -61,8 +58,7 @@ func (w *WhichKey) Update(items KeyMap) {
 }
 
 func getActionName(action any) string {
-	// If it's another KeyMap, it means it opens another menu
-	if _, ok := action.(KeyMap); ok {
+	if _, ok := action.(wig.KeyMap); ok {
 		return "..."
 	}
 
@@ -71,7 +67,6 @@ func getActionName(action any) string {
 		fn := runtime.FuncForPC(val.Pointer())
 		if fn != nil {
 			name := fn.Name()
-			// Extract the function name, e.g. "CmdCursorLeft" from "github.com/firstrow/wig.CmdCursorLeft"
 			parts := strings.Split(name, ".")
 			if len(parts) > 0 {
 				return parts[len(parts)-1]
@@ -82,8 +77,7 @@ func getActionName(action any) string {
 	return ""
 }
 
-func (w *WhichKey) Render(view View) {
-	// Don't render until 300ms have passed since the last key press
+func (w *WhichKey) Render(view wig.View) {
 	if time.Since(w.startTime) < 300*time.Millisecond {
 		return
 	}
@@ -97,7 +91,7 @@ func (w *WhichKey) Render(view View) {
 	maxLen := 0
 	for _, k := range keys {
 		desc := getActionName(w.items[k])
-		lineLen := len(k) + len(desc) + 3 // +3 for " : "
+		lineLen := len(k) + len(desc) + 3
 		if lineLen > maxLen {
 			maxLen = lineLen
 		}
@@ -115,22 +109,17 @@ func (w *WhichKey) Render(view View) {
 
 	vw, vh := view.Size()
 	x := vw - boxW
-	y := vh - boxH - 1 // -1 moves it one line up from the bottom
+	y := vh - boxH - 1
 
-	bgStyle := Color("default")
+	bgStyle := wig.Color("default")
 	keyStyle := bgStyle.Foreground(tcell.ColorGreen)
 
-	// Draw the box (border + filled interior) with the shared helper.
-	// DrawBox takes inclusive end coordinates, so the box occupies
-	// columns x..x+boxW-1 and rows y..y+boxH-1. The interior is already
-	// filled with bgStyle, so we only need to overlay the key/desc text;
-	// the trailing-space padding and right border are handled by DrawBox.
-	DrawBox(view, x, y, x+boxW-1, y+boxH-1, bgStyle)
+	drawBox(view, x, y, x+boxW-1, y+boxH-1, bgStyle)
 
 	for i, k := range keys {
 		desc := getActionName(w.items[k])
 		yCur := y + i + 1
-		xCur := x + 2 // border at x, padding at x+1, content from x+2
+		xCur := x + 2
 
 		view.SetContent(xCur, yCur, k, keyStyle)
 		xCur += len(k)

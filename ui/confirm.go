@@ -1,25 +1,26 @@
-package wig
+package ui
 
 import (
 	"strings"
 
+	"github.com/firstrow/wig"
 	"github.com/gdamore/tcell/v2"
 )
 
 type ConfirmWidget struct {
-	editor   *Editor
-	keymap   *KeyHandler
+	editor   *wig.Editor
+	keymap   *wig.KeyHandler
 	prompt   string
 	onYes    func()
 	onNo     func()
 	onCancel func()
 }
 
-func (u *ConfirmWidget) Plane() RenderPlane  { return PlaneEditor }
-func (u *ConfirmWidget) Mode() Mode          { return MODE_NORMAL }
-func (u *ConfirmWidget) Keymap() *KeyHandler { return u.keymap }
+func (u *ConfirmWidget) Plane() wig.RenderPlane  { return wig.PlaneEditor }
+func (u *ConfirmWidget) Mode() wig.Mode          { return wig.MODE_NORMAL }
+func (u *ConfirmWidget) Keymap() *wig.KeyHandler { return u.keymap }
 
-func ConfirmInit(ctx Context, prompt string, onYes func(), onNo func(), onCancel func()) *ConfirmWidget {
+func ConfirmInit(ctx wig.Context, prompt string, onYes func(), onNo func(), onCancel func()) *ConfirmWidget {
 	widget := &ConfirmWidget{
 		editor:   ctx.Editor,
 		prompt:   prompt,
@@ -28,50 +29,50 @@ func ConfirmInit(ctx Context, prompt string, onYes func(), onNo func(), onCancel
 		onCancel: onCancel,
 	}
 
-	km := KeyMap{
-		"y": func(ctx Context) {
+	km := wig.KeyMap{
+		"y": func(ctx wig.Context) {
 			ctx.Editor.PopUi()
 			if widget.onYes != nil {
 				widget.onYes()
 			}
 		},
-		"Y": func(ctx Context) {
+		"Y": func(ctx wig.Context) {
 			ctx.Editor.PopUi()
 			if widget.onYes != nil {
 				widget.onYes()
 			}
 		},
-		"Enter": func(ctx Context) {
+		"Enter": func(ctx wig.Context) {
 			ctx.Editor.PopUi()
 			if widget.onYes != nil {
 				widget.onYes()
 			}
 		},
-		"n": func(ctx Context) {
+		"n": func(ctx wig.Context) {
 			ctx.Editor.PopUi()
 			if widget.onNo != nil {
 				widget.onNo()
 			}
 		},
-		"N": func(ctx Context) {
+		"N": func(ctx wig.Context) {
 			ctx.Editor.PopUi()
 			if widget.onNo != nil {
 				widget.onNo()
 			}
 		},
-		"c": func(ctx Context) {
+		"c": func(ctx wig.Context) {
 			ctx.Editor.PopUi()
 			if widget.onCancel != nil {
 				widget.onCancel()
 			}
 		},
-		"C": func(ctx Context) {
+		"C": func(ctx wig.Context) {
 			ctx.Editor.PopUi()
 			if widget.onCancel != nil {
 				widget.onCancel()
 			}
 		},
-		"Esc": func(ctx Context) {
+		"Esc": func(ctx wig.Context) {
 			ctx.Editor.PopUi()
 			if widget.onCancel != nil {
 				widget.onCancel()
@@ -79,17 +80,17 @@ func ConfirmInit(ctx Context, prompt string, onYes func(), onNo func(), onCancel
 		},
 	}
 
-	widget.keymap = NewKeyHandler(ModeKeyMap{MODE_NORMAL: km})
+	widget.keymap = wig.NewKeyHandler(wig.ModeKeyMap{wig.MODE_NORMAL: km})
 	ctx.Editor.PushUi(widget)
 	return widget
 }
 
-func (u *ConfirmWidget) Render(view View) {
+func (u *ConfirmWidget) Render(view wig.View) {
 	vw, vh := view.Size()
 	y := vh - 1
 
 	// Use the statusline style to blend in with the bottom bar
-	st := Color("ui.statusline")
+	st := wig.Color("ui.statusline")
 
 	// Fill the entire bottom line with the background color
 	bg := strings.Repeat(" ", vw)

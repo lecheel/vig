@@ -16,6 +16,7 @@ import (
 	"github.com/firstrow/wig/config"
 	"github.com/firstrow/wig/metrics"
 	"github.com/firstrow/wig/render"
+	"github.com/firstrow/wig/ui"
 )
 
 func main() {
@@ -59,6 +60,10 @@ func main() {
 			keys.Map(mode, kmap)
 		}
 	}
+
+	keys.SetWhichKeyFactory(func(e *wig.Editor, k *wig.KeyHandler, mode wig.Mode, items wig.KeyMap) wig.WhichKeyUI {
+		return ui.WhichKeyInit(e, k, mode, items)
+	})
 
 	editor := wig.NewEditor(
 		render.NewMView(tscreen, 0, 0, w, h),
