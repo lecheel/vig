@@ -134,8 +134,15 @@ func (e *Editor) OpenFile(path string) (*Buffer, error) {
 
 	buf, err := BufferReadFile(path)
 	if err != nil {
-		e.LogError(err)
-		return nil, err
+		// If the file doesn't exist, create a new empty buffer instead of failing.
+		// This allows opening non-existent files from the command line (e.g. `wig newfile.txt`)
+		// and from file pickers, behaving like standard editors.
+		if !os.IsNotExist(err) {
+			e.LogError(err)
+			return nil, err
+		}
+		buf = NewBuffer()
+		buf.FilePath = path
 	}
 
 	e.Buffers = append(e.Buffers, buf)

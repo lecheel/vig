@@ -15,9 +15,10 @@ import (
 )
 
 type Renderer struct {
-	rw     sync.Mutex
-	e      *wig.Editor
-	screen tcell.Screen
+	rw      sync.Mutex
+	e       *wig.Editor
+	screen  tcell.Screen
+	stopped bool
 }
 
 func New(e *wig.Editor, screen tcell.Screen) *Renderer {
@@ -28,11 +29,24 @@ func New(e *wig.Editor, screen tcell.Screen) *Renderer {
 	return r
 }
 
+// Stop prevents further rendering. This must be called before tscreen.Fini()
+// to avoid a data race / panic when the input loop tries to render one last
+// time after the screen has been finalized.
+func (r *Renderer) Stop() {
+	r.rw.Lock()
+	defer r.rw.Unlock()
+	r.stopped = true
+}
+
 // TODO: rendering must be optimized.
 func (r *Renderer) Render() {
 	// TODO: schedule render
 	r.rw.Lock()
 	defer r.rw.Unlock()
+
+	if r.stopped {
+		return
+	}
 
 	r.screen.Fill(' ', wig.Color("ui.background"))
 

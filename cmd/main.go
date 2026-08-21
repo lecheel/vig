@@ -219,6 +219,9 @@ func main() {
 		posCache.Save()
 	}
 
+	// Stop the renderer before finalizing the screen to prevent
+	// a panic from a concurrent render triggered by the event loop.
+	renderer.Stop()
 	tscreen.Clear()
 	tscreen.Fini()
 }
