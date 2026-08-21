@@ -58,12 +58,14 @@ func LoadLanguagesConfig() LangConfig {
 	colorThemeFile := EditorInst.RuntimeDir(fmt.Sprintf("%s.toml", "languages"))
 	data, err := os.ReadFile(colorThemeFile)
 	if err != nil {
-		panic("failed to load languages.toml file")
+		// Fail soft: no languages.toml just means no LSP servers and no
+		// per-language indent config, not a reason to crash on startup.
+		return LangConfig{}
 	}
 	cfg := LangConfig{}
 	err = toml.Unmarshal(data, &cfg)
 	if err != nil {
-		panic("failed to parse languages.toml")
+		return LangConfig{}
 	}
 	return cfg
 }
