@@ -86,7 +86,7 @@ func init() {
 	wig.AllCommands["CmdMakeBuild"] = wig.CmdDefinition{Desc: "Make build", Fn: CmdMakeBuild}
 	wig.AllCommands["CmdMakeTest"] = wig.CmdDefinition{Desc: "Make test", Fn: CmdMakeTest}
 	wig.AllCommands["CmdRgUnderCursor"] = wig.CmdDefinition{Desc: "Ripgrep search under cursor", Fn: CmdRgUnderCursor}
-	wig.AllCommands["CmdOpenSavedSearch"] = wig.CmdDefinition{Desc: "Reopen saved search", Fn: CmdOpenSavedSearch}
+	wig.AllCommands["CmdOpenSavedSearch"] = wig.CmdDefinition{Desc: "Reopen rg search", Fn: CmdOpenSavedSearch}
 	wig.AllCommands["cn"] = wig.CmdDefinition{Desc: "Next result", Fn: wig.CmdVisitNextLine}
 	wig.AllCommands["cp"] = wig.CmdDefinition{Desc: "Previous result", Fn: wig.CmdVisitPrevLine}
 }

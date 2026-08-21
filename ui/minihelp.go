@@ -59,7 +59,7 @@ func (u *MiniHelpWidget) Render(view wig.View) {
 		boxW = 140
 	}
 	colW := (boxW - 2) / 6 // 6 per row
-	boxH := 4              // 2 rows of items + 2 borders
+	boxH := 3              // 2 rows of items (drawBox2 adds the top/bottom borders itself) dont know why need 3 for 2 lines
 
 	x := (vw - boxW) / 2
 	if x < 0 {
@@ -67,8 +67,11 @@ func (u *MiniHelpWidget) Render(view wig.View) {
 	}
 	y := vh - boxH - 2 // Move 1 line up
 
-	// Use statusline style for the blue border look, fallback to default
-	style := wig.Color("ui.statusline")
+	// Use a dedicated popup/border style for the box, fallback to statusline, then linenr
+	style := wig.Color("ui.popup.border")
+	if style == wig.Color("default") {
+		style = wig.Color("ui.statusline")
+	}
 	if style == wig.Color("default") {
 		style = wig.Color("ui.linenr")
 	}
@@ -76,9 +79,16 @@ func (u *MiniHelpWidget) Render(view wig.View) {
 	drawBox2(view, x, y, boxW, boxH, style)
 
 	// Title on top border
-	view.SetContent(x+2, y, " F - Keys ", wig.Color("ui.linenr"))
+	titleStyle := wig.Color("ui.popup.title")
+	if titleStyle == wig.Color("default") {
+		titleStyle = style
+	}
+	view.SetContent(x+2, y, " F - Keys ", titleStyle)
 
-	textStyle := wig.Color("ui.text")
+	textStyle := wig.Color("ui.popup.text")
+	if textStyle == wig.Color("default") {
+		textStyle = wig.Color("ui.text")
+	}
 	if textStyle == wig.Color("default") {
 		textStyle = style.Reverse(true)
 	}
