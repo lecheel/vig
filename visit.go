@@ -2,6 +2,20 @@ package wig
 
 import "strings"
 
+// VisitHandlerFunc handles visit-line behavior for special buffer types.
+// Returns true if the handler handled the visit, false to fall through
+// to the default flat-format behavior.
+type VisitHandlerFunc func(ctx Context, sourceBuf *Buffer, movement func(Context)) bool
+
+var visitHandlers []VisitHandlerFunc
+
+// RegisterVisitHandler registers a handler for visit-line behavior.
+// Called by packages that cannot be imported by wig (e.g. rgcollect)
+// to handle special buffer types like [rg].
+func RegisterVisitHandler(fn VisitHandlerFunc) {
+	visitHandlers = append(visitHandlers, fn)
+}
+
 type VisitOptions struct {
 	Movement      func(Context)
 	Center        bool
@@ -18,8 +32,19 @@ type VisitOptions struct {
 // 3. If still not found, return nil.
 func findVisitSourceBuffer(e *Editor) *Buffer {
 	for _, win := range e.Windows {
-		if win.Buffer() != nil && strings.HasPrefix(win.Buffer().FilePath, "[rgcollect") {
-			return win.Buffer()
+		if win.Buffer() != nil {
+			fp := win.Buffer().FilePath
+			if strings.HasPrefix(fp, "[rgcollect") || fp == "[rg]" {
+				return win.Buffer()
+			}
+		}
+	}
+
+	// For [rg] (grouped, no split), search all buffers since it may
+	// not be visible after opening a file replaces it in the window.
+	for _, buf := range e.Buffers {
+		if buf.FilePath == "[rg]" {
+			return buf
 		}
 	}
 
@@ -123,6 +148,12 @@ func CmdVisitNextLine(ctx Context) {
 		return
 	}
 
+	for _, handler := range visitHandlers {
+		if handler(ctx, sourceBuf, CmdCursorLineDown) {
+			return
+		}
+	}
+
 	VisitAtLine(ctx, sourceBuf, VisitOptions{
 		Movement:      CmdCursorLineDown,
 		ParseLocation: true,
@@ -134,6 +165,12 @@ func CmdVisitPrevLine(ctx Context) {
 	sourceBuf := findVisitSourceBuffer(ctx.Editor)
 	if sourceBuf == nil {
 		return
+	}
+
+	for _, handler := range visitHandlers {
+		if handler(ctx, sourceBuf, CmdCursorLineUp) {
+			return
+		}
 	}
 
 	VisitAtLine(ctx, sourceBuf, VisitOptions{
