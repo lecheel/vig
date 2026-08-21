@@ -15,6 +15,7 @@ type AutocompleteWidget struct {
 	items          wig.CompletionItems
 	eventsListener <-chan wig.Event
 	activeItem     int
+	refreshFn      func() wig.CompletionItems
 }
 
 func (u *AutocompleteWidget) Plane() wig.RenderPlane {
@@ -25,6 +26,7 @@ func AutocompleteInit(
 	ctx wig.Context,
 	pos wig.Position,
 	items wig.CompletionItems,
+	refreshFn func() wig.CompletionItems,
 ) *AutocompleteWidget {
 	if len(items.Items) == 0 {
 		return nil
@@ -35,6 +37,7 @@ func AutocompleteInit(
 		pos:        pos,
 		items:      items,
 		activeItem: 0,
+		refreshFn:  refreshFn,
 	}
 
 	widget.keymap = wig.NewKeyHandler(wig.ModeKeyMap{
@@ -93,10 +96,14 @@ func AutocompleteInit(
 	go func() {
 		for event := range widget.eventsListener {
 			event.Wg.Done()
-			switch e := event.Msg.(type) {
+			switch event.Msg.(type) {
 			case wig.EventTextChange:
 				widget.activeItem = 0
-				widget.items = ctx.Editor.Lsp.Completion(e.Buf)
+				if widget.refreshFn != nil {
+					widget.items = widget.refreshFn()
+				} else {
+					widget.items = wig.CompletionItems{}
+				}
 				if len(widget.items.Items) == 0 {
 					widget.Close()
 				}
@@ -131,7 +138,7 @@ func (w *AutocompleteWidget) selectItem(ctx wig.Context) {
 	line := wig.CursorLine(ctx.Buf, cur)
 	item := w.items.Items[w.activeItem]
 
-	if item.TextEdit == nil || (item.TextEdit.Insert.Start.Line == 0 && item.TextEdit.Insert.Start.Character == 0) {
+	if item.TextEdit == nil || (item.TextEdit.NewText == "" && item.TextEdit.Insert.Start.Line == 0 && item.TextEdit.Insert.Start.Character == 0) {
 		label := item.Label
 		if label == "" {
 			label = item.InsertText

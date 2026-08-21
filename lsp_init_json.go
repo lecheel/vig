@@ -55,6 +55,39 @@ type CompletionItems struct {
 	} `json:"items"`
 }
 
+// AddItem appends a simple text completion item to the list.
+func (c *CompletionItems) AddItem(label, insertText string, textEdit *CompletionTextEdit) {
+	c.Items = append(c.Items, struct {
+		Label               string              `json:"label"`
+		InsertText          string              `json:"insertText"`
+		Kind                int                 `json:"kind"`
+		Detail              string              `json:"detail"`
+		Documentation       Documentation       `json:"documentation"`
+		Preselect           bool                `json:"preselect,omitempty"`
+		SortText            string              `json:"sortText"`
+		FilterText          string              `json:"filterText,omitempty"`
+		InsertTextFormat    int                 `json:"insertTextFormat"`
+		TextEdit            *CompletionTextEdit `json:"textEdit,omitempty"`
+		AdditionalTextEdits []struct {
+			Range struct {
+				Start struct {
+					Line      int `json:"line"`
+					Character int `json:"character"`
+				} `json:"start"`
+				End struct {
+					Line      int `json:"line"`
+					Character int `json:"character"`
+				} `json:"end"`
+			} `json:"range"`
+			NewText string `json:"newText"`
+		} `json:"additionalTextEdits,omitempty"`
+	}{
+		Label:      label,
+		InsertText: insertText,
+		TextEdit:   textEdit,
+	})
+}
+
 type Documentation struct {
 	Kind  string `json:"kind"`
 	Value string `json:"value"`

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/firstrow/wig"
+	"github.com/firstrow/wig/autocomplete"
 	"github.com/firstrow/wig/commands"
 	"github.com/firstrow/wig/ui"
 	"github.com/pelletier/go-toml/v2"
@@ -378,6 +379,7 @@ func DefaultKeyMap() wig.ModeKeyMap {
 			"ctrl+j": wig.CmdCursorLineDown,
 			"ctrl+k": wig.CmdCursorLineUp,
 			"ctrl+n": wig.CmdAutocompleteTrigger,
+			"alt+/":  autocomplete.BufferComplete,
 			"Left":   wig.CmdCursorLeft,
 			"Right":  wig.CmdCursorRight,
 			"Up":     wig.CmdCursorLineUp,
