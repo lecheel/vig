@@ -2,6 +2,8 @@ package wig
 
 import (
 	"fmt"
+	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -162,6 +164,41 @@ func mergeKeyMaps(k1 KeyMap, k2 KeyMap) {
 		}
 		k1[rkey] = k2[rkey]
 	}
+}
+
+func (k *KeyHandler) GetActionDescriptions(keys []string) map[string]string {
+	res := make(map[string]string)
+
+	descMap := make(map[uintptr]string)
+	for _, cmd := range AllCommands {
+		if fn, ok := cmd.Fn.(func(Context)); ok {
+			descMap[reflect.ValueOf(fn).Pointer()] = cmd.Desc
+		}
+	}
+
+	for _, key := range keys {
+		if action, ok := k.keymap[MODE_NORMAL][key]; ok {
+			switch a := action.(type) {
+			case func(Context):
+				ptr := reflect.ValueOf(a).Pointer()
+				if desc, found := descMap[ptr]; found {
+					res[key] = desc
+				} else {
+					fn := runtime.FuncForPC(ptr)
+					if fn != nil {
+						name := fn.Name()
+						parts := strings.Split(name, ".")
+						if len(parts) > 0 {
+							res[key] = parts[len(parts)-1]
+						}
+					}
+				}
+			case KeyMap:
+				res[key] = "..."
+			}
+		}
+	}
+	return res
 }
 
 func (k *KeyHandler) Fallback(fn func(ctx Context, ev *tcell.EventKey)) {

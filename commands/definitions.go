@@ -2,9 +2,11 @@ package commands
 
 import (
 	"github.com/firstrow/wig"
+	"github.com/firstrow/wig/ui"
 )
 
 func init() {
+	wig.AllCommands["CmdMiniHelp"] = wig.CmdDefinition{Desc: "Mini help", Fn: ui.CmdMiniHelp}
 	wig.AllCommands["CmdFunctionList"] = wig.CmdDefinition{Desc: "Function list", Fn: CmdFunctionList}
 	wig.AllCommands["CmdFormatBuffer"] = wig.CmdDefinition{Desc: "Format buffer", Fn: CmdFormatBuffer}
 	wig.AllCommands["CmdSearchProject"] = wig.CmdDefinition{Desc: "Search project", Fn: CmdSearchProject}
