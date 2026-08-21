@@ -21,6 +21,18 @@ import (
 
 func main() {
 	for i, arg := range os.Args[1:] {
+		if arg == "--help" || arg == "-h" {
+			fmt.Println("Usage: wig [options] [file ...]")
+			fmt.Println("\nOptions:")
+			fmt.Println("  --edit       Open configuration file for editing.")
+			fmt.Println("  --health     Check health of dependencies.")
+			fmt.Println("  --help, -h   Show this help message.")
+			fmt.Println("\nExamples:")
+			fmt.Println("  wig main.go          Open main.go")
+			fmt.Println("  wig newfile.txt      Create or open newfile.txt")
+			fmt.Println("  wig --edit           Edit config file")
+			return
+		}
 		if arg == "--edit" || arg == "edit" {
 			home, _ := os.UserHomeDir()
 			configDir := filepath.Join(home, ".config", "wig")
