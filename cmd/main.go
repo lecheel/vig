@@ -141,11 +141,27 @@ func main() {
 			case *tcell.EventPaste:
 				if ev.Start() {
 					pasteStarted = true
+					pastedText = ""
 				}
 				if ev.End() {
 					pasteStarted = false
-					fmt.Println("paste:", pastedText)
-					pastedText = ""
+					if pastedText != "" {
+						ctx := editor.NewContext()
+						if ctx.Buf != nil {
+							cur := wig.ContextCursorGet(ctx)
+							line := wig.CursorLine(ctx.Buf, cur)
+							if ctx.Buf.TxStart() {
+								wig.TextInsert(ctx.Buf, line, cur.Char, pastedText)
+								ctx.Buf.TxEnd()
+							} else {
+								wig.TextInsert(ctx.Buf, line, cur.Char, pastedText)
+							}
+							for range pastedText {
+								wig.CursorInc(ctx.Buf, cur)
+							}
+							editor.Redraw()
+						}
+					}
 				}
 			case *tcell.EventResize:
 				tscreen.Sync()
@@ -154,7 +170,11 @@ func main() {
 				renderer.Render()
 			case *tcell.EventKey:
 				if pasteStarted == true {
-					pastedText = fmt.Sprintf("%s%s", pastedText, string(ev.Rune()))
+					if ev.Key() == tcell.KeyEnter {
+						pastedText += "\n"
+					} else if ev.Rune() != 0 {
+						pastedText += string(ev.Rune())
+					}
 					continue
 				}
 

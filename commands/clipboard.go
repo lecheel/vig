@@ -10,8 +10,7 @@ func CmdClipboardCopy(ctx wig.Context) {
 	if sel == "" {
 		return
 	}
-	text := wig.SelectionToString(ctx.Buf, ctx.Buf.Selection)
-	clipboard.WriteAll(text)
+	clipboard.WriteAll(sel)
 	wig.CmdNormalMode(ctx)
 	ctx.Editor.EchoMessage("copy to clipboard")
 }
@@ -27,9 +26,9 @@ func CmdClipboardPaste(ctx wig.Context) {
 			}
 			if ctx.Buf.Mode() == wig.MODE_VISUAL_LINE {
 				wig.SelectionDelete(ctx)
+				line := wig.CursorLine(ctx.Buf, cur)
+				wig.TextInsert(ctx.Buf, line, len(line.Value)-1, "\n")
 			}
-			line := wig.CursorLine(ctx.Buf, cur)
-			wig.TextInsert(ctx.Buf, line, len(line.Value)-1, "\n")
 			ctx.Buf.TxEnd()
 		}
 	}
