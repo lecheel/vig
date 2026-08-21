@@ -70,7 +70,10 @@ func (m *MacrosManager) StopRepeatRecording() {
 		return
 	}
 	m.recordRepeat = false
-	if len(m.repeatKeys) >= 2 {
+	// Allow single-key commands (like Ctrl-j or x) to be repeated.
+	// Previously this required >= 2 keys, which broke repeating
+	// any single ctrl/alt command.
+	if len(m.repeatKeys) >= 1 {
 		m.registers["."] = m.repeatKeys
 	}
 	m.repeatKeys = []tcell.EventKey{}

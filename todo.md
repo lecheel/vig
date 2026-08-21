@@ -12,9 +12,11 @@
 - **Syntax Highlighting**: Tree-sitter (Go, Rust, Odin, C, Python).
 - **UI Elements**: Statusline, Which-Key popup, Command line, Search prompt, Hover popup, Autocomplete, Mini Help, Confirm prompts.
 - **System**: System clipboard support (yank/paste, bracketed paste), Position cache (remember cursor on reopen), Basic macros, CLI flags (`--help`, `--edit`, `--health`).
-- **Configuration**: `config.toml` (settings, keys), `languages.toml` (LSP/Indent), Themes.
+- **Configuration**: `config.toml` (settings, keys), `languages.toml` (LSP/Indent), Themes. Ability to disable keys via `CmdDummyNA`.
 - **Visual Block**: `Ctrl-v` rectangle selection, block insert (`I`), block yank (`y`), block delete (`d`/`x`).
 - **Result Navigation**: `:cn` and `:cp` to jump through search results.
+- **Command Line**: `:123` to jump to line, `:e <file>` to open/create files, basic Ex commands.
+- **Completion**: LSP completions, manual local buffer completions (`Alt-/`), single-candidate auto-complete.
 
 ---
 
