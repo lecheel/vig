@@ -747,3 +747,9 @@ func CmdBufferLast(ctx Context) {
 func CmdPaste(ctx Context) {
 	panic(1)
 }
+
+// CmdDummyNA is a no-op command used to disable or override keybindings in config.toml
+// by mapping them to this function (e.g. `x = "CmdDummyNA"`).
+func CmdDummyNA(ctx Context) {
+	// No operation
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/firstrow/wig"
@@ -228,6 +229,15 @@ func (u *uiCommandLine) execute(cmd string) {
 	cmd = strings.TrimSpace(cmd)
 	if cmd == "" {
 		u.e.PopUi()
+		return
+	}
+
+	// Jump to line number (e.g. :123)
+	if lineNum, err := strconv.Atoi(cmd); err == nil {
+		u.e.PopUi()
+		ctx := u.e.NewContext()
+		ctx.Count = uint32(lineNum)
+		wig.CmdGotoLine0(ctx)
 		return
 	}
 
