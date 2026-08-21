@@ -13,6 +13,7 @@ import (
 	clang "github.com/tree-sitter/tree-sitter-c/bindings/go"
 	golang "github.com/tree-sitter/tree-sitter-go/bindings/go"
 	python "github.com/tree-sitter/tree-sitter-python/bindings/go"
+	rust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
 )
 
 // TODO: rewrite treesitter to use channel and scheduled parsing. some day.
@@ -81,6 +82,9 @@ func TreeSitterHighlighterInitBuffer(e *Editor, buf *Buffer) *TreeSitterHighligh
 	case strings.HasSuffix(buf.FilePath, ".py"):
 		treeSitterLang = python.Language()
 		qpath = "python"
+	case strings.HasSuffix(buf.FilePath, ".rs"):
+		treeSitterLang = rust.Language()
+		qpath = "rust"
 	default:
 		return nil
 	}

@@ -352,6 +352,17 @@ func CmdFormatBuffer(ctx wig.Context) {
 		}
 		reloadBufferPostFormat(ctx)
 	}
+
+	if strings.HasSuffix(ctx.Buf.FilePath, ".rs") {
+		cmd := exec.Command("rustfmt", ctx.Buf.FilePath)
+		stdout, err := cmd.CombinedOutput()
+		if err != nil {
+			ctx.Editor.LogError(err)
+			ctx.Editor.LogMessage(string(stdout))
+			return
+		}
+		reloadBufferPostFormat(ctx)
+	}
 }
 
 // reloadBufferPostFormat reloads the buffer after formatting. If FormatOnSave

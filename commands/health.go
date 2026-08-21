@@ -226,7 +226,7 @@ func collectHealthSections() []healthSection {
 	queriesDir := filepath.Join(configDir, "queries")
 
 	langSection := healthSection{
-		title: "Supported Languages (Go, Odin, Python)",
+		title: "Supported Languages (Go, Odin, Python, Rust)",
 		items: []healthItem{
 			// Go
 			checkTool("go", "Go compiler & formatter (go fmt)", false, "version"),
@@ -242,6 +242,11 @@ func collectHealthSections() []healthSection {
 			// Python
 			checkTool("pyright", "Python language server (LSP)", false, "--version"),
 			checkPath("  └ tree-sitter query (python)", filepath.Join(queriesDir, "python", "highlights.scm"), false),
+
+			// Rust
+			checkTool("rustfmt", "Rust formatter (rustfmt)", false, "--version"),
+			checkTool("rust-analyzer", "Rust language server (LSP)", false, "--version"),
+			checkPath("  └ tree-sitter query (rust)", filepath.Join(queriesDir, "rust", "highlights.scm"), false),
 		},
 	}
 	sections = append(sections, langSection)
