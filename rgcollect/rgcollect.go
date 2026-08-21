@@ -299,8 +299,9 @@ func CmdRgEnter(ctx wig.Context) {
 }
 
 // visitLineGrouped is the registered visit handler for [rg] buffers.
-// It looks up the lineMap to find the result and opens the file in the
-// current window. Returns true if handled (buffer is [rg]).
+// It looks up the lineMap to find result lines (kind == 2), automatically
+// skipping blank/title lines (kind == 0) and filename headers (kind == 1)
+// when navigating with :cn or :cp.
 func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.Context)) bool {
 	if sourceBuf.FilePath != "[rg]" {
 		return false
@@ -324,51 +325,87 @@ func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.
 		sourceWin = ctx.Editor.ActiveWindow()
 	}
 
-	// Apply movement (nil = visit current line, no movement)
+	bufCur := wig.WindowCursorGet(sourceWin, sourceBuf)
+	startLine := bufCur.Line
+	maxLines := sourceBuf.Lines.Len
+
 	if movement != nil {
 		nctx := ctx.Editor.NewContext()
 		nctx.Buf = sourceBuf
 		nctx.Win = sourceWin
+
 		movement(nctx)
+		newLine := bufCur.Line
+
+		found := false
+		if newLine > startLine {
+			// Moving forward (e.g. :cn / CmdCursorLineDown) — find next result line
+			for l := newLine; l < maxLines; l++ {
+				if entry, ok := rgState.lineMap[l]; ok && entry.kind == 2 {
+					bufCur.Line = l
+					bufCur.Char = 0
+					found = true
+					break
+				}
+			}
+			if !found {
+				bufCur.Line = startLine
+				ctx.Editor.EchoMessage("No more search results")
+				return true
+			}
+		} else if newLine < startLine {
+			// Moving backward (e.g. :cp / CmdCursorLineUp) — find previous result line
+			for l := newLine; l >= 0; l-- {
+				if entry, ok := rgState.lineMap[l]; ok && entry.kind == 2 {
+					bufCur.Line = l
+					bufCur.Char = 0
+					found = true
+					break
+				}
+			}
+			if !found {
+				bufCur.Line = startLine
+				ctx.Editor.EchoMessage("No earlier search results")
+				return true
+			}
+		} else {
+			// Cursor didn't move — search forward from current line
+			for l := newLine; l < maxLines; l++ {
+				if entry, ok := rgState.lineMap[l]; ok && entry.kind == 2 {
+					bufCur.Line = l
+					bufCur.Char = 0
+					found = true
+					break
+				}
+			}
+			if !found {
+				return true
+			}
+		}
 	}
 
-	// Get cursor position
-	bufCur := wig.WindowCursorGet(sourceWin, sourceBuf)
-
 	entry, ok := rgState.lineMap[bufCur.Line]
-	if !ok {
+	if !ok || entry.kind != 2 {
 		return true
 	}
 
-	switch entry.kind {
-	case 2: // result line
-		if entry.resultIdx >= len(rgState.results) {
-			return true
-		}
-		result := rgState.results[entry.resultIdx]
-		targetBuf, err := ctx.Editor.OpenFile(result.FilePath)
-		if err != nil {
-			return true
-		}
-		ctx.Buf = targetBuf
-		ctx.Win = sourceWin
-		sourceWin.VisitBuffer(ctx, wig.Cursor{
-			Line: result.Line - 1,
-			Char: result.Char,
-		})
-		wig.CmdCursorCenter(ctx)
-	case 1: // filename header
-		targetBuf, err := ctx.Editor.OpenFile(entry.filePath)
-		if err != nil {
-			return true
-		}
-		ctx.Buf = targetBuf
-		ctx.Win = sourceWin
-		sourceWin.VisitBuffer(ctx, wig.Cursor{
-			Line: 0,
-			Char: 0,
-		})
+	if entry.resultIdx >= len(rgState.results) {
+		return true
 	}
+
+	result := rgState.results[entry.resultIdx]
+	targetBuf, err := ctx.Editor.OpenFile(result.FilePath)
+	if err != nil {
+		ctx.Editor.EchoMessage("Cannot open: " + err.Error())
+		return true
+	}
+	ctx.Buf = targetBuf
+	ctx.Win = sourceWin
+	sourceWin.VisitBuffer(ctx, wig.Cursor{
+		Line: max(result.Line-1, 0),
+		Char: result.Char,
+	})
+	wig.CmdCursorCenter(ctx)
 
 	return true
 }
