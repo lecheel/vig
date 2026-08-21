@@ -19,7 +19,17 @@ import (
 )
 
 func main() {
-	for _, arg := range os.Args[1:] {
+	for i, arg := range os.Args[1:] {
+		if arg == "--edit" || arg == "edit" {
+			home, _ := os.UserHomeDir()
+			configDir := filepath.Join(home, ".config", "wig")
+			os.MkdirAll(configDir, 0755)
+			configPath := filepath.Join(configDir, "config.toml")
+			if _, err := os.Stat(configPath); os.IsNotExist(err) {
+				os.WriteFile(configPath, []byte{}, 0644)
+			}
+			os.Args[i+1] = configPath
+		}
 		if arg == "--health" || arg == "health" {
 			commands.PrintCLIHealth()
 			return
