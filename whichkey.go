@@ -120,15 +120,17 @@ func (w *WhichKey) Render(view View) {
 	bgStyle := Color("default")
 	keyStyle := bgStyle.Foreground(tcell.ColorGreen)
 
-	view.SetContent(x, y, "┌"+strings.Repeat("─", boxW-2)+"┐", bgStyle)
+	// Draw the box (border + filled interior) with the shared helper.
+	// DrawBox takes inclusive end coordinates, so the box occupies
+	// columns x..x+boxW-1 and rows y..y+boxH-1. The interior is already
+	// filled with bgStyle, so we only need to overlay the key/desc text;
+	// the trailing-space padding and right border are handled by DrawBox.
+	DrawBox(view, x, y, x+boxW-1, y+boxH-1, bgStyle)
 
 	for i, k := range keys {
 		desc := getActionName(w.items[k])
 		yCur := y + i + 1
-		xCur := x
-
-		view.SetContent(xCur, yCur, "│ ", bgStyle)
-		xCur += 2
+		xCur := x + 2 // border at x, padding at x+1, content from x+2
 
 		view.SetContent(xCur, yCur, k, keyStyle)
 		xCur += len(k)
@@ -137,17 +139,5 @@ func (w *WhichKey) Render(view View) {
 		xCur += 3
 
 		view.SetContent(xCur, yCur, desc, bgStyle)
-		xCur += len(desc)
-
-		// dynamically calculate the remaining spaces to hit the right border exactly
-		spaces := (x + boxW - 1) - xCur
-		if spaces > 0 {
-			view.SetContent(xCur, yCur, strings.Repeat(" ", spaces), bgStyle)
-			xCur += spaces
-		}
-
-		view.SetContent(xCur, yCur, "│", bgStyle)
 	}
-
-	view.SetContent(x, y+boxH-1, "└"+strings.Repeat("─", boxW-2)+"┘", bgStyle)
 }
