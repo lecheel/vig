@@ -167,11 +167,22 @@ func ComputeGitSigns(diff string) map[int]rune {
 					currentNewLine++
 				}
 			} else if removedCount > addedCount {
-				markLine := currentNewLine - 1
-				if markLine < 1 {
-					markLine = currentNewLine
+				// Standard gitgutter convention: a pure deletion has no
+				// row of its own in the new file, so the marker attaches
+				// to the line immediately following the deletion point,
+				// which is exactly what currentNewLine already points at
+				// (deletions never advance it). Only fall back to the
+				// preceding line when there's nothing left in the hunk
+				// for the deletion to attach to (e.g. trailing deletion
+				// at EOF).
+				hasFollowingLine := i < len(lines) && len(lines[i]) > 0
+				if hasFollowingLine {
+					signs[currentNewLine] = '-'
+				} else if currentNewLine > 1 {
+					signs[currentNewLine-1] = '-'
+				} else {
+					signs[currentNewLine] = '-'
 				}
-				signs[markLine] = '-'
 			}
 		case '+':
 			signs[currentNewLine] = '+'

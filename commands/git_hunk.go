@@ -99,8 +99,13 @@ func hunkFirstChangeLine(hunk GitHunk) int {
 				// (or leftover '+') line at currentNewLine.
 				return currentNewLine
 			}
-			// Pure deletion: marker sits on the line above (or the
-			// current line if the deletion is at the very start).
+			// Pure deletion: mirrors ComputeGitSigns — the marker
+			// attaches to the line immediately following the deletion
+			// (currentNewLine), falling back to the preceding line only
+			// when nothing follows in the hunk.
+			if i < len(hunk.Lines) && len(hunk.Lines[i]) > 0 {
+				return currentNewLine
+			}
 			if currentNewLine == hunk.NewStart {
 				return currentNewLine
 			}
