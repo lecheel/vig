@@ -26,6 +26,7 @@ func Init(ctx wig.Context, title string, items []wig.Location) {
 	buf.ResetLines()
 	buf.FilePath = "[rgcollect " + title + "]"
 	buf.Highlighter = &TestHighlighter{}
+
 	buf.KeyHandler = wig.DefaultKeyHandler(wig.ModeKeyMap{
 		wig.MODE_NORMAL: wig.KeyMap{
 			"Enter": func(ctx wig.Context) {
@@ -246,6 +247,36 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 	buf.KeyHandler = wig.DefaultKeyHandler(wig.ModeKeyMap{
 		wig.MODE_NORMAL: wig.KeyMap{
 			"Enter": CmdRgEnter,
+			"l": func(ctx wig.Context) {
+				cur := wig.ContextCursorGet(ctx)
+				hl, ok := ctx.Buf.Highlighter.(*RgHighlighter)
+				if !ok {
+					return
+				}
+				for i := cur.Line + 1; i < ctx.Buf.Lines.Len; i++ {
+					if entry, ok := hl.LineMap[i]; ok && entry.kind == 1 {
+						cur.Line = i
+						cur.Char = 0
+						wig.CmdCursorCenter(ctx)
+						return
+					}
+				}
+			},
+			"L": func(ctx wig.Context) {
+				cur := wig.ContextCursorGet(ctx)
+				hl, ok := ctx.Buf.Highlighter.(*RgHighlighter)
+				if !ok {
+					return
+				}
+				for i := cur.Line - 1; i >= 0; i-- {
+					if entry, ok := hl.LineMap[i]; ok && entry.kind == 1 {
+						cur.Line = i
+						cur.Char = 0
+						wig.CmdCursorCenter(ctx)
+						return
+					}
+				}
+			},
 		},
 	})
 

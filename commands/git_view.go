@@ -895,6 +895,36 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 
 	gitBuf.KeyHandler = wig.DefaultKeyHandler(wig.ModeKeyMap{
 		wig.MODE_NORMAL: wig.KeyMap{
+			"l": func(ctx wig.Context) {
+				cur := wig.ContextCursorGet(ctx)
+				lineMap := getGitStatusLineMap(gitBuf)
+				if lineMap == nil {
+					return
+				}
+				for i := cur.Line + 1; i < gitBuf.Lines.Len; i++ {
+					if entry, ok := lineMap[i]; ok && entry.kind == "header" {
+						cur.Line = i
+						cur.Char = 0
+						wig.CmdCursorCenter(ctx)
+						return
+					}
+				}
+			},
+			"L": func(ctx wig.Context) {
+				cur := wig.ContextCursorGet(ctx)
+				lineMap := getGitStatusLineMap(gitBuf)
+				if lineMap == nil {
+					return
+				}
+				for i := cur.Line - 1; i >= 0; i-- {
+					if entry, ok := lineMap[i]; ok && entry.kind == "header" {
+						cur.Line = i
+						cur.Char = 0
+						wig.CmdCursorCenter(ctx)
+						return
+					}
+				}
+			},
 			"Enter": func(ctx wig.Context) {
 				cur := wig.ContextCursorGet(ctx)
 				if cur == nil {
