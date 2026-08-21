@@ -73,6 +73,9 @@ func VisitAtLine(ctx Context, sourceBuf *Buffer, opts VisitOptions) error {
 	if sourceWin == nil {
 		if ctx.Editor.ActiveWindow().Buffer() == sourceBuf {
 			sourceWin = ctx.Editor.ActiveWindow()
+		} else if strings.HasPrefix(sourceBuf.FilePath, "[rgcollect") || sourceBuf.FilePath == "[rg]" {
+			// If rg buffer is not in a window, use the active window to get/update its cursor.
+			sourceWin = ctx.Editor.ActiveWindow()
 		} else {
 			ctx.Editor.EchoMessage("source buffer is not visible")
 			return nil

@@ -318,10 +318,10 @@ func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.
 		}
 	}
 
+	// If [rg] is not in a window, use the active window to get/update its cursor.
+	// The active window just opened a file from [rg], so it still has the cursor.
 	if sourceWin == nil {
-		// [rg] is not visible — can't navigate
-		ctx.Editor.EchoMessage("[rg] not visible. Use ; or Ctrl+b to return.")
-		return true
+		sourceWin = ctx.Editor.ActiveWindow()
 	}
 
 	// Apply movement (nil = visit current line, no movement)
@@ -351,6 +351,7 @@ func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.
 			return true
 		}
 		ctx.Buf = targetBuf
+		ctx.Win = sourceWin
 		sourceWin.VisitBuffer(ctx, wig.Cursor{
 			Line: result.Line - 1,
 			Char: result.Char,
@@ -362,6 +363,7 @@ func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.
 			return true
 		}
 		ctx.Buf = targetBuf
+		ctx.Win = sourceWin
 		sourceWin.VisitBuffer(ctx, wig.Cursor{
 			Line: 0,
 			Char: 0,
