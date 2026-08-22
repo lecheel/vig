@@ -250,7 +250,23 @@ func ParseFileLocation(text string, cursor int) (filename string, line, ch int) 
 func CmdGotoLineEndOfFile(ctx Context) {
 	cur := ContextCursorGet(ctx)
 	defer CmdEnsureCursorVisible(ctx)
+
+	// In visual mode, extend selection to end of file
+	if ctx.Buf.Mode() == MODE_VISUAL || ctx.Buf.Mode() == MODE_VISUAL_LINE || ctx.Buf.Mode() == MODE_VISUAL_BLOCK {
+		ctx.Buf.Selection.End.Line = ctx.Buf.Lines.Len - 1
+		lastLine := CursorLineByNum(ctx.Buf, ctx.Buf.Lines.Len-1)
+		if lastLine != nil {
+			ctx.Buf.Selection.End.Char = len(lastLine.Value) - 1
+		}
+	}
+
 	cur.Line = ctx.Buf.Lines.Len - 1
+	if ctx.Buf.Selection != nil {
+		lastLine := CursorLineByNum(ctx.Buf, ctx.Buf.Lines.Len-1)
+		if lastLine != nil {
+			cur.Char = len(lastLine.Value) - 1
+		}
+	}
 	ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, cur)
 }
 
