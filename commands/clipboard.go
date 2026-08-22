@@ -47,9 +47,14 @@ func CmdClipboardPasteAll(ctx wig.Context) {
 		return
 	}
 	wig.ReloadBufferContent(ctx, text)
+	if ctx.Buf.Highlighter != nil {
+		ctx.Buf.Highlighter.Build()
+	}
+	ctx.Editor.Events.Broadcast(wig.EventBufferReloaded{Buf: ctx.Buf})
 	cur := wig.ContextCursorGet(ctx)
 	cur.Line = 0
 	cur.Char = 0
 	cur.PreserveCharPosition = 0
 	wig.CmdNormalMode(ctx)
+	ctx.Editor.Redraw()
 }
