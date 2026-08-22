@@ -216,10 +216,10 @@ func GetGitStatusItems() []wig.GitViewItem {
 	addSection(fmt.Sprintf("Unstage Changes (%d)", len(unstaged)), unstaged)
 	addSection(fmt.Sprintf("Untracked Files (%d)", len(untracked)), untracked)
 	addSection(fmt.Sprintf("Last Commit [%s] (%d)", headHash, len(lastCommitFiles)), lastCommitFiles)
-	addSection("------ Branches ------", branches)
+	addSection("Branches", branches)
 
 	// Stash (no trailing blank — last section)
-	items = append(items, wig.GitViewItem{Type: "header", Label: "------ Stash ------"})
+	items = append(items, wig.GitViewItem{Type: "header", Label: "Stash"})
 	items = append(items, wig.GitViewItem{Type: "separator"})
 	hasStashes := false
 	if len(stashes) > 0 && stashes[0] != "" {
@@ -903,6 +903,22 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 				}
 				for i := cur.Line + 1; i < gitBuf.Lines.Len; i++ {
 					if entry, ok := lineMap[i]; ok && entry.kind == "header" {
+						// Found next header, now find first selectable item inside it
+						for j := i + 1; j < gitBuf.Lines.Len; j++ {
+							if nextEntry, ok := lineMap[j]; ok {
+								if nextEntry.kind == "file" || nextEntry.kind == "branch" || nextEntry.kind == "stash" {
+									cur.Line = j
+									cur.Char = 0
+									wig.CmdCursorCenter(ctx)
+									return
+								}
+								// If we hit a blank or another header, the section is empty
+								if nextEntry.kind == "blank" || nextEntry.kind == "header" {
+									break
+								}
+							}
+						}
+						// If no selectable item found in this section, just land on the header
 						cur.Line = i
 						cur.Char = 0
 						wig.CmdCursorCenter(ctx)
@@ -916,8 +932,34 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 				if lineMap == nil {
 					return
 				}
+
+				// 1. Skip the current session's header to find the PREVIOUS session.
+				foundCurrentHeader := false
 				for i := cur.Line - 1; i >= 0; i-- {
 					if entry, ok := lineMap[i]; ok && entry.kind == "header" {
+						if !foundCurrentHeader {
+							// This is the header of the section we are currently in. Skip it.
+							foundCurrentHeader = true
+							continue
+						}
+
+						// 2. Found the previous session's header at line i.
+						// Now find the first selectable item inside it.
+						for j := i + 1; j < gitBuf.Lines.Len; j++ {
+							if nextEntry, ok := lineMap[j]; ok {
+								if nextEntry.kind == "file" || nextEntry.kind == "branch" || nextEntry.kind == "stash" {
+									cur.Line = j
+									cur.Char = 0
+									wig.CmdCursorCenter(ctx)
+									return
+								}
+								// If we hit a blank or another header, the section is empty
+								if nextEntry.kind == "blank" || nextEntry.kind == "header" {
+									break
+								}
+							}
+						}
+						// If no selectable item found in this previous section, land on its header
 						cur.Line = i
 						cur.Char = 0
 						wig.CmdCursorCenter(ctx)
