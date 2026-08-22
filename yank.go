@@ -23,7 +23,37 @@ func CmdYank(ctx Context) {
 		}
 		ctx.Buf.Selection = nil
 	}()
-	yankSave(ctx)
+
+	// Visual mode: yank selection as-is
+	if ctx.Buf.Selection != nil {
+		yankSave(ctx)
+		return
+	}
+
+	// Normal mode: yank N lines (linewise)
+	count := max(int(ctx.Count), 1)
+	endLine := min(cur.Line+count-1, ctx.Buf.Lines.Len-1)
+
+	var text strings.Builder
+	for i := cur.Line; i <= endLine; i++ {
+		line := CursorLineByNum(ctx.Buf, i)
+		if line != nil {
+			text.WriteString(string(line.Value))
+		}
+	}
+
+	y := yank{val: text.String(), isLine: true}
+	if ctx.Editor.Yanks.Len == 0 || ctx.Editor.Yanks.Last().Value != y {
+		ctx.Editor.Yanks.PushBack(y)
+	}
+
+	repeatCount := ctx.Count
+	ctx.Editor.LastRepeatableFn = func(c Context) {
+		if c.Count == 0 {
+			c.Count = repeatCount
+		}
+		CmdYank(c)
+	}
 }
 
 func CmdYankEol(ctx Context) {

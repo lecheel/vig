@@ -556,7 +556,6 @@ func (u *uiCommandLine) runCommand(cmd string) {
 	if def, ok := wig.AllCommands[restCmd]; ok {
 		ctx := u.e.NewContext()
 		if fn, ok := def.Fn.(func(wig.Context)); ok {
-			// Register for System 2 (command repeat) if marked Repeatable
 			if def.Repeatable {
 				u.e.LastRepeatableFn = fn
 			}

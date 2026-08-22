@@ -46,7 +46,7 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		FormatOnSave:        false,
 		GitStatusView:       "full",
 		GitBlameView:        "split",
-		IndentGuides:        true,
+		IndentGuides:        false,
 		LspEnabled:          true,
 	}
 	userMap := wig.ModeKeyMap{

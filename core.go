@@ -159,12 +159,24 @@ func CmdDeleteCharForward(ctx Context) {
 		CmdCursorLeft(ctx)
 	}
 
+	count := max(int(ctx.Count), 1)
+	endChar := min(cur.Char+count-1, len(line.Value)-2)
+
 	ctx.Buf.Selection = &Selection{
 		Start: *cur,
-		End:   *cur,
+		End:   Cursor{Line: cur.Line, Char: endChar},
 	}
 
+	yankSave(ctx)
 	SelectionDelete(ctx)
+
+	repeatCount := ctx.Count
+	ctx.Editor.LastRepeatableFn = func(c Context) {
+		if c.Count == 0 {
+			c.Count = repeatCount
+		}
+		CmdDeleteCharForward(c)
+	}
 }
 
 func CmdDeleteCharBackward(ctx Context) {
@@ -238,16 +250,32 @@ func CmdDeleteWord(ctx Context) {
 	if ctx.Buf.TxStart() {
 		defer ctx.Buf.TxEnd()
 	}
-	cur := ContextCursorGet(ctx)
-	_, end := TextObjectWord(ctx, false)
-	ctx.Buf.Selection = &Selection{
-		Start: *cur,
-		End:   Cursor{Line: cur.Line, Char: end},
-	}
-	yankSave(ctx)
-	SelectionDelete(ctx)
+	count := max(int(ctx.Count), 1)
 
-	ctx.Editor.LastRepeatableFn = CmdDeleteWord
+	var deletedText string
+	for i := 0; i < count; i++ {
+		cur := ContextCursorGet(ctx)
+		_, end := TextObjectWord(ctx, false)
+		ctx.Buf.Selection = &Selection{
+			Start: *cur,
+			End:   Cursor{Line: cur.Line, Char: end},
+		}
+		deletedText += SelectionToString(ctx.Buf, ctx.Buf.Selection)
+		SelectionDelete(ctx)
+	}
+
+	y := yank{val: deletedText}
+	if ctx.Editor.Yanks.Len == 0 || ctx.Editor.Yanks.Last().Value != y {
+		ctx.Editor.Yanks.PushBack(y)
+	}
+
+	repeatCount := ctx.Count
+	ctx.Editor.LastRepeatableFn = func(c Context) {
+		if c.Count == 0 {
+			c.Count = repeatCount
+		}
+		CmdDeleteWord(c)
+	}
 }
 
 func CmdChangeWord(ctx Context) {
@@ -704,8 +732,6 @@ func CmdMacroPlay(ctx Context) func(Context) {
 }
 
 func CmdMacroRepeat(ctx Context) {
-	// Repeat the last registered repeatable command (command-based repeat).
-	// Guard against infinite recursion when '.' is inside a macro playback.
 	if ctx.Editor.LastRepeatableFn != nil {
 		if !ctx.Editor.Keys.Macros.IsPlaying() {
 			ctx.Editor.LastRepeatableFn(ctx)
