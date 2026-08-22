@@ -10,6 +10,7 @@ import (
 )
 
 type EditorConfig struct {
+	Leader              string
 	Theme               string
 	ShowLineNumbers     bool
 	RelativeLineNumbers bool

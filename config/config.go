@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/firstrow/wig"
 	"github.com/firstrow/wig/autocomplete"
@@ -17,6 +18,7 @@ type UserConfig struct {
 }
 
 type EditorSettings struct {
+	Leader              *string `toml:"leader"`
 	Theme               *string `toml:"theme"`
 	ShowLineNumbers     *bool   `toml:"show_line_numbers"`
 	RelativeLineNumbers *bool   `toml:"relative_line_numbers"`
@@ -37,9 +39,19 @@ type UserKeysConfig struct {
 	VisualBlock map[string]string `toml:"visual_block"`
 }
 
+func normalizeLeader(leader string) string {
+	switch strings.ToLower(strings.TrimSpace(leader)) {
+	case "", "space", "<space>", " ":
+		return "Space"
+	default:
+		return strings.TrimSpace(leader)
+	}
+}
+
 // LoadUserConfig reads ~/.config/wig/config.toml for editor settings and keymaps
 func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	editorCfg := wig.EditorConfig{
+		Leader:              "Space",
 		Theme:               "naysayer",
 		ShowLineNumbers:     true,
 		RelativeLineNumbers: true,
@@ -73,6 +85,9 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	}
 
 	// Apply editor settings if they were provided in the TOML
+	if cfg.Editor.Leader != nil {
+		editorCfg.Leader = normalizeLeader(*cfg.Editor.Leader)
+	}
 	if cfg.Editor.Theme != nil {
 		editorCfg.Theme = *cfg.Editor.Theme
 	}
@@ -110,36 +125,50 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		return nil
 	}
 
+	expandKey := func(k string) string {
+		k = strings.ReplaceAll(k, "<leader>", editorCfg.Leader)
+		k = strings.ReplaceAll(k, "<Leader>", editorCfg.Leader)
+		if k == "<space>" || k == "<Space>" || k == " " {
+			return "Space"
+		}
+		return k
+	}
+
 	for key, cmdName := range cfg.Keys.Normal {
 		if fn := resolve(cmdName); fn != nil {
-			userMap[wig.MODE_NORMAL][key] = fn
+			userMap[wig.MODE_NORMAL][expandKey(key)] = fn
 		}
 	}
 	for key, cmdName := range cfg.Keys.Insert {
 		if fn := resolve(cmdName); fn != nil {
-			userMap[wig.MODE_INSERT][key] = fn
+			userMap[wig.MODE_INSERT][expandKey(key)] = fn
 		}
 	}
 	for key, cmdName := range cfg.Keys.Visual {
 		if fn := resolve(cmdName); fn != nil {
-			userMap[wig.MODE_VISUAL][key] = fn
+			userMap[wig.MODE_VISUAL][expandKey(key)] = fn
 		}
 	}
 	for key, cmdName := range cfg.Keys.VisualLine {
 		if fn := resolve(cmdName); fn != nil {
-			userMap[wig.MODE_VISUAL_LINE][key] = fn
+			userMap[wig.MODE_VISUAL_LINE][expandKey(key)] = fn
 		}
 	}
 	for key, cmdName := range cfg.Keys.VisualBlock {
 		if fn := resolve(cmdName); fn != nil {
-			userMap[wig.MODE_VISUAL_BLOCK][key] = fn
+			userMap[wig.MODE_VISUAL_BLOCK][expandKey(key)] = fn
 		}
 	}
 
 	return editorCfg, userMap
 }
 
-func DefaultKeyMap() wig.ModeKeyMap {
+func DefaultKeyMap(leaders ...string) wig.ModeKeyMap {
+	leader := "Space"
+	if len(leaders) > 0 && leaders[0] != "" {
+		leader = normalizeLeader(leaders[0])
+	}
+
 	return wig.ModeKeyMap{
 		wig.MODE_NORMAL: wig.KeyMap{
 			"F1":     commands.CmdGitView,
@@ -260,7 +289,7 @@ func DefaultKeyMap() wig.ModeKeyMap {
 				"[": wig.CmdJumpBack,
 				"h": commands.CmdGitHunkPrev,
 			},
-			"Space": wig.KeyMap{
+			leader: wig.KeyMap{
 				"/": commands.CmdSearchProject,
 				"?": commands.CmdCommandPalettePicker,
 				"`": wig.CmdBufferCycle,
@@ -330,7 +359,7 @@ func DefaultKeyMap() wig.ModeKeyMap {
 				"g": wig.WithSelection(wig.CmdGotoLine0),
 				"c": wig.CmdToggleComment,
 			},
-			"Space": wig.KeyMap{
+			leader: wig.KeyMap{
 				"y": commands.CmdClipboardCopy,
 				"p": wig.KeyMap{
 					"v": commands.CmdClipboardPaste,
@@ -365,7 +394,7 @@ func DefaultKeyMap() wig.ModeKeyMap {
 				"g": wig.WithSelection(wig.CmdGotoLine0),
 				"c": wig.CmdToggleComment,
 			},
-			"Space": wig.KeyMap{
+			leader: wig.KeyMap{
 				"y": commands.CmdClipboardCopy,
 				"p": wig.KeyMap{
 					"v": commands.CmdClipboardPaste,
@@ -380,16 +409,16 @@ func DefaultKeyMap() wig.ModeKeyMap {
 			"ctrl+y": wig.CmdScrollUpLine,
 			"j":      wig.WithSelection(wig.CmdCursorLineDown),
 			"k":      wig.WithSelection(wig.CmdCursorLineUp),
-			"h":      wig.WithSelection(wig.CmdCursorLeft),
-			"l":      wig.WithSelection(wig.CmdCursorRight),
-			"Left":   wig.WithSelection(wig.CmdCursorLeft),
-			"Right":  wig.WithSelection(wig.CmdCursorRight),
+			"h":      wig.CmdCursorLeft,
+			"l":      wig.CmdCursorRight,
+			"Left":   wig.CmdCursorLeft,
+			"Right":  wig.CmdCursorRight,
 			"Up":     wig.WithSelection(wig.CmdCursorLineUp),
 			"Down":   wig.WithSelection(wig.CmdCursorLineDown),
-			"Home":   wig.WithSelection(wig.CmdCursorBeginningOfTheLine),
-			"End":    wig.WithSelection(wig.CmdGotoLineEnd),
-			"PgUp":   wig.WithSelection(wig.CmdScrollUpPage),
-			"PgDn":   wig.WithSelection(wig.CmdScrollDownPage),
+			"Home":   wig.CmdCursorBeginningOfTheLine,
+			"End":    wig.CmdGotoLineEnd,
+			"PgUp":   wig.CmdScrollUpPage,
+			"PgDn":   wig.CmdScrollDownPage,
 			"$":      wig.WithSelection(wig.CmdGotoLineEnd),
 			"0":      wig.WithSelection(wig.CmdCursorBeginningOfTheLine),
 			"G":      wig.WithSelection(wig.CmdGotoLineEndOfFile),
