@@ -57,6 +57,10 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 	if cur.Char > termWidth {
 		skip = cur.Char - termWidth
 	}
+	lineLen := len(currentLine.Value)
+	if skip >= lineLen {
+		skip = max(lineLen-1, 0)
+	}
 
 	startLine := uint32(offset)
 	var tsNodeCursor *wig.HighlighterCursor
