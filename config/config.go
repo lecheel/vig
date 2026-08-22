@@ -19,6 +19,8 @@ type UserConfig struct {
 
 type EditorSettings struct {
 	Leader              *string `toml:"leader"`
+	CommentStyle        *string `toml:"comment_style"`
+	GcMotion            *bool   `toml:"gc_motion"`
 	Theme               *string `toml:"theme"`
 	ShowLineNumbers     *bool   `toml:"show_line_numbers"`
 	RelativeLineNumbers *bool   `toml:"relative_line_numbers"`
@@ -52,6 +54,7 @@ func normalizeLeader(leader string) string {
 func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	editorCfg := wig.EditorConfig{
 		Leader:              "Space",
+		CommentStyle:        "standard",
 		Theme:               "naysayer",
 		ShowLineNumbers:     true,
 		RelativeLineNumbers: true,
@@ -87,6 +90,16 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	// Apply editor settings if they were provided in the TOML
 	if cfg.Editor.Leader != nil {
 		editorCfg.Leader = normalizeLeader(*cfg.Editor.Leader)
+	}
+	if cfg.Editor.CommentStyle != nil {
+		editorCfg.CommentStyle = *cfg.Editor.CommentStyle
+	}
+	if cfg.Editor.GcMotion != nil {
+		if *cfg.Editor.GcMotion {
+			editorCfg.CommentStyle = "standard"
+		} else {
+			editorCfg.CommentStyle = "simple"
+		}
 	}
 	if cfg.Editor.Theme != nil {
 		editorCfg.Theme = *cfg.Editor.Theme
@@ -163,10 +176,32 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	return editorCfg, userMap
 }
 
-func DefaultKeyMap(leaders ...string) wig.ModeKeyMap {
+func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 	leader := "Space"
-	if len(leaders) > 0 && leaders[0] != "" {
-		leader = normalizeLeader(leaders[0])
+	commentStyle := "standard"
+
+	if len(args) > 0 && args[0] != "" {
+		leader = normalizeLeader(args[0])
+	}
+	if len(args) > 1 && args[1] != "" {
+		commentStyle = strings.ToLower(args[1])
+	}
+
+	var gcMapping any
+	if commentStyle == "simple" {
+		gcMapping = wig.CmdToggleComment
+	} else {
+		gcMapping = wig.KeyMap{
+			"c": wig.CmdCommentLine,
+			"j": wig.CmdCommentLineDown,
+			"k": wig.CmdCommentLineUp,
+			"$": wig.CmdCommentEndOfLine,
+			"w": wig.CmdCommentWord,
+			"G": wig.CmdCommentEndOfFile,
+			"g": wig.CmdCommentStartOfFile,
+			"i": wig.CmdCommentInside,
+			"a": wig.CmdCommentAround,
+		}
 	}
 
 	return wig.ModeKeyMap{
@@ -266,7 +301,7 @@ func DefaultKeyMap(leaders ...string) wig.ModeKeyMap {
 				"d": commands.CmdGotoDefinition,
 				"O": commands.CmdGotoDefinitionOtherWindow,
 				"o": commands.CmdViewDefinitionOtherWindow,
-				"c": wig.CmdToggleComment,
+				"c": gcMapping,
 			},
 			"ctrl+c": wig.KeyMap{
 				"ctrl+c": commands.CmdExecute,

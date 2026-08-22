@@ -379,7 +379,8 @@ func CmdSelectionChange(ctx Context) {
 	SelectionDelete(ctx)
 }
 
-func CmdToggleComment(ctx Context) {
+// ToggleCommentRange toggles comments across lines [startLine, endLine] inclusive.
+func ToggleCommentRange(ctx Context, startLine, endLine int) {
 	if ctx.Buf == nil {
 		return
 	}
@@ -388,7 +389,15 @@ func CmdToggleComment(ctx Context) {
 	}
 	defer CmdNormalMode(ctx)
 
-	ctx.Editor.LastRepeatableFn = CmdToggleComment
+	if startLine > endLine {
+		startLine, endLine = endLine, startLine
+	}
+	if startLine < 0 {
+		startLine = 0
+	}
+	if endLine >= ctx.Buf.Lines.Len {
+		endLine = ctx.Buf.Lines.Len - 1
+	}
 
 	comment := GetCommentToken(ctx.Buf)
 
@@ -418,73 +427,246 @@ func CmdToggleComment(ctx Context) {
 		return strings.HasPrefix(trimmed, comment)
 	}
 
+	lineStart := CursorLineByNum(ctx.Buf, startLine)
+	count := endLine - startLine
+
+	lines := make([]*Element[Line], 0, count+1)
+	curr := lineStart
+	for i := 0; i <= count && curr != nil; i++ {
+		lines = append(lines, curr)
+		curr = curr.Next()
+	}
+
+	allCommented := true
+	hasNonEmpty := false
+
+	for _, l := range lines {
+		if l.Value.IsEmpty() {
+			continue
+		}
+		hasNonEmpty = true
+		if !isLineCommented(l) {
+			allCommented = false
+			break
+		}
+	}
+
+	if !hasNonEmpty {
+		return
+	}
+
+	for _, l := range lines {
+		if l.Value.IsEmpty() {
+			continue
+		}
+		if allCommented {
+			cmUncomment(l)
+		} else {
+			spacePos := 0
+			for i, c := range l.Value {
+				if !unicode.IsSpace(c) {
+					spacePos = i
+					break
+				}
+			}
+			cmComment(l, spacePos)
+		}
+	}
+}
+
+func CmdToggleComment(ctx Context) {
+	if ctx.Buf == nil {
+		return
+	}
 	if ctx.Buf.Selection != nil {
 		selection := SelectionNormalize(ctx.Buf.Selection)
-		lineStart := CursorLineByNum(ctx.Buf, selection.Start.Line)
-		count := selection.End.Line - selection.Start.Line
-
-		lines := make([]*Element[Line], 0, count+1)
-		curr := lineStart
-		for i := 0; i <= count && curr != nil; i++ {
-			lines = append(lines, curr)
-			curr = curr.Next()
-		}
-
-		allCommented := true
-		hasNonEmpty := false
-
-		for _, l := range lines {
-			if l.Value.IsEmpty() {
-				continue
-			}
-			hasNonEmpty = true
-			if !isLineCommented(l) {
-				allCommented = false
-				break
-			}
-		}
-
-		if !hasNonEmpty {
-			return
-		}
-
-		for _, l := range lines {
-			if l.Value.IsEmpty() {
-				continue
-			}
-			if allCommented {
-				cmUncomment(l)
-			} else {
-				spacePos := 0
-				for i, c := range l.Value {
-					if !unicode.IsSpace(c) {
-						spacePos = i
-						break
-					}
-				}
-				cmComment(l, spacePos)
-			}
-		}
+		ToggleCommentRange(ctx, selection.Start.Line, selection.End.Line)
+		ctx.Editor.LastRepeatableFn = CmdToggleComment
 		return
 	}
 
 	cur := ContextCursorGet(ctx)
-	line := CursorLine(ctx.Buf, cur)
-	if line == nil || line.Value.IsEmpty() {
-		return
+	count := max(int(ctx.Count), 1)
+	ToggleCommentRange(ctx, cur.Line, cur.Line+count-1)
+	ctx.Editor.LastRepeatableFn = CmdToggleComment
+}
+
+// CmdCommentLine comments the current line (or count lines) — `gcc` mapping.
+func CmdCommentLine(ctx Context) {
+	cur := ContextCursorGet(ctx)
+	count := max(int(ctx.Count), 1)
+	ToggleCommentRange(ctx, cur.Line, cur.Line+count-1)
+	repeatCount := ctx.Count
+	ctx.Editor.LastRepeatableFn = func(c Context) {
+		if c.Count == 0 {
+			c.Count = repeatCount
+		}
+		CmdCommentLine(c)
+	}
+}
+
+// CmdCommentLineDown comments current line and count lines below — `gcj` mapping.
+func CmdCommentLineDown(ctx Context) {
+	cur := ContextCursorGet(ctx)
+	count := max(int(ctx.Count), 1)
+	ToggleCommentRange(ctx, cur.Line, cur.Line+count)
+	repeatCount := ctx.Count
+	ctx.Editor.LastRepeatableFn = func(c Context) {
+		if c.Count == 0 {
+			c.Count = repeatCount
+		}
+		CmdCommentLineDown(c)
+	}
+}
+
+// CmdCommentLineUp comments current line and count lines above — `gck` mapping.
+func CmdCommentLineUp(ctx Context) {
+	cur := ContextCursorGet(ctx)
+	count := max(int(ctx.Count), 1)
+	ToggleCommentRange(ctx, cur.Line-count, cur.Line)
+	repeatCount := ctx.Count
+	ctx.Editor.LastRepeatableFn = func(c Context) {
+		if c.Count == 0 {
+			c.Count = repeatCount
+		}
+		CmdCommentLineUp(c)
+	}
+}
+
+// CmdCommentEndOfLine comments the current line — `gc$` mapping.
+func CmdCommentEndOfLine(ctx Context) {
+	cur := ContextCursorGet(ctx)
+	ToggleCommentRange(ctx, cur.Line, cur.Line)
+	ctx.Editor.LastRepeatableFn = CmdCommentEndOfLine
+}
+
+// CmdCommentWord comments the current line — `gcw` mapping.
+func CmdCommentWord(ctx Context) {
+	cur := ContextCursorGet(ctx)
+	ToggleCommentRange(ctx, cur.Line, cur.Line)
+	ctx.Editor.LastRepeatableFn = CmdCommentWord
+}
+
+// CmdCommentEndOfFile comments from current line to end of file — `gcG` mapping.
+func CmdCommentEndOfFile(ctx Context) {
+	cur := ContextCursorGet(ctx)
+	ToggleCommentRange(ctx, cur.Line, ctx.Buf.Lines.Len-1)
+	ctx.Editor.LastRepeatableFn = CmdCommentEndOfFile
+}
+
+// CmdCommentStartOfFile comments from line 0 to current line — `gcgg` mapping.
+func CmdCommentStartOfFile(ctx Context) {
+	cur := ContextCursorGet(ctx)
+	ToggleCommentRange(ctx, 0, cur.Line)
+	ctx.Editor.LastRepeatableFn = CmdCommentStartOfFile
+}
+
+func getParagraphRange(buf *Buffer, curLine int, includeTrailingBlank bool) (startLine, endLine int) {
+	if buf == nil || buf.Lines.Len == 0 {
+		return curLine, curLine
+	}
+	startLine = curLine
+	for startLine > 0 {
+		prev := CursorLineByNum(buf, startLine-1)
+		if prev == nil || prev.Value.IsEmpty() {
+			break
+		}
+		startLine--
 	}
 
-	if isLineCommented(line) {
-		cmUncomment(line)
-	} else {
-		spacePos := 0
-		for i, c := range line.Value {
-			if !unicode.IsSpace(c) {
-				spacePos = i
-				break
+	endLine = curLine
+	for endLine < buf.Lines.Len-1 {
+		next := CursorLineByNum(buf, endLine+1)
+		if next == nil || next.Value.IsEmpty() {
+			if includeTrailingBlank && next != nil && next.Value.IsEmpty() {
+				endLine++
 			}
+			break
 		}
-		cmComment(line, spacePos)
+		endLine++
+	}
+	return startLine, endLine
+}
+
+// CmdCommentParagraph comments the surrounding paragraph — `gcip` mapping.
+func CmdCommentParagraph(ctx Context) {
+	cur := ContextCursorGet(ctx)
+	start, end := getParagraphRange(ctx.Buf, cur.Line, false)
+	ToggleCommentRange(ctx, start, end)
+	ctx.Editor.LastRepeatableFn = CmdCommentParagraph
+}
+
+// CmdCommentAroundParagraph comments the surrounding paragraph including trailing blank — `gcap` mapping.
+func CmdCommentAroundParagraph(ctx Context) {
+	cur := ContextCursorGet(ctx)
+	start, end := getParagraphRange(ctx.Buf, cur.Line, true)
+	ToggleCommentRange(ctx, start, end)
+	ctx.Editor.LastRepeatableFn = CmdCommentAroundParagraph
+}
+
+// CmdCommentInside handles `gci{target}` (e.g. `gcip`, `gciw`).
+func CmdCommentInside(_ Context) func(Context) {
+	return func(ctx Context) {
+		if len(ctx.Char) == 0 {
+			return
+		}
+		ch := rune(ctx.Char[0])
+		if ch == 'p' {
+			CmdCommentParagraph(ctx)
+			return
+		}
+		if ch == 'w' || ch == 'W' {
+			CmdCommentWord(ctx)
+			return
+		}
+
+		var sel *Selection
+		var found bool
+		if ch == '\'' || ch == '"' || ch == '`' {
+			found, sel = TextObjectQuotes(ctx, ch, false)
+		} else {
+			found, sel = TextObjectBlock(ctx, ch, false)
+		}
+
+		if !found || sel == nil {
+			return
+		}
+
+		norm := SelectionNormalize(sel)
+		ToggleCommentRange(ctx, norm.Start.Line, norm.End.Line)
+	}
+}
+
+// CmdCommentAround handles `gca{target}` (e.g. `gcap`, `gcaw`).
+func CmdCommentAround(_ Context) func(Context) {
+	return func(ctx Context) {
+		if len(ctx.Char) == 0 {
+			return
+		}
+		ch := rune(ctx.Char[0])
+		if ch == 'p' {
+			CmdCommentAroundParagraph(ctx)
+			return
+		}
+		if ch == 'w' || ch == 'W' {
+			CmdCommentWord(ctx)
+			return
+		}
+
+		var sel *Selection
+		var found bool
+		if ch == '\'' || ch == '"' || ch == '`' {
+			found, sel = TextObjectQuotes(ctx, ch, true)
+		} else {
+			found, sel = TextObjectBlock(ctx, ch, true)
+		}
+
+		if !found || sel == nil {
+			return
+		}
+
+		norm := SelectionNormalize(sel)
+		ToggleCommentRange(ctx, norm.Start.Line, norm.End.Line)
 	}
 }
 

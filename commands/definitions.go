@@ -80,6 +80,16 @@ func init() {
 	wig.AllCommands["CmdGotoFile"] = wig.CmdDefinition{Desc: "Go to file under cursor", Fn: wig.CmdGotoFile}
 	wig.AllCommands["CmdGotoFileOtherWindow"] = wig.CmdDefinition{Desc: "Go to file under cursor in other window", Fn: wig.CmdGotoFileOtherWindow}
 	wig.AllCommands["CmdToggleComment"] = wig.CmdDefinition{Desc: "Toggle comment", Fn: wig.CmdToggleComment}
+	wig.AllCommands["CmdCommentLine"] = wig.CmdDefinition{Desc: "Comment line", Fn: wig.CmdCommentLine, Repeatable: true}
+	wig.AllCommands["gcc"] = wig.CmdDefinition{Desc: "Comment line", Fn: wig.CmdCommentLine, Repeatable: true}
+	wig.AllCommands["CmdCommentLineDown"] = wig.CmdDefinition{Desc: "Comment line down", Fn: wig.CmdCommentLineDown, Repeatable: true}
+	wig.AllCommands["CmdCommentLineUp"] = wig.CmdDefinition{Desc: "Comment line up", Fn: wig.CmdCommentLineUp, Repeatable: true}
+	wig.AllCommands["CmdCommentEndOfLine"] = wig.CmdDefinition{Desc: "Comment to end of line", Fn: wig.CmdCommentEndOfLine, Repeatable: true}
+	wig.AllCommands["CmdCommentParagraph"] = wig.CmdDefinition{Desc: "Comment paragraph", Fn: wig.CmdCommentParagraph, Repeatable: true}
+	wig.AllCommands["CmdCommentAroundParagraph"] = wig.CmdDefinition{Desc: "Comment around paragraph", Fn: wig.CmdCommentAroundParagraph, Repeatable: true}
+	wig.AllCommands["CmdCommentEndOfFile"] = wig.CmdDefinition{Desc: "Comment to end of file", Fn: wig.CmdCommentEndOfFile, Repeatable: true}
+	wig.AllCommands["CmdCommentStartOfFile"] = wig.CmdDefinition{Desc: "Comment to start of file", Fn: wig.CmdCommentStartOfFile, Repeatable: true}
+	wig.AllCommands["CmdCommentWord"] = wig.CmdDefinition{Desc: "Comment word", Fn: wig.CmdCommentWord, Repeatable: true}
 	wig.AllCommands["CmdWindowVSplit"] = wig.CmdDefinition{Desc: "Vertical split", Fn: wig.CmdWindowVSplit}
 	wig.AllCommands["CmdWindowClose"] = wig.CmdDefinition{Desc: "Close window", Fn: wig.CmdWindowClose}
 	wig.AllCommands["CmdWindowCloseOther"] = wig.CmdDefinition{Desc: "Close other windows", Fn: wig.CmdWindowCloseOther}

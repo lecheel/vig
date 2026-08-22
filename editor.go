@@ -11,6 +11,7 @@ import (
 
 type EditorConfig struct {
 	Leader              string
+	CommentStyle        string // "standard" (supports motions: gcc, gcj, gcip, gc$) or "simple" (direct gc toggle)
 	Theme               string
 	ShowLineNumbers     bool
 	RelativeLineNumbers bool

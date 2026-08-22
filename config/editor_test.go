@@ -104,9 +104,25 @@ line four
 line five
 `
 
+	// gcc comments current line
 	keys.HandleKey(e, key('j'), buf.Mode())
 	keys.HandleKey(e, key('g'), buf.Mode())
 	keys.HandleKey(e, key('c'), buf.Mode())
+	keys.HandleKey(e, key('c'), buf.Mode())
+	require.Equal(t, expected, buf.String())
+
+	// gcj comments current line + one below
+	keys.HandleKey(e, key('j'), buf.Mode())
+	keys.HandleKey(e, key('g'), buf.Mode())
+	keys.HandleKey(e, key('c'), buf.Mode())
+	keys.HandleKey(e, key('j'), buf.Mode())
+
+	expected = `line one
+// line two
+// line three
+// line four
+line five
+`
 	require.Equal(t, expected, buf.String())
 }
 

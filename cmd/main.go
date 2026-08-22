@@ -66,7 +66,7 @@ func main() {
 	// Load user config from ~/.config/wig/config.toml
 	editorCfg, userKeys := config.LoadUserConfig()
 
-	keys := wig.NewKeyHandler(config.DefaultKeyMap(editorCfg.Leader))
+	keys := wig.NewKeyHandler(config.DefaultKeyMap(editorCfg.Leader, editorCfg.CommentStyle))
 	for mode, kmap := range userKeys {
 		if len(kmap) > 0 {
 			keys.Map(mode, kmap)
