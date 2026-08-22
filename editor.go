@@ -115,21 +115,6 @@ func NewEditor(
 	return EditorInst
 }
 
-func (e *Editor) ReadConfigFile() {
-	e.Config = EditorConfig{
-		Theme:               "naysayer",
-		ShowLineNumbers:     true,
-		RelativeLineNumbers: true,
-		CurrentLineAbsolute: true,
-		FormatOnSave:        false,
-		GitStatusView:       "full",
-		GitBlameView:        "split",
-		IndentGuides:        true,
-		LspEnabled:          true,
-		WhichKeyFormat:      "words",
-	}
-}
-
 func (e *Editor) OpenFile(path string) (*Buffer, error) {
 	absPath, err := filepath.Abs(path)
 	if err == nil {

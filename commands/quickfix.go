@@ -67,12 +67,6 @@ var quickfixState struct {
 	lineMap map[int]int // buffer line → entries index
 }
 
-// quickfixMutex protects quickfixState.
-var quickfixMutex = struct {
-	mu   bool
-	cond chan struct{}
-}{cond: make(chan struct{}, 1)}
-
 // saveQuickfixResults serializes quickfix entries to
 // ~/.config/wig/quickfix.json for persistence across sessions.
 func saveQuickfixResults(entries []QuickfixEntry) error {

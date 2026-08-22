@@ -123,7 +123,7 @@ func (u *uiSearchPrompt) Keymap() *wig.KeyHandler {
 }
 
 func (u *uiSearchPrompt) Render(view wig.View) {
-	st := wig.Color("statusline")
+	st := wig.Color("ui.statusline")
 	w, h := view.Size()
 	h -= 1
 
