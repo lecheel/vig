@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"reflect"
 	"runtime"
 	"sort"
@@ -56,24 +57,49 @@ func (w *WhichKey) Update(items wig.KeyMap) {
 	}()
 }
 
-func getActionName(action any) string {
-	if _, ok := action.(wig.KeyMap); ok {
-		return "..."
+func getActionInfo(action any) (desc string, isGroup bool) {
+	if km, ok := action.(wig.KeyMap); ok {
+		return fmt.Sprintf("+prefix (%d)", len(km)), true
 	}
 
 	val := reflect.ValueOf(action)
 	if val.Kind() == reflect.Func {
-		fn := runtime.FuncForPC(val.Pointer())
+		ptr := val.Pointer()
+		for name, cmd := range wig.AllCommands {
+			if cmd.Fn != nil && reflect.ValueOf(cmd.Fn).Pointer() == ptr {
+				if cmd.Desc != "" {
+					return cmd.Desc, false
+				}
+				return formatCmdName(name), false
+			}
+		}
+
+		fn := runtime.FuncForPC(ptr)
 		if fn != nil {
 			name := fn.Name()
 			parts := strings.Split(name, ".")
 			if len(parts) > 0 {
-				return parts[len(parts)-1]
+				return formatCmdName(parts[len(parts)-1]), false
 			}
-			return name
+			return formatCmdName(name), false
 		}
 	}
-	return ""
+	return "", false
+}
+
+func formatCmdName(name string) string {
+	name = strings.TrimPrefix(name, "Cmd")
+	var result []rune
+	for i, r := range name {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			prev := rune(name[i-1])
+			if prev < 'A' || prev > 'Z' {
+				result = append(result, ' ')
+			}
+		}
+		result = append(result, r)
+	}
+	return string(result)
 }
 
 func (w *WhichKey) Render(view wig.View) {
@@ -87,45 +113,108 @@ func (w *WhichKey) Render(view wig.View) {
 	}
 	sort.Strings(keys)
 
-	maxLen := 0
-	for _, k := range keys {
-		desc := getActionName(w.items[k])
-		lineLen := len(k) + len(desc) + 3
-		if lineLen > maxLen {
-			maxLen = lineLen
-		}
-	}
-
-	boxW := maxLen + 4
-	if boxW < 30 {
-		boxW = 30
-	}
-
-	boxH := len(keys) + 2
-	if boxH < 3 {
-		boxH = 3
+	if len(keys) == 0 {
+		return
 	}
 
 	vw, vh := view.Size()
+
+	// Multi-column calculations
+	maxRows := max(vh/3, 8)
+	if maxRows > vh-4 {
+		maxRows = max(vh-4, 1)
+	}
+
+	numCols := (len(keys) + maxRows - 1) / maxRows
+	if numCols < 1 {
+		numCols = 1
+	}
+
+	numRows := (len(keys) + numCols - 1) / numCols
+	if numRows < 1 {
+		numRows = 1
+	}
+
+	type itemInfo struct {
+		key     string
+		desc    string
+		isGroup bool
+	}
+
+	colItems := make([][]itemInfo, numCols)
+	colWidths := make([]int, numCols)
+
+	for i, k := range keys {
+		c := i / numRows
+		if c >= numCols {
+			c = numCols - 1
+		}
+		desc, isGroup := getActionInfo(w.items[k])
+		info := itemInfo{key: k, desc: desc, isGroup: isGroup}
+		colItems[c] = append(colItems[c], info)
+
+		itemWidth := len(k) + len(desc) + 4
+		if itemWidth > colWidths[c] {
+			colWidths[c] = itemWidth
+		}
+	}
+
+	totalInnerW := 0
+	for _, wCol := range colWidths {
+		totalInnerW += wCol + 2
+	}
+
+	boxW := totalInnerW + 4
+	if boxW < 36 {
+		boxW = 36
+	}
+	if boxW > vw {
+		boxW = vw
+	}
+
+	boxH := numRows + 2
 	x := vw - boxW
+	if x < 0 {
+		x = 0
+	}
 	y := vh - boxH - 1
+	if y < 0 {
+		y = 0
+	}
 
 	bgStyle := wig.Color("default")
 	keyStyle := wig.Color("ui.whichkey.key")
+	groupStyle := wig.Color("ui.whichkey.group")
+	if groupStyle == bgStyle {
+		groupStyle = keyStyle
+	}
 
 	drawBox(view, x, y, x+boxW-1, y+boxH-1, bgStyle)
 
-	for i, k := range keys {
-		desc := getActionName(w.items[k])
-		yCur := y + i + 1
-		xCur := x + 2
+	// Title header
+	title := fmt.Sprintf(" Which Key (%s) ", w.mode.String())
+	if len(title) < boxW-4 {
+		view.SetContent(x+2, y, title, keyStyle)
+	}
 
-		view.SetContent(xCur, yCur, k, keyStyle)
-		xCur += len(k)
+	xOffset := x + 2
+	for c, items := range colItems {
+		for r, item := range items {
+			yCur := y + r + 1
+			xCur := xOffset
 
-		view.SetContent(xCur, yCur, " : ", bgStyle)
-		xCur += 3
+			view.SetContent(xCur, yCur, item.key, keyStyle)
+			xCur += len(item.key)
 
-		view.SetContent(xCur, yCur, desc, bgStyle)
+			view.SetContent(xCur, yCur, " -> ", bgStyle)
+			xCur += 4
+
+			valStyle := bgStyle
+			if item.isGroup {
+				valStyle = groupStyle
+			}
+			view.SetContent(xCur, yCur, item.desc, valStyle)
+		}
+		xOffset += colWidths[c] + 2
 	}
 }
