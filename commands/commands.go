@@ -124,10 +124,10 @@ func CmdMRUBufferPicker(ctx wig.Context) {
 				if e.Val.Timestamp > 0 {
 					prefix = time.Unix(e.Val.Timestamp, 0).Format("01-02 15:04")
 				} else {
-					prefix = "--------"
+					prefix = "--/-- --:--"
 				}
 			} else {
-				prefix = fmt.Sprintf("%d", e.Val.OpenCount)
+				prefix = fmt.Sprintf("%11d", e.Val.OpenCount)
 			}
 			res = append(res, ui.PickerItem[string]{
 				Name:  fmt.Sprintf("[%s] %s", prefix, e.Key),
