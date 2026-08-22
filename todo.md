@@ -77,7 +77,8 @@
 
 - **System & Integration**
   - System clipboard: copy (`<Leader>y`), paste at cursor (`<Leader>pv`), replace buffer (`<Leader>pp`)
-  - Bracketed paste mode support
+  - Bracketed paste mode support (`tcell.EventPaste`)
+  - Cross-platform clipboard health checks (`checkhealth`: `pbcopy`, `wl-clipboard`, `xclip`, `xsel`, Windows API)
   - Position cache (persists cursor position and open counts across sessions)
   - CLI flags: `--help`, `--edit`, `--health` (`checkhealth`)
   - Thread-safe event manager and buffer concurrency protection
@@ -135,7 +136,8 @@
 - [ ] **Tabs**: Vim-style tabs (`:tabnew`, `gt`, `gT`)
 - [ ] **Jumplist**: `Ctrl-o` (jump back), `Ctrl-i` (jump forward) across all jumps
 - [ ] **Mouse Support**: Click to set cursor, drag to select visual mode, scroll wheel
-- [ ] **Registers**: Multiple registers (`"ay`, `"ap`), system clipboard registers (`"+`, `"*`)
+- [v] **System Clipboard Integration**: Copy/paste via `<Leader>y`, `<Leader>pv`, `<Leader>pp` and bracketed paste
+- [ ] **Named & System Registers**: Multiple registers (`"ay`, `"ap`), explicit system clipboard registers (`"+y`, `"+p`, `"*y`, `"*p`), default unnamed register syncing (`set clipboard=unnamedplus`)
 - [ ] **Word Motions**: `e` (end of word), `ge` (end of word backward), `W`, `B`, `E` (WORD motions)
 - [ ] **Multi-cursor**: `Ctrl-n`/`Ctrl-v` multi-edit
 
