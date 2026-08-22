@@ -830,11 +830,11 @@ func CmdGitView(ctx wig.Context) {
 
 	gitBuf := ctx.Editor.BufferFindByFilePath("[git]", false)
 	if gitBuf != nil && ctx.Editor.ActiveBuffer() == gitBuf {
-		// Toggle off: close split or cycle buffer
+		// Toggle off: close split or kill buffer
 		if len(ctx.Editor.Windows) > 1 {
-			wig.CmdWindowClose(ctx)
+			wig.CmdWindowCloseAndKillBuffer(ctx)
 		} else {
-			wig.CmdBufferCycle(ctx)
+			wig.CmdKillBuffer(ctx)
 		}
 		return
 	}
@@ -1092,6 +1092,7 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 
 					savedCur := *cur
 					backToGit := func(c wig.Context) {
+						wig.CmdKillBuffer(c)
 						c.Buf = gitBuf
 						c.Editor.ActiveWindow().VisitBuffer(c, savedCur)
 						wig.CmdCursorCenter(c)
@@ -1130,6 +1131,7 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 
 				savedCur := *cur
 				backToGit := func(c wig.Context) {
+					wig.CmdKillBuffer(c)
 					c.Buf = gitBuf
 					c.Editor.ActiveWindow().VisitBuffer(c, savedCur)
 					wig.CmdCursorCenter(c)
@@ -1160,9 +1162,9 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 			"q": func(ctx wig.Context) {
 				pendingStash = nil
 				if len(ctx.Editor.Windows) > 1 {
-					wig.CmdWindowClose(ctx)
+					wig.CmdWindowCloseAndKillBuffer(ctx)
 				} else {
-					wig.CmdBufferCycle(ctx)
+					wig.CmdKillBuffer(ctx)
 				}
 			},
 			"Esc": func(ctx wig.Context) {

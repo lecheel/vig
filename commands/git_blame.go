@@ -96,7 +96,7 @@ func parseLinePorcelain(output []byte) []blameLine {
 	return results
 }
 
-// DiffHighlighter provides syntax highlighting for git diff and commit inspection buffers.
+// DiffHighlighter provides syntax highlighting for git diff and commit inspection buffers using the active theme.
 type DiffHighlighter struct {
 	Buf *wig.Buffer
 }
@@ -292,6 +292,7 @@ func CmdGitBlameCommit(ctx wig.Context) {
 	savedCur := *cur
 	savedBuf := ctx.Buf
 	backToBuf := func(c wig.Context) {
+		wig.CmdKillBuffer(c)
 		c.Buf = savedBuf
 		c.Editor.ActiveWindow().VisitBuffer(c, savedCur)
 		wig.CmdCursorCenter(c)

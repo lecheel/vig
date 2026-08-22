@@ -170,6 +170,10 @@ func checkPath(label string, path string, required bool) healthItem {
 func collectHealthSections() []healthSection {
 	sections := []healthSection{}
 
+	home, _ := os.UserHomeDir()
+	configDir := filepath.Join(home, ".config", "wig")
+	queriesDir := filepath.Join(configDir, "queries")
+
 	// 1. Environment & Terminal
 	term := os.Getenv("TERM")
 	if term == "" {
@@ -214,6 +218,8 @@ func collectHealthSections() []healthSection {
 		title: "Core Dependencies",
 		items: []healthItem{
 			checkTool("git", "Git version control (project root, diffs, git gutter, hunks)", true, "--version"),
+			checkPath("  └ tree-sitter query (diff)", filepath.Join(queriesDir, "diff", "highlights.scm"), false),
+			checkPath("  └ tree-sitter query (git)", filepath.Join(queriesDir, "git", "highlights.scm"), false),
 			checkTool("rg", "Ripgrep (project search & file finder)", true, "--version"),
 			checkTool("make", "Make build tool (make run, make test)", false, "--version"),
 		},
@@ -221,10 +227,6 @@ func collectHealthSections() []healthSection {
 	sections = append(sections, coreSection)
 
 	// 3. Supported Languages (Go, Odin, Python)
-	home, _ := os.UserHomeDir()
-	configDir := filepath.Join(home, ".config", "wig")
-	queriesDir := filepath.Join(configDir, "queries")
-
 	langSection := healthSection{
 		title: "Supported Languages (Go, Odin, Python, Rust)",
 		items: []healthItem{
