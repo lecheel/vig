@@ -275,7 +275,10 @@ func DefaultKeyMap() wig.ModeKeyMap {
 				"t": commands.CmdThemeSelect,
 				"i": wig.CmdToggleIndentGuides,
 				"y": commands.CmdClipboardCopy,
-				"p": commands.CmdClipboardPaste,
+				"p": wig.KeyMap{
+					"v": commands.CmdClipboardPaste,
+					"p": commands.CmdClipboardPasteAll,
+				},
 				"g": wig.KeyMap{
 					"r": commands.CmdGitHunkRevert,
 					"p": commands.CmdGitHunkPreview,
@@ -322,7 +325,10 @@ func DefaultKeyMap() wig.ModeKeyMap {
 			},
 			"Space": wig.KeyMap{
 				"y": commands.CmdClipboardCopy,
-				"p": commands.CmdClipboardPaste,
+				"p": wig.KeyMap{
+					"v": commands.CmdClipboardPaste,
+					"p": commands.CmdClipboardPasteAll,
+				},
 			},
 		},
 		wig.MODE_VISUAL_LINE: wig.KeyMap{
@@ -354,7 +360,10 @@ func DefaultKeyMap() wig.ModeKeyMap {
 			},
 			"Space": wig.KeyMap{
 				"y": commands.CmdClipboardCopy,
-				"p": commands.CmdClipboardPaste,
+				"p": wig.KeyMap{
+					"v": commands.CmdClipboardPaste,
+					"p": commands.CmdClipboardPasteAll,
+				},
 			},
 		},
 		wig.MODE_VISUAL_BLOCK: wig.KeyMap{

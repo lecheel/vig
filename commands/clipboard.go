@@ -39,3 +39,17 @@ func CmdClipboardPaste(ctx wig.Context) {
 	}
 	wig.CmdNormalMode(ctx)
 }
+
+func CmdClipboardPasteAll(ctx wig.Context) {
+	text, err := clipboard.ReadAll()
+	if err != nil {
+		ctx.Editor.EchoMessage("clipboard read error: " + err.Error())
+		return
+	}
+	wig.ReloadBufferContent(ctx, text)
+	cur := wig.ContextCursorGet(ctx)
+	cur.Line = 0
+	cur.Char = 0
+	cur.PreserveCharPosition = 0
+	wig.CmdNormalMode(ctx)
+}
