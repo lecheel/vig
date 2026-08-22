@@ -51,6 +51,7 @@ func Init(ctx wig.Context, title string, items []wig.Location) {
 		Movement:      wig.CmdGotoLine0,
 		ParseLocation: true,
 	})
+	wig.SetVisitSource(buf)
 }
 
 type TestHighlighter struct{}
@@ -283,6 +284,7 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 	// Visit buffer (current window, full screen)
 	ctx.Buf = buf
 	ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: 2, Char: 0})
+	wig.SetVisitSource(buf)
 }
 
 // CmdRgEnter is the Enter handler for the [rg] grouped buffer.
@@ -327,6 +329,104 @@ func CmdRgEnter(ctx wig.Context) {
 		})
 	case 0: // blank/title — do nothing
 	}
+}
+
+// visitRgCollectLine is the registered visit handler for [rgcollect ...] buffers.
+// It automatically skips blank lines when navigating with :cn or :cp.
+func visitRgCollectLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.Context)) bool {
+	if !strings.HasPrefix(sourceBuf.FilePath, "[rgcollect ") {
+		return false
+	}
+
+	var sourceWin *wig.Window
+	for _, win := range ctx.Editor.Windows {
+		if win.Buffer() == sourceBuf {
+			sourceWin = win
+			break
+		}
+	}
+
+	if sourceWin == nil {
+		sourceWin = ctx.Editor.ActiveWindow()
+	}
+
+	bufCur := wig.WindowCursorGet(sourceWin, sourceBuf)
+	startLine := bufCur.Line
+	maxLines := sourceBuf.Lines.Len
+
+	if movement != nil {
+		nctx := ctx.Editor.NewContext()
+		nctx.Buf = sourceBuf
+		nctx.Win = sourceWin
+
+		movement(nctx)
+		newLine := bufCur.Line
+
+		found := false
+		if newLine > startLine {
+			for l := newLine; l < maxLines; l++ {
+				line := wig.CursorLineByNum(sourceBuf, l)
+				if line != nil && !line.Value.IsEmpty() {
+					bufCur.Line = l
+					bufCur.Char = 0
+					found = true
+					break
+				}
+			}
+			if !found {
+				bufCur.Line = startLine
+				ctx.Editor.EchoMessage("No more search results")
+				return true
+			}
+		} else if newLine < startLine {
+			for l := newLine; l >= 0; l-- {
+				line := wig.CursorLineByNum(sourceBuf, l)
+				if line != nil && !line.Value.IsEmpty() {
+					bufCur.Line = l
+					bufCur.Char = 0
+					found = true
+					break
+				}
+			}
+			if !found {
+				bufCur.Line = startLine
+				ctx.Editor.EchoMessage("No earlier search results")
+				return true
+			}
+		} else {
+			line := wig.CursorLineByNum(sourceBuf, newLine)
+			if line == nil || line.Value.IsEmpty() {
+				return true
+			}
+		}
+	}
+
+	line := wig.CursorLineByNum(sourceBuf, bufCur.Line)
+	if line == nil {
+		return true
+	}
+
+	filename, lineNum, chNum := wig.ParseFileLocation(line.Value.String(), 0)
+	if filename == "" {
+		ctx.Editor.EchoMessage("no file path found under cursor")
+		return true
+	}
+
+	targetBuf, err := ctx.Editor.OpenFile(filename)
+	if err != nil {
+		ctx.Editor.EchoMessage("Cannot open: " + err.Error())
+		return true
+	}
+
+	ctx.Buf = targetBuf
+	ctx.Win = sourceWin
+	sourceWin.VisitBuffer(ctx, wig.Cursor{
+		Line: lineNum - 1,
+		Char: chNum,
+	})
+	wig.CmdCursorCenter(ctx)
+
+	return true
 }
 
 // visitLineGrouped is the registered visit handler for [rg] buffers.
@@ -489,4 +589,5 @@ func LoadResults() []wig.Location {
 
 func init() {
 	wig.RegisterVisitHandler(visitLineGrouped)
+	wig.RegisterVisitHandler(visitRgCollectLine)
 }

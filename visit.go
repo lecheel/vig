@@ -8,6 +8,15 @@ import "strings"
 type VisitHandlerFunc func(ctx Context, sourceBuf *Buffer, movement func(Context)) bool
 
 var visitHandlers []VisitHandlerFunc
+var lastVisitSource *Buffer
+
+// SetVisitSource stores the last used result buffer (e.g. [rg] or [rgcollect...])
+// so that :cn and :cp can find it even if it's no longer in a window.
+func SetVisitSource(buf *Buffer) {
+	if buf != nil {
+		lastVisitSource = buf
+	}
+}
 
 // RegisterVisitHandler registers a handler for visit-line behavior.
 // Called by packages that cannot be imported by wig (e.g. rgcollect)
@@ -31,6 +40,16 @@ type VisitOptions struct {
 // 2. If not found, fallback to the "other" window (not active) if it exists.
 // 3. If still not found, return nil.
 func findVisitSourceBuffer(e *Editor) *Buffer {
+	// 1. Prefer the last known source buffer if it still exists
+	if lastVisitSource != nil {
+		for _, buf := range e.Buffers {
+			if buf == lastVisitSource {
+				return buf
+			}
+		}
+	}
+
+	// 2. Search all windows for a buffer whose FilePath starts with "[rgcollect" or is "[rg]".
 	for _, win := range e.Windows {
 		if win.Buffer() != nil {
 			fp := win.Buffer().FilePath
@@ -40,10 +59,10 @@ func findVisitSourceBuffer(e *Editor) *Buffer {
 		}
 	}
 
-	// For [rg] (grouped, no split), search all buffers since it may
+	// 3. For [rg] or [rgcollect] (grouped, no split), search all buffers since it may
 	// not be visible after opening a file replaces it in the window.
 	for _, buf := range e.Buffers {
-		if buf.FilePath == "[rg]" {
+		if strings.HasPrefix(buf.FilePath, "[rgcollect") || buf.FilePath == "[rg]" {
 			return buf
 		}
 	}
