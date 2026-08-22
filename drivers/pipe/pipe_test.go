@@ -19,6 +19,7 @@ func TestPipe(t *testing.T) {
 	)
 
 	buf := e.BufferFindByFilePath("test-1", true)
+	buf.ResetLines()
 	lines := `#
 #  cmd: echo "%s"
 #
@@ -52,6 +53,7 @@ func Test_LongRunningProcess(t *testing.T) {
 	)
 
 	buf := e.BufferFindByFilePath("test-1", true)
+	buf.ResetLines()
 	lines := `#
 # cmd: python -i
 # interactive: 1
@@ -96,6 +98,7 @@ hello world
 `
 
 	buf := e.BufferFindByFilePath("test-1", true)
+	buf.ResetLines()
 	for _, l := range strings.Split(lines, "\n") {
 		buf.Append(l)
 	}

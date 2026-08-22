@@ -86,6 +86,7 @@ line five
 	buf.Selection = nil
 	CmdYank(ctx)
 	cur = &Cursor{Line: 5, Char: 3}
+	WindowCursorSet(e.ActiveWindow(), buf, cur)
 	CmdYankPutBefore(ctx)
 	expected = `lineine thre one
 line two
