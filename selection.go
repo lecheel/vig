@@ -1,6 +1,8 @@
 package wig
 
-import "strings"
+import (
+	"strings"
+)
 
 type Selection struct {
 	Start Cursor
