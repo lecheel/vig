@@ -6,12 +6,13 @@
 - **Movement**: `h/j/k/l`, `w/b`, `%` (match pair), `f/F/t/T` (find to), `0/$`, Page Up/Down, Scroll Up/Down, EasyMotion (`s` 2-character viewport jump with instant single-match teleport and home-row label overlays in Normal and Visual modes).
 - **Marks**: `m[a-z]` to set, `` ` `` popup with mark legends & line hints, `` `[a-z] `` to jump, ``` `` ``` pingpong jump toggle. Visual marks displayed in the gutter (yellow).
 - **Search**: Basic search (`/`), next/prev (`n`/`N`), project-wide ripgrep search, word under cursor search.
+- **Search**: On-the-fly incremental search (`/` with live match highlighting & cursor preview while typing), next/prev (`n`/`N`), project-wide ripgrep search, word under cursor search.
 - **File Management**: Open file, Save, Buffer picker, MRU Buffer Picker, File picker, Command Palette. Creating new files from command line if they don't exist.
 - **Window Management**: Vertical split, Window next (`ctrl+w w`), Close window, Close other, Close & kill buffer, Toggle layout.
 - **Git Integration**: Git gutter signs (ignores untracked files), Hunk navigation (`]h`/`[h`), Hunk revert/preview, Inline Git Blame, Blame commit detail, Git status panel. `l`/`L` jumps to the first item of the next/previous session in git status.
 - **LSP**: Completion, Goto definition, Hover, Signature help, Diagnostics.
 - **Syntax Highlighting**: Tree-sitter (Go, Rust, Odin, C, Python).
-- **UI Elements**: Statusline, Which-Key popup (multi-column, mode title, sub-prefix indicators, configurable formatting `which_key_format` for `words`/`camel`/`cmd`, bottom-right aligned), EasyMotion visual jump labels overlay, Command line, Search prompt, Hover popup, Autocomplete, Mini Help (shortcut alignment), Confirm prompts, Marks popup (themed `ui.mark`), unified popup styling (`ui.popup.title`).
+- **UI Elements**: Statusline, Top-right notification toasts (`ui.Notify` with 5s auto-dismiss, multi-toast stacking, type badges, padded rounded boxes), Which-Key popup (multi-column, mode title, sub-prefix indicators, configurable formatting `which_key_format` for `words`/`camel`/`cmd`, bottom-right aligned), EasyMotion visual jump labels overlay, Command line, Search prompt, Hover popup, Autocomplete, Mini Help (shortcut alignment), Confirm prompts, Marks popup (themed `ui.mark`), unified popup styling (`ui.popup.title`).
 - **System**: System clipboard support (copy `<Leader>y`, paste at cursor `<Leader>pv`, replace entire buffer `<Leader>pp`, bracketed paste), Position cache (remember cursor on reopen), CLI flags (`--help`, `--edit`, `--health`), Thread-safe event manager and buffer concurrency protection.
 - **Macros & Repeat**: Macro recording/playback (`q`/`@` with count support `3@a`), Dot-repeat (`.`) via command-based `LastRepeatableFn` with count preservation (`2dd`→`.` deletes 2 lines). Count support on `dd`, `dw`, `x`, `yy`. Repeatable Ex commands (`:cn`, `:cp`, git hunks) via `Repeatable` flag. Recursion guard prevents `.` inside macro playback.
 - **Configuration**:
@@ -23,7 +24,7 @@
   - Runtime theme switcher (`<Leader>t`) and runtime virtual indent guides toggle (`<Leader>i`).
 - **Visual Block**: `Ctrl-v` rectangle selection, block insert (`I`), block yank (`y`), block delete (`d`/`x`).
 - **Result Navigation**: `:cn` and `:cp` to jump through search results (dot-repeatable via `Repeatable` flag).
-- **Command Line**: `:123` to jump to line, `:e <file>` to open/create files, Search & Replace (`:s/...`, `:%s/...`, `:'<,'>s/...` with `c`/`g` flags), full line editing (`Ctrl-a`, `Ctrl-e`, `Ctrl-w`, `Ctrl-r Ctrl-w`).
+- **Command Line**: `:123` to jump to line, `:e <file>` to open/create files, `:info` (file/cursor status) and `:info <msg>` (toast notification), command argument parsing, Search & Replace (`:s/...`, `:%s/...`, `:'<,'>s/...` with `c`/`g` flags), full line editing (`Ctrl-a`, `Ctrl-e`, `Ctrl-w`, `Ctrl-r Ctrl-w`).
 - **Completion**: LSP completions, manual local buffer completions (`Alt-/`), single-candidate auto-complete.
 
 ---
