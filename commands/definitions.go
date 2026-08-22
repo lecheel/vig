@@ -31,6 +31,8 @@ func init() {
 	wig.AllCommands["CmdMRUBufferPicker"] = wig.CmdDefinition{Desc: "MRU Buffer Picker", Fn: CmdMRUBufferPicker}
 	wig.AllCommands["CmdCheckHealth"] = wig.CmdDefinition{Desc: "Check health of dependencies", Fn: CmdCheckHealth}
 	wig.AllCommands["checkhealth"] = wig.CmdDefinition{Desc: "Check health of dependencies", Fn: CmdCheckHealth}
+	wig.AllCommands["CmdInfo"] = wig.CmdDefinition{Desc: "Show notification info", Fn: CmdInfo}
+	wig.AllCommands["info"] = wig.CmdDefinition{Desc: "Show notification info", Fn: CmdInfo}
 
 	// Repeatable Ex commands (can be repeated with `.`)
 	wig.AllCommands["cn"] = wig.CmdDefinition{Desc: "Next result", Fn: wig.CmdVisitNextLine, Repeatable: true}

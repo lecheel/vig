@@ -579,3 +579,48 @@ func CmdReloadBuffer(ctx wig.Context) {
 	ctx.Buf.Highlighter.Build()
 	ctx.Editor.Events.Broadcast(wig.EventBufferReloaded{Buf: ctx.Buf})
 }
+
+// CmdInfo sends a notification to the top-right notification area.
+// If an argument/message is provided (e.g. :info hello), it displays that text.
+// Otherwise, it displays current buffer and cursor position info.
+func CmdInfo(ctx wig.Context) {
+	if ctx.Char != "" {
+		ui.Notify(ctx.Char, ui.NotifyInfo)
+		return
+	}
+
+	if ctx.Buf == nil {
+		ui.Notify("No active buffer", ui.NotifyWarn)
+		return
+	}
+
+	cur := wig.ContextCursorGet(ctx)
+	totalLines := ctx.Buf.CountLines()
+	curLine := 1
+	curChar := 1
+	if cur != nil {
+		curLine = cur.Line + 1
+		curChar = cur.Char + 1
+	}
+
+	percent := 0
+	if totalLines > 0 {
+		percent = (curLine * 100) / totalLines
+	}
+
+	dirtyStr := ""
+	if ctx.Buf.Dirty {
+		dirtyStr = " [+]"
+	}
+
+	msg := fmt.Sprintf("\"%s\"%s line %d of %d --%d%%-- col %d",
+		ctx.Buf.GetName(),
+		dirtyStr,
+		curLine,
+		totalLines,
+		percent,
+		curChar,
+	)
+	ui.Notify(msg, ui.NotifyInfo)
+	ctx.Editor.EchoMessage(msg)
+}

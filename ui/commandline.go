@@ -345,11 +345,12 @@ func (u *uiCommandLine) autocomplete() {
 }
 
 func (u *uiCommandLine) execute(cmd string) {
-	u.e.PopUi()
 	u.runCommand(cmd)
 }
 
 func (u *uiCommandLine) runCommand(cmd string) {
+	u.e.PopUiComponent(u)
+
 	cmd = strings.TrimSpace(cmd)
 	if cmd == "" {
 		return
@@ -368,7 +369,6 @@ func (u *uiCommandLine) runCommand(cmd string) {
 
 	// Jump to line number (e.g. :123)
 	if lineNum, err := strconv.Atoi(restCmd); err == nil {
-		u.e.PopUi()
 		ctx := u.e.NewContext()
 		ctx.Count = uint32(lineNum)
 		wig.CmdGotoLine0(ctx)
@@ -377,7 +377,6 @@ func (u *uiCommandLine) runCommand(cmd string) {
 
 	parts := strings.SplitN(restCmd, " ", 2)
 	if len(parts) > 0 && (parts[0] == "e" || parts[0] == "edit") {
-		u.e.PopUi()
 		if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
 			u.e.EchoMessage("No file name")
 			return
@@ -397,8 +396,6 @@ func (u *uiCommandLine) runCommand(cmd string) {
 	// Search and replace: :s/pat/rep/flags, :%s/pat/rep/flags, or :'<,'>s/pat/rep/flags
 	isGlobal := rangeStr == "%"
 	if strings.HasPrefix(restCmd, "s/") {
-		u.e.PopUi()
-
 		replaceCmd := restCmd[2:] // "pat/rep/flags"
 		parts := strings.SplitN(replaceCmd, "/", 3)
 		if len(parts) < 2 {
@@ -548,10 +545,12 @@ func (u *uiCommandLine) runCommand(cmd string) {
 		return
 	}
 
-	// Pop the command line UI *before* executing the command.
-	// This allows commands (like :q) to push their own UI (like the exit prompt)
-	// without it being immediately popped by this deferred cleanup.
-	u.e.PopUi()
+	cmdName := restCmd
+	arg := ""
+	if spIdx := strings.Index(restCmd, " "); spIdx != -1 {
+		cmdName = restCmd[:spIdx]
+		arg = strings.TrimSpace(restCmd[spIdx+1:])
+	}
 
 	if def, ok := wig.AllCommands[restCmd]; ok {
 		ctx := u.e.NewContext()
@@ -562,6 +561,17 @@ func (u *uiCommandLine) runCommand(cmd string) {
 			fn(ctx)
 		} else {
 			u.e.EchoMessage(fmt.Sprintf("Command %s is not executable", restCmd))
+		}
+	} else if def, ok := wig.AllCommands[cmdName]; ok {
+		ctx := u.e.NewContext()
+		ctx.Char = arg
+		if fn, ok := def.Fn.(func(wig.Context)); ok {
+			if def.Repeatable {
+				u.e.LastRepeatableFn = fn
+			}
+			fn(ctx)
+		} else {
+			u.e.EchoMessage(fmt.Sprintf("Command %s is not executable", cmdName))
 		}
 	} else {
 		u.e.EchoMessage(fmt.Sprintf("Unknown command: %s", restCmd))
