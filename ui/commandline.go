@@ -3,9 +3,11 @@ package ui
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/firstrow/wig"
 	"github.com/gdamore/tcell/v2"
@@ -257,6 +259,165 @@ func (u *uiCommandLine) execute(cmd string) {
 		ctx := u.e.NewContext()
 		ctx.Buf = buf
 		u.e.ActiveWindow().VisitBuffer(ctx)
+		return
+	}
+
+	// Search and replace: :s/pat/rep/flags or :%s/pat/rep/flags
+	isGlobal := strings.HasPrefix(cmd, "%s/")
+	if isGlobal || strings.HasPrefix(cmd, "s/") {
+		u.e.PopUi()
+
+		if isGlobal {
+			cmd = cmd[3:] // "pat/rep/flags"
+		} else {
+			cmd = cmd[2:] // "pat/rep/flags"
+		}
+
+		parts := strings.SplitN(cmd, "/", 3)
+		if len(parts) < 2 {
+			u.e.EchoMessage("Invalid search command")
+			return
+		}
+
+		pattern := parts[0]
+		replacement := parts[1]
+		flags := ""
+		if len(parts) == 3 {
+			flags = parts[2]
+		}
+
+		ctx := u.e.NewContext()
+		buf := ctx.Buf
+
+		startLine := 0
+		endLine := buf.Lines.Len - 1
+		if !isGlobal {
+			if buf.Selection != nil {
+				sel := wig.SelectionNormalize(buf.Selection)
+				startLine = sel.Start.Line
+				endLine = sel.End.Line
+			} else {
+				cur := wig.ContextCursorGet(ctx)
+				startLine = cur.Line
+				endLine = cur.Line
+			}
+		}
+
+		replaceAll := strings.Contains(flags, "g")
+		confirm := strings.Contains(flags, "c")
+
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			u.e.EchoMessage("Invalid regex: " + err.Error())
+			return
+		}
+
+		if !confirm {
+			if buf.TxStart() {
+				defer buf.TxEnd()
+			}
+			count := 0
+			for i := startLine; i <= endLine; i++ {
+				line := wig.CursorLineByNum(buf, i)
+				lineRunes := line.Value
+				lineLen := len(lineRunes) - 1
+				text := string(lineRunes)
+
+				var newText string
+				if replaceAll {
+					newText = re.ReplaceAllString(text, replacement)
+					count += len(re.FindAllString(text, -1))
+				} else {
+					loc := re.FindStringSubmatchIndex(text)
+					if loc != nil {
+						match := text[loc[0]:loc[1]]
+						expanded := re.ReplaceAllString(match, replacement)
+						newText = text[:loc[0]] + expanded + text[loc[1]:]
+						count++
+					} else {
+						newText = text
+					}
+				}
+
+				if newText != text {
+					wig.TextDelete(buf, &wig.Selection{
+						Start: wig.Cursor{Line: i, Char: 0},
+						End:   wig.Cursor{Line: i, Char: lineLen},
+					})
+					wig.TextInsert(buf, line, 0, newText[:len(newText)-1])
+				}
+			}
+			u.e.EchoMessage(fmt.Sprintf("%d substitutions", count))
+		} else {
+			// With confirmation
+			if buf.TxStart() {
+				defer buf.TxEnd()
+			}
+
+			i := startLine
+			offset := 0
+			var processNext func()
+			processNext = func() {
+				if i > endLine {
+					u.e.EchoMessage("substitutions done")
+					return
+				}
+
+				line := wig.CursorLineByNum(buf, i)
+				text := string(line.Value)
+				// search from offset
+				loc := re.FindStringSubmatchIndex(text[offset:])
+				if loc == nil {
+					i++
+					offset = 0
+					processNext()
+					return
+				}
+
+				actualStart := offset + loc[0]
+				actualEnd := offset + loc[1]
+
+				cur := wig.ContextCursorGet(ctx)
+				cur.Line = i
+				cur.Char = utf8.RuneCountInString(text[:actualStart])
+				ctx.Editor.Redraw()
+
+				matchStr := text[actualStart:actualEnd]
+				expandedStr := re.ReplaceAllString(matchStr, replacement)
+
+				prompt := fmt.Sprintf("Replace '%s' with '%s'? (y/n)", matchStr, expandedStr)
+				ConfirmInit(ctx, prompt, func() {
+					// Yes
+					newText := text[:actualStart] + expandedStr + text[actualEnd:]
+					lineLen := len(line.Value) - 1
+					wig.TextDelete(buf, &wig.Selection{
+						Start: wig.Cursor{Line: i, Char: 0},
+						End:   wig.Cursor{Line: i, Char: lineLen},
+					})
+					wig.TextInsert(buf, line, 0, newText[:len(newText)-1])
+
+					// advance offset by length of expandedStr
+					offset = actualStart + len(expandedStr)
+					if !replaceAll {
+						i++
+						offset = 0
+					}
+					processNext()
+				}, func() {
+					// No
+					offset = actualEnd
+					if !replaceAll {
+						i++
+						offset = 0
+					}
+					processNext()
+				}, func() {
+					// Cancel
+					u.e.EchoMessage("Replace cancelled")
+				})
+			}
+			processNext()
+		}
 		return
 	}
 
