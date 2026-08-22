@@ -44,6 +44,7 @@ func CmdLineInit(ctx wig.Context) {
 	// Pre-fill range for visual modes, exactly like Vim
 	if ctx.Buf != nil && (ctx.Buf.Mode() == wig.MODE_VISUAL || ctx.Buf.Mode() == wig.MODE_VISUAL_LINE || ctx.Buf.Mode() == wig.MODE_VISUAL_BLOCK) {
 		u.chBuf = []rune("'<,'>")
+		u.cursorPos = len(u.chBuf)
 	}
 	u.keymap = wig.NewKeyHandler(wig.ModeKeyMap{
 		wig.MODE_INSERT: wig.KeyMap{
@@ -389,6 +390,17 @@ func (u *uiCommandLine) runCommand(cmd string) {
 	} else if strings.HasPrefix(cmd, "'<,'>") {
 		rangeStr = "'<,'>"
 		restCmd = cmd[5:]
+	}
+
+	// If a visual range was used, ensure we exit visual mode after the command runs.
+	// This matches Vim's behavior where executing an Ex command drops you back to Normal mode.
+	if rangeStr == "'<,'>" {
+		defer func() {
+			ctx := u.e.NewContext()
+			if ctx.Buf != nil {
+				wig.CmdNormalMode(ctx)
+			}
+		}()
 	}
 
 	// Jump to line number (e.g. :123)
