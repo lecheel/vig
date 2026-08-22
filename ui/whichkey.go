@@ -57,9 +57,14 @@ func (w *WhichKey) Update(items wig.KeyMap) {
 	}()
 }
 
-func getActionInfo(action any) (desc string, isGroup bool) {
+func (w *WhichKey) getActionInfo(action any) (desc string, isGroup bool) {
 	if km, ok := action.(wig.KeyMap); ok {
 		return fmt.Sprintf("+prefix (%d)", len(km)), true
+	}
+
+	format := ""
+	if w.e != nil {
+		format = w.e.Config.WhichKeyFormat
 	}
 
 	val := reflect.ValueOf(action)
@@ -67,10 +72,10 @@ func getActionInfo(action any) (desc string, isGroup bool) {
 		ptr := val.Pointer()
 		for name, cmd := range wig.AllCommands {
 			if cmd.Fn != nil && reflect.ValueOf(cmd.Fn).Pointer() == ptr {
-				if cmd.Desc != "" {
+				if format != "cmd" && format != "camel" && format != "camelcase" && cmd.Desc != "" {
 					return cmd.Desc, false
 				}
-				return formatCmdName(name), false
+				return formatCmdName(name, format), false
 			}
 		}
 
@@ -79,27 +84,39 @@ func getActionInfo(action any) (desc string, isGroup bool) {
 			name := fn.Name()
 			parts := strings.Split(name, ".")
 			if len(parts) > 0 {
-				return formatCmdName(parts[len(parts)-1]), false
+				return formatCmdName(parts[len(parts)-1], format), false
 			}
-			return formatCmdName(name), false
+			return formatCmdName(name, format), false
 		}
 	}
 	return "", false
 }
 
-func formatCmdName(name string) string {
-	name = strings.TrimPrefix(name, "Cmd")
-	var result []rune
-	for i, r := range name {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			prev := rune(name[i-1])
-			if prev < 'A' || prev > 'Z' {
-				result = append(result, ' ')
+func formatCmdName(name string, format string) string {
+	switch strings.ToLower(format) {
+	case "cmd":
+		return name
+	case "camel", "camelcase":
+		return strings.TrimPrefix(name, "Cmd")
+	default:
+		name = strings.TrimPrefix(name, "Cmd")
+		var result []rune
+		runes := []rune(name)
+		for i := 0; i < len(runes); i++ {
+			r := runes[i]
+			if i > 0 && r >= 'A' && r <= 'Z' {
+				prev := runes[i-1]
+				isPrevLower := prev >= 'a' && prev <= 'z'
+				isPrevUpper := prev >= 'A' && prev <= 'Z'
+				isNextLower := i+1 < len(runes) && runes[i+1] >= 'a' && runes[i+1] <= 'z'
+				if isPrevLower || (isPrevUpper && isNextLower) {
+					result = append(result, ' ')
+				}
 			}
+			result = append(result, r)
 		}
-		result = append(result, r)
+		return string(result)
 	}
-	return string(result)
 }
 
 func (w *WhichKey) Render(view wig.View) {
@@ -149,7 +166,7 @@ func (w *WhichKey) Render(view wig.View) {
 		if c >= numCols {
 			c = numCols - 1
 		}
-		desc, isGroup := getActionInfo(w.items[k])
+		desc, isGroup := w.getActionInfo(w.items[k])
 		info := itemInfo{key: k, desc: desc, isGroup: isGroup}
 		colItems[c] = append(colItems[c], info)
 
