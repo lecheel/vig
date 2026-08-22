@@ -59,7 +59,7 @@ func (u *MiniHelpWidget) Render(view wig.View) {
 		boxW = 140
 	}
 	colW := (boxW - 2) / 6 // 6 per row
-	boxH := 3              // 2 rows of items (drawBox2 adds the top/bottom borders itself) dont know why need 3 for 2 lines
+	boxH := 4              // 2 rows of items + 2 border lines
 
 	x := (vw - boxW) / 2
 	if x < 0 {
@@ -70,7 +70,7 @@ func (u *MiniHelpWidget) Render(view wig.View) {
 	// Use default colors to match the marks popup exactly
 	style := wig.Color("default")
 
-	drawBox2(view, x, y, boxW, boxH, style)
+	drawBox(view, x, y, boxW, boxH, style)
 
 	// Title on top border
 	view.SetContent(x+2, y, " F - Keys ", wig.Color("ui.popup.title"))

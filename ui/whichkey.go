@@ -206,7 +206,7 @@ func (w *WhichKey) Render(view wig.View) {
 		groupStyle = keyStyle
 	}
 
-	drawBox(view, x, y, x+boxW-1, y+boxH-1, bgStyle)
+	drawBox(view, x, y, boxW, boxH, bgStyle)
 
 	// Title header
 	title := fmt.Sprintf(" Which Key (%s) ", w.mode.String())

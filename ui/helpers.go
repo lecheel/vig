@@ -16,13 +16,13 @@ func truncate(s string, maxLen int) string {
 	return string(runes[0:maxLen-3]) + "..."
 }
 
-func drawBox(s wig.View, x1, y1, x2, y2 int, style tcell.Style) {
-	if y2 < y1 {
-		y1, y2 = y2, y1
+func drawBox(s wig.View, x, y, width, height int, style tcell.Style) {
+	if width <= 0 || height <= 0 {
+		return
 	}
-	if x2 < x1 {
-		x1, x2 = x2, x1
-	}
+
+	x1, y1 := x, y
+	x2, y2 := x+width-1, y+height-1
 
 	for col := x1; col <= x2; col++ {
 		s.SetContent(col, y1, string(tcell.RuneHLine), style)
@@ -33,7 +33,6 @@ func drawBox(s wig.View, x1, y1, x2, y2 int, style tcell.Style) {
 		s.SetContent(x2, row, string(tcell.RuneVLine), style)
 	}
 	if y1 != y2 && x1 != x2 {
-		// Only add corners if we need to
 		s.SetContent(x1, y1, "╭", style)
 		s.SetContent(x2, y1, "╮", style)
 		s.SetContent(x1, y2, "╰", style)
@@ -48,22 +47,13 @@ func drawBox(s wig.View, x1, y1, x2, y2 int, style tcell.Style) {
 	}
 }
 
-func drawBox2(s wig.View, x, y, width, height int, style tcell.Style) {
-	drawBox(s, x, y, x+width, y+height, style)
-}
-
-func drawBoxNoBorder(s wig.View, x1, y1, width, height int, style tcell.Style) {
-	x2 := x1 + width
-	y2 := y1 + height
-	if y2 < y1 {
-		y1, y2 = y2, y1
-	}
-	if x2 < x1 {
-		x1, x2 = x2, x1
+func drawBoxNoBorder(s wig.View, x, y, width, height int, style tcell.Style) {
+	if width <= 0 || height <= 0 {
+		return
 	}
 
-	for row := y1; row < y2; row++ {
-		for col := x1; col < x2; col++ {
+	for row := y; row < y+height; row++ {
+		for col := x; col < x+width; col++ {
 			s.SetContent(col, row, " ", style)
 		}
 	}

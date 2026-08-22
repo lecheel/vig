@@ -92,7 +92,7 @@ func (u *MarksPopupWidget) Render(view wig.View) {
 		}
 	}
 
-	boxH := len(lines) + 1
+	boxH := len(lines) + 2
 	boxW := int(float32(vw) * 0.9)
 	if boxW > vw {
 		boxW = vw
@@ -107,7 +107,7 @@ func (u *MarksPopupWidget) Render(view wig.View) {
 	// Use default colors to match the file picker exactly
 	style := wig.Color("default")
 
-	drawBox2(view, x, y, boxW, boxH, style)
+	drawBox(view, x, y, boxW, boxH, style)
 
 	// Title on top border
 	view.SetContent(x+2, y, " Marks (` for pingpong) ", wig.Color("ui.popup.title"))

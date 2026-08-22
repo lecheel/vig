@@ -186,7 +186,7 @@ func (nm *NotifyManager) Render(view wig.View) {
 		}
 
 		// Draw border
-		drawBox(view, x, yCur, x+msgWidth-1, yCur+2, boxBg)
+		drawBox(view, x, yCur, msgWidth, 3, boxBg)
 
 		// Clear the entire inside row with the popup background style
 		innerWidth := msgWidth - 2

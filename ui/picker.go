@@ -295,7 +295,7 @@ func (u *UiPicker[T]) Render(view wig.View) {
 	pageSize := h - 6
 
 	// fill box
-	drawBox2(view, x, y, w, h, wig.Color("default"))
+	drawBox(view, x, y, w, h, wig.Color("default"))
 
 	if u.title != "" {
 		titleStr := " " + truncate(u.title, w-4) + " "

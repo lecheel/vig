@@ -10,8 +10,8 @@ func NotificationsRender(e *wig.Editor, view wig.View) {
 	x := vw - 53
 	y := vh - 5
 	w := 50
-	h := 2
+	h := 3
 
-	drawBox2(view, x, y, w, h, wig.Color("statusline"))
-	view.SetContent(x+1, y+1, truncate("sdf", 48), wig.Color("statusline"))
+	drawBox(view, x, y, w, h, wig.Color("ui.statusline"))
+	view.SetContent(x+1, y+1, truncate("sdf", 48), wig.Color("ui.statusline"))
 }
