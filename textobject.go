@@ -41,73 +41,173 @@ func TextObjectWord(ctx Context, bigword bool) (start, end int) {
 	return start, end
 }
 
-// Returns selection inside '(', '{', '[' as "Selection" range. This implementation is simple
-// and does not check if open/close symbols are "balanced".
-// TODO: rewrite
-func TextObjectBlock(buf *Buffer, ch rune, include bool) (found bool, sel *Selection, cur Cursor) {
-	// defer func(c Cursor) {
-	// buf.Cursor = c
-	// }(buf.Cursor)
+// TextObjectBlock finds the enclosing bracket pair for the cursor position.
+// Supports (), {}, [], <>. Scans backward for the opening bracket, then
+// forward for the matching close. Handles nesting and multi-line spans.
+// If include is true, the selection includes the brackets; otherwise it's
+// the content inside them. Returns nil selection for empty brackets like ().
+func TextObjectBlock(ctx Context, ch rune, include bool) (found bool, sel *Selection) {
+	cur := ContextCursorGet(ctx)
 
 	openClose := map[rune]rune{
 		'(': ')',
 		'{': '}',
 		'[': ']',
+		'<': '>',
 	}
 
-	if _, ok := openClose[ch]; !ok {
+	closeCh, ok := openClose[ch]
+	if !ok {
 		for k, v := range openClose {
 			if v == ch {
 				ch = k
+				closeCh = v
+				ok = true
 				break
 			}
 		}
-	}
-	openCh := ch
-	closeCh := openClose[ch]
-
-	// move cursor back until 'openCh' is found
-	openChFound := false
-	for {
-		if CursorChar(buf, nil) == openCh {
-			openChFound = true
-			break
-		}
-		if !CursorDec(buf, nil) {
-			break
+		if !ok {
+			return false, nil
 		}
 	}
-	if !openChFound {
-		return
+
+	// If cursor is on the opening bracket, scan forward directly
+	curChar := CursorChar(ctx.Buf, cur)
+	if curChar == ch {
+		return findCloseBracket(ctx, *cur, ch, closeCh, include)
 	}
 
-	// TODO: fix
-	bufCursor := Cursor{}
-	start := bufCursor
+	// Scan backward to find enclosing opening bracket
+	scanCur := *cur
+	depth := 0
 
-	// move cursor "left" till we find first "open" bracket
 	for {
-		if CursorChar(buf, nil) == closeCh {
-			end := bufCursor
-			if include == false {
-				// no selection. empty ().
-				if end.Char == start.Char+1 {
-					return true, nil, end
-				}
-
-				start.Char += 1
-				end.Char -= 1
+		r := CursorChar(ctx.Buf, &scanCur)
+		if r == closeCh {
+			depth++
+		} else if r == ch {
+			if depth == 0 {
+				return findCloseBracket(ctx, scanCur, ch, closeCh, include)
 			}
-
-			return true, &Selection{
-				Start: start,
-				End:   end,
-			}, bufCursor
+			depth--
 		}
-		if !CursorInc(buf, nil) {
+		if !CursorDec(ctx.Buf, &scanCur) {
 			break
 		}
 	}
 
-	return false, nil, bufCursor
+	return false, nil
+}
+
+func findCloseBracket(ctx Context, openPos Cursor, openCh, closeCh rune, include bool) (found bool, sel *Selection) {
+	scanCur := openPos
+	depth := 1
+
+	if !CursorInc(ctx.Buf, &scanCur) {
+		return false, nil
+	}
+
+	for {
+		r := CursorChar(ctx.Buf, &scanCur)
+		if r == openCh {
+			depth++
+		} else if r == closeCh {
+			depth--
+			if depth == 0 {
+				if include {
+					return true, &Selection{
+						Start: openPos,
+						End:   scanCur,
+					}
+				}
+				innerStart := openPos
+				innerStart.Char++
+				innerEnd := scanCur
+				innerEnd.Char--
+				if openPos.Line == scanCur.Line && innerStart.Char > innerEnd.Char {
+					return true, nil
+				}
+				return true, &Selection{
+					Start: innerStart,
+					End:   innerEnd,
+				}
+			}
+		}
+		if !CursorInc(ctx.Buf, &scanCur) {
+			break
+		}
+	}
+
+	return false, nil
+}
+
+// TextObjectQuotes finds a matching quote pair on the current line.
+// Supports ', ", `. Pairs are matched left-to-right (first pair, second pair, etc.).
+// If the cursor is inside a pair, that pair is used. If before the first
+// quote, the first pair is used.
+func TextObjectQuotes(ctx Context, ch rune, include bool) (found bool, sel *Selection) {
+	cur := ContextCursorGet(ctx)
+	line := CursorLine(ctx.Buf, cur)
+	if line == nil {
+		return false, nil
+	}
+
+	lineRunes := line.Value
+	charIdx := cur.Char
+	if charIdx >= len(lineRunes) {
+		charIdx = len(lineRunes) - 1
+	}
+
+	var positions []int
+	for i, r := range lineRunes {
+		if r == ch {
+			positions = append(positions, i)
+		}
+	}
+
+	if len(positions) < 2 {
+		return false, nil
+	}
+
+	for i := 0; i < len(positions)-1; i += 2 {
+		start := positions[i]
+		end := positions[i+1]
+
+		if charIdx >= start && charIdx <= end {
+			if include {
+				return true, &Selection{
+					Start: Cursor{Line: cur.Line, Char: start},
+					End:   Cursor{Line: cur.Line, Char: end},
+				}
+			}
+			if start+1 > end-1 {
+				return true, nil
+			}
+			return true, &Selection{
+				Start: Cursor{Line: cur.Line, Char: start + 1},
+				End:   Cursor{Line: cur.Line, Char: end - 1},
+			}
+		}
+	}
+
+	// Cursor before first quote — use first pair
+	if charIdx < positions[0] {
+		start := positions[0]
+		end := positions[1]
+		if include {
+			return true, &Selection{
+				Start: Cursor{Line: cur.Line, Char: start},
+				End:   Cursor{Line: cur.Line, Char: end},
+			}
+		}
+		if start+1 > end-1 {
+			return true, nil
+		}
+		return true, &Selection{
+			Start: Cursor{Line: cur.Line, Char: start + 1},
+			End:   Cursor{Line: cur.Line, Char: end - 1},
+		}
+	}
+
+	return false, nil
 }

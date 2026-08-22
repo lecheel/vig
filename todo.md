@@ -12,10 +12,11 @@
 - **LSP**: Completion, Goto definition, Hover, Signature help, Diagnostics.
 - **Syntax Highlighting**: Tree-sitter (Go, Rust, Odin, C, Python).
 - **UI Elements**: Statusline, Which-Key popup (centered), Command line, Search prompt, Hover popup, Autocomplete, Mini Help (shortcut alignment), Confirm prompts, Marks popup (themed `ui.mark`), unified popup styling (`ui.popup.title`).
-- **System**: System clipboard support (yank/paste, bracketed paste), Position cache (remember cursor on reopen), Basic macros, CLI flags (`--help`, `--edit`, `--health`).
+- **System**: System clipboard support (yank/paste, bracketed paste), Position cache (remember cursor on reopen), CLI flags (`--help`, `--edit`, `--health`).
+- **Macros & Repeat**: Macro recording/playback (`q`/`@` with count support `3@a`), Dot-repeat (`.`) via command-based `LastRepeatableFn` with count preservation (`2dd`→`.` deletes 2 lines). Count support on `dd`, `dw`, `x`, `yy`. Repeatable Ex commands (`:cn`, `:cp`, git hunks) via `Repeatable` flag. Recursion guard prevents `.` inside macro playback.
 - **Configuration**: `config.toml` (settings, keys), `languages.toml` (LSP/Indent), Themes. Ability to disable keys via `CmdDummyNA`.
 - **Visual Block**: `Ctrl-v` rectangle selection, block insert (`I`), block yank (`y`), block delete (`d`/`x`).
-- **Result Navigation**: `:cn` and `:cp` to jump through search results.
+- **Result Navigation**: `:cn` and `:cp` to jump through search results (dot-repeatable via `Repeatable` flag).
 - **Command Line**: `:123` to jump to line, `:e <file>` to open/create files, Search & Replace (`:s/...`, `:%s/...`, `:'<,'>s/...` with `c`/`g` flags), full line editing (`Ctrl-a`, `Ctrl-e`, `Ctrl-w`, `Ctrl-r Ctrl-w`).
 - **Completion**: LSP completions, manual local buffer completions (`Alt-/`), single-candidate auto-complete.
 
@@ -26,9 +27,10 @@
 ### High Priority (Core Vim Features)
 - [v] **Ex Mode / Command-line ranges**: Implement `:[range]s/old/new/g`, `:%s/...`, `:'<,'>s/...` with confirm (`c`) and global (`g`) flags.
 - [v] **Search & Replace**: Visual selection + `:s/.../...`, `:%s/.../...` with confirmation (`c` flag).
+- [v] **Dot Repeat & Count**: `.` repeats last change with count preservation (`2dd`→`.` deletes 2). Count support on `dd`, `dw`, `x`, `yy`. Repeatable Ex commands via `Repeatable` flag.
 - [ ] **Horizontal Splits**: `:sp` / `ctrl+w s`. Currently only vertical splits are supported.
 - [v] **Marks**: m[a-z] to set mark, `[a-z] to jump to mark, `` for last position
-- [ ] **Advanced Text Objects**: `ci(`, `ci{`, `ci'`, `da"`, `ciw` inside punctuation/blocks.
+- [v] **Advanced Text Objects**: `ci(`/`ci{`/`ci[`/`ci'`/`ci"`, `ca(`/`ca{`/`ca'`/`ca"`, `di(`/`da(`/`di"`/`da"`, `yi(`/`ya(` — inside & around blocks and quotes. Balanced bracket matching with nesting. `ciw`/`caw`/`diw`/`daw` also supported.
 - [ ] **Quickfix List**: `:copen`, `:cnext`, `:cprev` for LSP diagnostics and grep results.
 
 ### Medium Priority (Quality of Life)

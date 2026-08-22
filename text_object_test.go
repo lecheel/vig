@@ -97,7 +97,8 @@ func TestTextObjects(t *testing.T) {
 		require.Equal(t, c.lines, buf.String())
 		cur := c.cursor
 
-		found, sel, _ := TextObjectBlock(buf, c.ch, c.include)
+		ctx := Context{Editor: e, Buf: buf}
+		found, sel := TextObjectBlock(ctx, c.ch, c.include)
 		require.Equal(t, c.found, found, c)
 		require.Equal(t, c.cursor.Char, cur.Char)
 		require.Equal(t, c.cursor.Line, cur.Line)

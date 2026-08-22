@@ -570,20 +570,197 @@ func CmdIndentOrComplete(ctx Context) {
 	ctx.Editor.Lsp.Completion(ctx.Buf)
 }
 
-func CmdChangeInsideBlock(ctx Context) {
-	switch ctx.Char {
-	case "w":
-		CmdChangeWORD(ctx)
-	case "(", "[", "{", "'", "\"":
-		ctx.Editor.EchoMessage("TODO: rewrite this")
-		found, sel, _ := TextObjectBlock(ctx.Buf, rune(ctx.Char[0]), false) // TODO: handle unicode
+func CmdChangeInside(_ Context) func(Context) {
+	return func(ctx Context) {
+		if len(ctx.Char) == 0 {
+			return
+		}
+		ch := rune(ctx.Char[0])
+
+		if ch == 'w' {
+			CmdChangeWord(ctx)
+			return
+		}
+		if ch == 'W' {
+			CmdChangeWORD(ctx)
+			return
+		}
+
+		var sel *Selection
+		var found bool
+
+		if ch == '\'' || ch == '"' || ch == '`' {
+			found, sel = TextObjectQuotes(ctx, ch, false)
+		} else {
+			found, sel = TextObjectBlock(ctx, ch, false)
+		}
+
 		if !found {
 			return
 		}
+		if sel == nil {
+			CmdEnterInsertMode(ctx)
+			return
+		}
+
 		ctx.Buf.Selection = sel
-		// ctx.Buf.Cursor = cur
 		CmdEnterInsertMode(ctx)
+		yankSave(ctx)
 		SelectionDelete(ctx)
+	}
+}
+
+func CmdChangeAround(_ Context) func(Context) {
+	return func(ctx Context) {
+		if len(ctx.Char) == 0 {
+			return
+		}
+		ch := rune(ctx.Char[0])
+
+		if ch == 'w' {
+			CmdChangeWORD(ctx)
+			return
+		}
+
+		var sel *Selection
+		var found bool
+
+		if ch == '\'' || ch == '"' || ch == '`' {
+			found, sel = TextObjectQuotes(ctx, ch, true)
+		} else {
+			found, sel = TextObjectBlock(ctx, ch, true)
+		}
+
+		if !found || sel == nil {
+			return
+		}
+
+		ctx.Buf.Selection = sel
+		CmdEnterInsertMode(ctx)
+		yankSave(ctx)
+		SelectionDelete(ctx)
+	}
+}
+
+func CmdDeleteInside(_ Context) func(Context) {
+	return func(ctx Context) {
+		if len(ctx.Char) == 0 {
+			return
+		}
+		ch := rune(ctx.Char[0])
+
+		if ch == 'w' {
+			CmdDeleteWord(ctx)
+			return
+		}
+
+		var sel *Selection
+		var found bool
+
+		if ch == '\'' || ch == '"' || ch == '`' {
+			found, sel = TextObjectQuotes(ctx, ch, false)
+		} else {
+			found, sel = TextObjectBlock(ctx, ch, false)
+		}
+
+		if !found || sel == nil {
+			return
+		}
+
+		if ctx.Buf.TxStart() {
+			defer ctx.Buf.TxEnd()
+		}
+		ctx.Buf.Selection = sel
+		yankSave(ctx)
+		SelectionDelete(ctx)
+		CmdNormalMode(ctx)
+	}
+}
+
+func CmdDeleteAround(_ Context) func(Context) {
+	return func(ctx Context) {
+		if len(ctx.Char) == 0 {
+			return
+		}
+		ch := rune(ctx.Char[0])
+
+		if ch == 'w' {
+			CmdDeleteWord(ctx)
+			return
+		}
+
+		var sel *Selection
+		var found bool
+
+		if ch == '\'' || ch == '"' || ch == '`' {
+			found, sel = TextObjectQuotes(ctx, ch, true)
+		} else {
+			found, sel = TextObjectBlock(ctx, ch, true)
+		}
+
+		if !found || sel == nil {
+			return
+		}
+
+		if ctx.Buf.TxStart() {
+			defer ctx.Buf.TxEnd()
+		}
+		ctx.Buf.Selection = sel
+		yankSave(ctx)
+		SelectionDelete(ctx)
+		CmdNormalMode(ctx)
+	}
+}
+
+func CmdYankInside(_ Context) func(Context) {
+	return func(ctx Context) {
+		if len(ctx.Char) == 0 {
+			return
+		}
+		ch := rune(ctx.Char[0])
+
+		var sel *Selection
+		var found bool
+
+		if ch == '\'' || ch == '"' || ch == '`' {
+			found, sel = TextObjectQuotes(ctx, ch, false)
+		} else {
+			found, sel = TextObjectBlock(ctx, ch, false)
+		}
+
+		if !found || sel == nil {
+			return
+		}
+
+		ctx.Buf.Selection = sel
+		yankSave(ctx)
+		ctx.Buf.Selection = nil
+	}
+}
+
+func CmdYankAround(_ Context) func(Context) {
+	return func(ctx Context) {
+		if len(ctx.Char) == 0 {
+			return
+		}
+		ch := rune(ctx.Char[0])
+
+		var sel *Selection
+		var found bool
+
+		if ch == '\'' || ch == '"' || ch == '`' {
+			found, sel = TextObjectQuotes(ctx, ch, true)
+		} else {
+			found, sel = TextObjectBlock(ctx, ch, true)
+		}
+
+		if !found || sel == nil {
+			return
+		}
+
+		ctx.Buf.Selection = sel
+		yankSave(ctx)
+		ctx.Buf.Selection = nil
 	}
 }
 
