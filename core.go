@@ -379,9 +379,10 @@ func CmdSelectionChange(ctx Context) {
 	SelectionDelete(ctx)
 }
 
-// TODO: implement correct toggle comment logic: check if all lines are commented - then uncomment.
-// else, append comment to each uncommted line.
 func CmdToggleComment(ctx Context) {
+	if ctx.Buf == nil {
+		return
+	}
 	if ctx.Buf.TxStart() {
 		defer ctx.Buf.TxEnd()
 	}
@@ -389,10 +390,93 @@ func CmdToggleComment(ctx Context) {
 
 	ctx.Editor.LastRepeatableFn = CmdToggleComment
 
-	comment := "//"
+	comment := GetCommentToken(ctx.Buf)
 
-	// TODO: improve. make comments like all other normal editors!
-	cmComment := func(line *Element[Line]) {
+	cmComment := func(line *Element[Line], insertCol int) {
+		TextInsert(ctx.Buf, line, insertCol, comment+" ")
+	}
+
+	cmUncomment := func(line *Element[Line]) {
+		str := string(line.Value)
+		trimmed := strings.TrimLeftFunc(str, unicode.IsSpace)
+		leadLen := len([]rune(str[:len(str)-len(trimmed)]))
+		lineNum := CursorNumByLine(ctx.Buf, line)
+
+		prefixToDel := comment
+		if strings.HasPrefix(trimmed, comment+" ") {
+			prefixToDel = comment + " "
+		}
+
+		TextDelete(ctx.Buf, &Selection{
+			Start: Cursor{Line: lineNum, Char: leadLen},
+			End:   Cursor{Line: lineNum, Char: leadLen + len([]rune(prefixToDel))},
+		})
+	}
+
+	isLineCommented := func(line *Element[Line]) bool {
+		trimmed := strings.TrimSpace(string(line.Value))
+		return strings.HasPrefix(trimmed, comment)
+	}
+
+	if ctx.Buf.Selection != nil {
+		selection := SelectionNormalize(ctx.Buf.Selection)
+		lineStart := CursorLineByNum(ctx.Buf, selection.Start.Line)
+		count := selection.End.Line - selection.Start.Line
+
+		lines := make([]*Element[Line], 0, count+1)
+		curr := lineStart
+		for i := 0; i <= count && curr != nil; i++ {
+			lines = append(lines, curr)
+			curr = curr.Next()
+		}
+
+		allCommented := true
+		hasNonEmpty := false
+
+		for _, l := range lines {
+			if l.Value.IsEmpty() {
+				continue
+			}
+			hasNonEmpty = true
+			if !isLineCommented(l) {
+				allCommented = false
+				break
+			}
+		}
+
+		if !hasNonEmpty {
+			return
+		}
+
+		for _, l := range lines {
+			if l.Value.IsEmpty() {
+				continue
+			}
+			if allCommented {
+				cmUncomment(l)
+			} else {
+				spacePos := 0
+				for i, c := range l.Value {
+					if !unicode.IsSpace(c) {
+						spacePos = i
+						break
+					}
+				}
+				cmComment(l, spacePos)
+			}
+		}
+		return
+	}
+
+	cur := ContextCursorGet(ctx)
+	line := CursorLine(ctx.Buf, cur)
+	if line == nil || line.Value.IsEmpty() {
+		return
+	}
+
+	if isLineCommented(line) {
+		cmUncomment(line)
+	} else {
 		spacePos := 0
 		for i, c := range line.Value {
 			if !unicode.IsSpace(c) {
@@ -400,50 +484,8 @@ func CmdToggleComment(ctx Context) {
 				break
 			}
 		}
-		TextInsert(ctx.Buf, line, spacePos, comment+" ")
+		cmComment(line, spacePos)
 	}
-
-	cmUncomment := func(line *Element[Line], comment string) {
-		r := strings.Replace(string(line.Value), comment, "", 1)
-		lineNum := CursorNumByLine(ctx.Buf, line)
-		TextDelete(ctx.Buf, &Selection{
-			Start: Cursor{Line: lineNum, Char: 0},
-			End:   Cursor{Line: lineNum, Char: len(line.Value) - 1},
-		})
-		TextInsert(ctx.Buf, line, 0, r[:len(r)-1])
-	}
-
-	toggleCommentForLine := func(line *Element[Line]) {
-		trimmed := strings.TrimSpace(string(line.Value))
-		if strings.HasPrefix(trimmed, comment+" ") {
-			cmUncomment(line, comment+" ")
-		} else if strings.HasPrefix(trimmed, comment) {
-			cmUncomment(line, comment)
-		} else {
-			cmComment(line)
-		}
-	}
-
-	if ctx.Buf.Selection != nil {
-		selection := SelectionNormalize(ctx.Buf.Selection)
-
-		lineStart := CursorLineByNum(ctx.Buf, selection.Start.Line)
-		count := selection.End.Line - selection.Start.Line
-
-		for i := 0; i <= count; i++ {
-			line := lineStart
-			lineStart = lineStart.Next()
-			if line.Value.IsEmpty() {
-				continue
-			}
-			toggleCommentForLine(line)
-		}
-		return
-	}
-
-	cur := ContextCursorGet(ctx)
-	line := CursorLine(ctx.Buf, cur)
-	toggleCommentForLine(line)
 }
 
 func CmdSelectionDelete(ctx Context) {

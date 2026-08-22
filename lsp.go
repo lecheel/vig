@@ -25,6 +25,11 @@ func init() {
 	lcfg := LoadLanguagesConfig()
 	for _, v := range lcfg.Languages {
 		exts, _ := v.GetFileTypes()
+		if v.CommentToken != "" {
+			for _, ext := range exts {
+				languageCommentTokens["."+ext] = v.CommentToken
+			}
+		}
 		servers := v.GetLanguageServers()
 		if len(servers) == 0 {
 			continue
