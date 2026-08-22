@@ -106,7 +106,7 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 						for m, c := range win.Marks {
 							if c.Line == lineNum {
 								markChar = string(m)
-								markStyle = tcell.StyleDefault.Foreground(tcell.ColorGreen)
+								markStyle = wig.Color("ui.mark")
 								break
 							}
 						}

@@ -328,7 +328,7 @@ func MergeStyles(base tcell.Style, color string) tcell.Style {
 			ulColor = currentTheme.Palette[ulColor]
 		}
 		if ulColor != "" {
-			base = base.Underline(ulStyle, tcell.GetColor("red"))
+			base = base.Underline(ulStyle, tcell.GetColor(ulColor))
 		}
 	}
 	return base

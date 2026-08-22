@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/firstrow/wig"
-	"github.com/gdamore/tcell/v2"
 )
 
 type WhichKey struct {
@@ -112,7 +111,7 @@ func (w *WhichKey) Render(view wig.View) {
 	y := vh - boxH - 1
 
 	bgStyle := wig.Color("default")
-	keyStyle := bgStyle.Foreground(tcell.ColorGreen)
+	keyStyle := wig.Color("ui.whichkey.key")
 
 	drawBox(view, x, y, x+boxW-1, y+boxH-1, bgStyle)
 

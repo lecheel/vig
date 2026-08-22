@@ -5,8 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gdamore/tcell/v2"
-
 	"github.com/firstrow/wig"
 )
 
@@ -129,7 +127,7 @@ func (u *MarksPopupWidget) Render(view wig.View) {
 		textStyle = wig.Color("ui.text")
 	}
 
-	markStyle := tcell.StyleDefault.Foreground(tcell.ColorGreen)
+	markStyle := wig.Color("ui.mark")
 
 	if len(u.items) == 0 {
 		for i, line := range lines {

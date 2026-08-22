@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/firstrow/wig"
-	"github.com/gdamore/tcell/v2"
 )
 
 type ConfirmWidget struct {
@@ -99,8 +98,8 @@ func (u *ConfirmWidget) Render(view wig.View) {
 	// Render the prompt text
 	view.SetContent(0, y, u.prompt, st)
 
-	// Render a red cursor block at the end of the prompt
-	cursorStyle := tcell.StyleDefault.Background(tcell.ColorRed).Foreground(tcell.ColorWhite)
+	// Render a cursor block at the end of the prompt
+	cursorStyle := wig.Color("ui.cursor")
 	if len(u.prompt) < vw {
 		view.SetContent(len(u.prompt), y, " ", cursorStyle)
 	}
