@@ -93,6 +93,14 @@ func init() {
 	wig.AllCommands["CmdMakeTest"] = wig.CmdDefinition{Desc: "Make test", Fn: CmdMakeTest}
 	wig.AllCommands["CmdRgUnderCursor"] = wig.CmdDefinition{Desc: "Ripgrep search under cursor", Fn: CmdRgUnderCursor}
 	wig.AllCommands["CmdOpenSavedSearch"] = wig.CmdDefinition{Desc: "Reopen rg search", Fn: CmdOpenSavedSearch}
+	wig.AllCommands["copen"] = wig.CmdDefinition{Desc: "Open quickfix list", Fn: CmdQuickfixOpen}
+	wig.AllCommands["cclose"] = wig.CmdDefinition{Desc: "Close quickfix window", Fn: func(ctx wig.Context) {
+		if len(ctx.Editor.Windows) > 1 {
+			wig.CmdWindowClose(ctx)
+		} else {
+			wig.CmdBufferCycle(ctx)
+		}
+	}}
 	wig.AllCommands["CmdDummyNA"] = wig.CmdDefinition{Desc: "Disable key", Fn: wig.CmdDummyNA}
 	wig.AllCommands["nop"] = wig.CmdDefinition{Desc: "NOP", Fn: wig.CmdDummyNA}
 }

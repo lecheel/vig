@@ -49,20 +49,19 @@ func findVisitSourceBuffer(e *Editor) *Buffer {
 		}
 	}
 
-	// 2. Search all windows for a buffer whose FilePath starts with "[rgcollect" or is "[rg]".
+	// 2. Search all windows for a result buffer ([rgcollect], [rg], or [quickfix]).
 	for _, win := range e.Windows {
 		if win.Buffer() != nil {
 			fp := win.Buffer().FilePath
-			if strings.HasPrefix(fp, "[rgcollect") || fp == "[rg]" {
+			if strings.HasPrefix(fp, "[rgcollect") || fp == "[rg]" || fp == "[quickfix]" {
 				return win.Buffer()
 			}
 		}
 	}
 
-	// 3. For [rg] or [rgcollect] (grouped, no split), search all buffers since it may
-	// not be visible after opening a file replaces it in the window.
+	// 3. Search all buffers (may not be visible after opening a file replaced it).
 	for _, buf := range e.Buffers {
-		if strings.HasPrefix(buf.FilePath, "[rgcollect") || buf.FilePath == "[rg]" {
+		if strings.HasPrefix(buf.FilePath, "[rgcollect") || buf.FilePath == "[rg]" || buf.FilePath == "[quickfix]" {
 			return buf
 		}
 	}
@@ -92,7 +91,7 @@ func VisitAtLine(ctx Context, sourceBuf *Buffer, opts VisitOptions) error {
 	if sourceWin == nil {
 		if ctx.Editor.ActiveWindow().Buffer() == sourceBuf {
 			sourceWin = ctx.Editor.ActiveWindow()
-		} else if strings.HasPrefix(sourceBuf.FilePath, "[rgcollect") || sourceBuf.FilePath == "[rg]" {
+		} else if strings.HasPrefix(sourceBuf.FilePath, "[rgcollect") || sourceBuf.FilePath == "[rg]" || sourceBuf.FilePath == "[quickfix]" {
 			// If rg buffer is not in a window, use the active window to get/update its cursor.
 			sourceWin = ctx.Editor.ActiveWindow()
 		} else {

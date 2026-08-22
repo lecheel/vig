@@ -31,7 +31,7 @@
 - [ ] **Horizontal Splits**: `:sp` / `ctrl+w s`. Currently only vertical splits are supported.
 - [v] **Marks**: m[a-z] to set mark, `[a-z] to jump to mark, `` for last position
 - [v] **Advanced Text Objects**: `ci(`/`ci{`/`ci[`/`ci'`/`ci"`, `ca(`/`ca{`/`ca'`/`ca"`, `di(`/`da(`/`di"`/`da"`, `yi(`/`ya(` — inside & around blocks and quotes. Balanced bracket matching with nesting. `ciw`/`caw`/`diw`/`daw` also supported.
-- [ ] **Quickfix List**: `:copen`, `:cnext`, `:cprev` for LSP diagnostics and grep results.
+- [v] **Quickfix List**: `:copen` opens LSP diagnostics in a split buffer. Navigate with `:cn`/`:cp` or Enter. `q`/`Esc` closes.
 
 ### Medium Priority (Quality of Life)
 - [ ] **Folding**: `zc`, `zo`, `za` with syntax/indent based folding.

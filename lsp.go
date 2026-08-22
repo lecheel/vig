@@ -416,6 +416,20 @@ func (m *LspManager) Diagnostics(buf *Buffer, lineNum int) []protocol.Diagnostic
 	return nil
 }
 
+// AllDiagnostics returns all diagnostics for the given buffer across all lines.
+func (m *LspManager) AllDiagnostics(buf *Buffer) []protocol.Diagnostic {
+	m.rw.Lock()
+	defer m.rw.Unlock()
+
+	var result []protocol.Diagnostic
+	if val, ok := m.diagnostics[buf.FilePath]; ok {
+		for _, diags := range val {
+			result = append(result, diags...)
+		}
+	}
+	return result
+}
+
 type pipeWrapper struct {
 	reader io.Reader
 	writer io.Writer
