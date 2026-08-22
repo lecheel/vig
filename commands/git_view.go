@@ -1035,10 +1035,32 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 				}
 			},
 			"p": func(ctx wig.Context) {
-				ctx.Editor.EchoMessage("running: git push origin HEAD")
-				ctx.Editor.Redraw()
-				gitRun("push", "origin", "HEAD")
-				ctx.Editor.EchoMessage("push done")
+				curBranchOut, _ := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+				curBranch := strings.TrimSpace(string(curBranchOut))
+				if curBranch == "" {
+					curBranch = "HEAD"
+				}
+				prompt := fmt.Sprintf("Push '%s' to origin? (y/n/c)", curBranch)
+				ui.ConfirmInit(ctx, prompt, func() {
+					ctx.Editor.EchoMessage(fmt.Sprintf("pushing '%s' to origin...", curBranch))
+					ctx.Editor.Redraw()
+					cmd := exec.Command("git", "push", "origin", "HEAD")
+					out, err := cmd.CombinedOutput()
+					if err != nil {
+						outStr := strings.TrimSpace(string(out))
+						if outStr == "" {
+							outStr = err.Error()
+						}
+						outStr = strings.ReplaceAll(outStr, "\n", " ")
+						ctx.Editor.EchoMessage("Push failed: " + outStr)
+					} else {
+						ctx.Editor.EchoMessage("Push complete: origin/" + curBranch)
+					}
+				}, func() {
+					ctx.Editor.EchoMessage("Push cancelled")
+				}, func() {
+					ctx.Editor.EchoMessage("Push cancelled")
+				})
 			},
 			"S": func(ctx wig.Context) {
 				if pendingStash != nil {
