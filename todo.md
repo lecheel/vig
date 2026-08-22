@@ -137,7 +137,13 @@
 - [ ] **Jumplist**: `Ctrl-o` (jump back), `Ctrl-i` (jump forward) across all jumps
 - [ ] **Mouse Support**: Click to set cursor, drag to select visual mode, scroll wheel
 - [v] **System Clipboard Integration**: Copy/paste via `<Leader>y`, `<Leader>pv`, `<Leader>pp` and bracketed paste
-- [ ] **Named & System Registers**: Multiple registers (`"ay`, `"ap`), explicit system clipboard registers (`"+y`, `"+p`, `"*y`, `"*p`), default unnamed register syncing (`set clipboard=unnamedplus`)
+- [v] **Named & System Registers**
+  - Register popup (`"` / `:reg` / `:registers`)
+  - Preview
+  - `%` current file
+  - `+`/`*` system clipboard
+  - `0` last yank
+  - `1`–`9` history
 - [ ] **Word Motions**: `e` (end of word), `ge` (end of word backward), `W`, `B`, `E` (WORD motions)
 - [ ] **Multi-cursor**: `Ctrl-n`/`Ctrl-v` multi-edit
 

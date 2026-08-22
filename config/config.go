@@ -268,6 +268,7 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 			".":      wig.CmdMacroRepeat,
 			"m":      wig.CmdSetMark,
 			"`":      wig.CmdGotoMark,
+			"\"":     wig.CmdSelectRegister,
 			"c": wig.KeyMap{
 				"$": wig.CmdChangeEndOfLine,
 				"c": wig.CmdChangeLine,
@@ -469,6 +470,7 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 			"ctrl+j": wig.CmdCursorLineDown,
 			"ctrl+k": wig.CmdCursorLineUp,
 			"ctrl+n": wig.CmdAutocompleteTrigger,
+			"ctrl+r": wig.CmdInsertRegister,
 			"alt+/":  autocomplete.BufferComplete,
 			"Left":   wig.CmdCursorLeft,
 			"Right":  wig.CmdCursorRight,

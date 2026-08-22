@@ -137,7 +137,30 @@ func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 			}
 			return
 		}
-		// If not Ctrl-w, fall through and process normally
+
+		// Register insertion: <Ctrl-r>{reg} (e.g. +, %, 0-9, a-z, ")
+		var regKey rune
+		if ev.Key() == tcell.KeyRune {
+			regKey = ev.Rune()
+		}
+		if regKey != 0 {
+			eCtx := u.e.NewContext()
+			text := wig.GetRegisterText(eCtx, regKey)
+			if text != "" {
+				textRunes := []rune(text)
+				newBuf := make([]rune, len(u.chBuf)+len(textRunes))
+				copy(newBuf, u.chBuf[:u.cursorPos])
+				copy(newBuf[u.cursorPos:], textRunes)
+				copy(newBuf[u.cursorPos+len(textRunes):], u.chBuf[u.cursorPos:])
+
+				u.chBuf = newBuf
+				u.cursorPos += len(textRunes)
+				u.candidates = []string{}
+				u.candIdx = -1
+			}
+			return
+		}
+		// If not handled, fall through and process normally
 	}
 
 	if ev.Modifiers()&tcell.ModCtrl != 0 {
@@ -355,6 +378,7 @@ func (u *uiCommandLine) runCommand(cmd string) {
 	if cmd == "" {
 		return
 	}
+	wig.LastCommand = cmd
 
 	// Handle ranges like '<,'> or %
 	rangeStr := ""
@@ -382,12 +406,21 @@ func (u *uiCommandLine) runCommand(cmd string) {
 			return
 		}
 		filePath := strings.TrimSpace(parts[1])
+		ctx := u.e.NewContext()
+		if filePath == "%" && ctx.Buf != nil {
+			if def, ok := wig.AllCommands["CmdReloadBuffer"]; ok {
+				if fn, ok := def.Fn.(func(wig.Context)); ok {
+					fn(ctx)
+					return
+				}
+			}
+			filePath = ctx.Buf.FilePath
+		}
 		buf, err := u.e.OpenFile(filePath)
 		if err != nil {
 			u.e.EchoMessage(fmt.Sprintf("Error opening %s: %v", filePath, err))
 			return
 		}
-		ctx := u.e.NewContext()
 		ctx.Buf = buf
 		u.e.ActiveWindow().VisitBuffer(ctx)
 		return

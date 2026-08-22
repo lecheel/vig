@@ -81,6 +81,10 @@ func main() {
 		ui.MarksPopupInit(ctx, marks)
 	}
 
+	wig.RegistersPopupFactory = func(ctx wig.Context) {
+		ui.RegistersPopupInit(ctx)
+	}
+
 	editor := wig.NewEditor(
 		render.NewMView(tscreen, 0, 0, w, h),
 		keys,

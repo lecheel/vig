@@ -10,10 +10,14 @@ import (
 
 const minVisibleLines = 5
 
+// LastInsertedText tracks the last inserted text for the '.' register
+var LastInsertedText string
+
 func TextInsert(buf *Buffer, line *Element[Line], pos int, text string) {
 	if buf == nil || line == nil || text == "" {
 		return
 	}
+	LastInsertedText = text
 	buf.Dirty = true
 	sline := CursorNumByLine(buf, line)
 
@@ -975,7 +979,8 @@ func CmdYankInside(_ Context) func(Context) {
 		}
 
 		ctx.Buf.Selection = sel
-		yankSave(ctx)
+		val := SelectionToString(ctx.Buf, ctx.Buf.Selection)
+		saveYank(ctx, val, false, false)
 		ctx.Buf.Selection = nil
 	}
 }
@@ -1001,7 +1006,8 @@ func CmdYankAround(_ Context) func(Context) {
 		}
 
 		ctx.Buf.Selection = sel
-		yankSave(ctx)
+		val := SelectionToString(ctx.Buf, ctx.Buf.Selection)
+		saveYank(ctx, val, false, false)
 		ctx.Buf.Selection = nil
 	}
 }

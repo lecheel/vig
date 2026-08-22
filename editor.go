@@ -58,6 +58,10 @@ type AutocompleteFn func(Context) bool
 // without causing a circular import.
 var MarksPopupFactory func(ctx Context, marks map[rune]Cursor)
 
+// RegistersPopupFactory allows the `ui` package to register a popup for registers
+// without causing a circular import.
+var RegistersPopupFactory func(ctx Context)
+
 var EditorInst *Editor
 
 type Layout int
@@ -87,6 +91,7 @@ type Editor struct {
 	Snippets            *SnippetsManager
 	Config              EditorConfig
 	LastRepeatableFn    func(Context)
+	ActiveRegister      rune
 }
 
 func NewEditor(

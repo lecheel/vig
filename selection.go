@@ -177,10 +177,12 @@ func CmdSelectionBlockYank(ctx Context) {
 		}
 		lines = append(lines, string(line.Value[start:end]))
 	}
-	y := yank{val: strings.Join(lines, "\n"), isBlock: true}
+	val := strings.Join(lines, "\n")
+	y := yank{val: val, isBlock: true}
 	if ctx.Editor.Yanks.Len == 0 || ctx.Editor.Yanks.Last().Value != y {
 		ctx.Editor.Yanks.PushBack(y)
 	}
+	saveYank(ctx, val, false, true)
 	cur.Line = minLine
 	cur.Char = RuneIndexFromVisualCol(CursorLineByNum(ctx.Buf, minLine).Value, minVisCol)
 	ctx.Buf.Selection = nil

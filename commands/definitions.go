@@ -24,6 +24,11 @@ func init() {
 	wig.AllCommands["CmdKillBuffer"] = wig.CmdDefinition{Desc: "Kill buffer", Fn: wig.CmdKillBuffer}
 	wig.AllCommands["CmdSaveFile"] = wig.CmdDefinition{Desc: "Save file", Fn: wig.CmdSaveFile}
 	wig.AllCommands["CmdGitHunkRevert"] = wig.CmdDefinition{Desc: "Revert git hunk", Fn: CmdGitHunkRevert}
+	wig.AllCommands["CmdSelectRegister"] = wig.CmdDefinition{Desc: "Select register", Fn: wig.CmdSelectRegister}
+	wig.AllCommands["CmdInsertRegister"] = wig.CmdDefinition{Desc: "Insert register", Fn: wig.CmdInsertRegister}
+	wig.AllCommands["CmdShowRegisters"] = wig.CmdDefinition{Desc: "Show registers", Fn: wig.CmdShowRegisters}
+	wig.AllCommands["registers"] = wig.CmdDefinition{Desc: "Show registers", Fn: wig.CmdShowRegisters}
+	wig.AllCommands["reg"] = wig.CmdDefinition{Desc: "Show registers", Fn: wig.CmdShowRegisters}
 	wig.AllCommands["CmdDeleteLine"] = wig.CmdDefinition{Desc: "Delete line", Fn: wig.CmdDeleteLine}
 	wig.AllCommands["CmdGitHunkPreview"] = wig.CmdDefinition{Desc: "Preview git hunk", Fn: CmdGitHunkPreview}
 	wig.AllCommands["CmdMRUBufferPicker"] = wig.CmdDefinition{Desc: "MRU Buffer Picker", Fn: CmdMRUBufferPicker}
