@@ -67,35 +67,46 @@ func (u *MiniHelpWidget) Render(view wig.View) {
 	}
 	y := vh - boxH - 2 // Move 1 line up
 
-	// Use a dedicated popup/border style for the box
-	style := wig.Color("ui.popup.border")
-	if style == wig.Color("default") {
-		style = wig.Color("ui.statusline")
-	}
+	// Use default colors to match the marks popup exactly
+	style := wig.Color("default")
 
 	drawBox2(view, x, y, boxW, boxH, style)
 
 	// Title on top border
-	view.SetContent(x+2, y, " F - Keys ", wig.Color("ui.linenr.selected"))
+	view.SetContent(x+2, y, " F - Keys ", wig.Color("ui.popup.title"))
 
-	textStyle := wig.Color("ui.popup.text")
-	if textStyle == wig.Color("default") {
-		textStyle = wig.Color("ui.text")
-	}
-	if textStyle == wig.Color("default") {
-		textStyle = style.Reverse(true)
-	}
+	textStyle := wig.Color("default")
 
 	// Row 1: F1 to F6
 	// Row 2: F7 to F12
-	var row1, row2 strings.Builder
-	for i := 0; i < 6; i++ {
-		row1.WriteString(fmt.Sprintf("%-*s", colW, truncate(u.items[i], colW)))
-	}
-	for i := 6; i < 12; i++ {
-		row2.WriteString(fmt.Sprintf("%-*s", colW, truncate(u.items[i], colW)))
+	shortcutStyle := wig.Color("ui.whichkey.key")
+	keyWidth := 3 // Length of "F12"
+
+	renderRow := func(rowItems []string, yPos int) {
+		cx := x + 1
+		for _, item := range rowItems {
+			parts := strings.SplitN(item, " ", 2)
+			keyStr := parts[0]
+			descStr := ""
+			if len(parts) > 1 {
+				descStr = parts[1]
+			}
+
+			descMaxW := colW - keyWidth - 1
+			if descMaxW < 0 {
+				descMaxW = 0
+			}
+			descRender := truncate(descStr, descMaxW)
+
+			// Render key padded to keyWidth
+			view.SetContent(cx, yPos, fmt.Sprintf("%-*s", keyWidth, keyStr), shortcutStyle)
+			// Render description padded to descMaxW
+			view.SetContent(cx+keyWidth+1, yPos, fmt.Sprintf("%-*s", descMaxW, descRender), textStyle)
+
+			cx += colW
+		}
 	}
 
-	view.SetContent(x+1, y+1, row1.String(), textStyle)
-	view.SetContent(x+1, y+2, row2.String(), textStyle)
+	renderRow(u.items[0:6], y+1)
+	renderRow(u.items[6:12], y+2)
 }

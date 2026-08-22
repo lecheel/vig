@@ -89,6 +89,6 @@ func init() {
 	wig.AllCommands["CmdOpenSavedSearch"] = wig.CmdDefinition{Desc: "Reopen rg search", Fn: CmdOpenSavedSearch}
 	wig.AllCommands["cn"] = wig.CmdDefinition{Desc: "Next result", Fn: wig.CmdVisitNextLine}
 	wig.AllCommands["cp"] = wig.CmdDefinition{Desc: "Previous result", Fn: wig.CmdVisitPrevLine}
-	wig.AllCommands["CmdDummyNA"] = wig.CmdDefinition{Desc: "Disable key (No operation)", Fn: wig.CmdDummyNA}
-	wig.AllCommands["nop"] = wig.CmdDefinition{Desc: "Do nothing", Fn: wig.CmdDummyNA}
+	wig.AllCommands["CmdDummyNA"] = wig.CmdDefinition{Desc: "Disable key", Fn: wig.CmdDummyNA}
+	wig.AllCommands["nop"] = wig.CmdDefinition{Desc: "NOP", Fn: wig.CmdDummyNA}
 }
