@@ -36,6 +36,11 @@ func CmdLineInit(ctx wig.Context) {
 		candidates: []string{},
 		candIdx:    -1,
 	}
+
+	// Pre-fill range for visual modes, exactly like Vim
+	if ctx.Buf != nil && (ctx.Buf.Mode() == wig.MODE_VISUAL || ctx.Buf.Mode() == wig.MODE_VISUAL_LINE || ctx.Buf.Mode() == wig.MODE_VISUAL_BLOCK) {
+		u.chBuf = []rune("'<,'>")
+	}
 	u.keymap = wig.NewKeyHandler(wig.ModeKeyMap{
 		wig.MODE_INSERT: wig.KeyMap{
 			"Esc": func(ctx wig.Context) {
@@ -234,8 +239,19 @@ func (u *uiCommandLine) execute(cmd string) {
 		return
 	}
 
+	// Handle ranges like '<,'> or %
+	rangeStr := ""
+	restCmd := cmd
+	if strings.HasPrefix(cmd, "%") {
+		rangeStr = "%"
+		restCmd = cmd[1:]
+	} else if strings.HasPrefix(cmd, "'<,'>") {
+		rangeStr = "'<,'>"
+		restCmd = cmd[5:]
+	}
+
 	// Jump to line number (e.g. :123)
-	if lineNum, err := strconv.Atoi(cmd); err == nil {
+	if lineNum, err := strconv.Atoi(restCmd); err == nil {
 		u.e.PopUi()
 		ctx := u.e.NewContext()
 		ctx.Count = uint32(lineNum)
@@ -243,7 +259,7 @@ func (u *uiCommandLine) execute(cmd string) {
 		return
 	}
 
-	parts := strings.SplitN(cmd, " ", 2)
+	parts := strings.SplitN(restCmd, " ", 2)
 	if len(parts) > 0 && (parts[0] == "e" || parts[0] == "edit") {
 		u.e.PopUi()
 		if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
@@ -262,18 +278,13 @@ func (u *uiCommandLine) execute(cmd string) {
 		return
 	}
 
-	// Search and replace: :s/pat/rep/flags or :%s/pat/rep/flags
-	isGlobal := strings.HasPrefix(cmd, "%s/")
-	if isGlobal || strings.HasPrefix(cmd, "s/") {
+	// Search and replace: :s/pat/rep/flags, :%s/pat/rep/flags, or :'<,'>s/pat/rep/flags
+	isGlobal := rangeStr == "%"
+	if strings.HasPrefix(restCmd, "s/") {
 		u.e.PopUi()
 
-		if isGlobal {
-			cmd = cmd[3:] // "pat/rep/flags"
-		} else {
-			cmd = cmd[2:] // "pat/rep/flags"
-		}
-
-		parts := strings.SplitN(cmd, "/", 3)
+		replaceCmd := restCmd[2:] // "pat/rep/flags"
+		parts := strings.SplitN(replaceCmd, "/", 3)
 		if len(parts) < 2 {
 			u.e.EchoMessage("Invalid search command")
 			return
@@ -426,15 +437,15 @@ func (u *uiCommandLine) execute(cmd string) {
 	// without it being immediately popped by this deferred cleanup.
 	u.e.PopUi()
 
-	if def, ok := wig.AllCommands[cmd]; ok {
+	if def, ok := wig.AllCommands[restCmd]; ok {
 		ctx := u.e.NewContext()
 		if fn, ok := def.Fn.(func(wig.Context)); ok {
 			fn(ctx)
 		} else {
-			u.e.EchoMessage(fmt.Sprintf("Command %s is not executable", cmd))
+			u.e.EchoMessage(fmt.Sprintf("Command %s is not executable", restCmd))
 		}
 	} else {
-		u.e.EchoMessage(fmt.Sprintf("Unknown command: %s", cmd))
+		u.e.EchoMessage(fmt.Sprintf("Unknown command: %s", restCmd))
 	}
 }
 

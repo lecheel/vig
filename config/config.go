@@ -45,8 +45,7 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		CurrentLineAbsolute: true,
 		FormatOnSave:        false,
 		GitStatusView:       "full",
-		GitBlameView:        "split",
-		IndentGuides:        true,
+		IndentGuides:        false,
 		LspEnabled:          true,
 	}
 	userMap := wig.ModeKeyMap{
@@ -285,6 +284,7 @@ func DefaultKeyMap() wig.ModeKeyMap {
 		},
 		wig.MODE_VISUAL: wig.KeyMap{
 			"Esc":    wig.CmdNormalMode,
+			":":      ui.CmdLineInit,
 			"ctrl+e": wig.WithSelection(wig.CmdScrollDownLine),
 			"ctrl+y": wig.WithSelection(wig.CmdScrollUpLine),
 			"w":      wig.WithSelection(wig.CmdForwardWord),
@@ -323,6 +323,7 @@ func DefaultKeyMap() wig.ModeKeyMap {
 		},
 		wig.MODE_VISUAL_LINE: wig.KeyMap{
 			"Esc":    wig.CmdNormalMode,
+			":":      ui.CmdLineInit,
 			"ctrl+e": wig.CmdScrollDownLine,
 			"ctrl+y": wig.CmdScrollUpLine,
 			"j":      wig.WithSelection(wig.CmdCursorLineDown),
@@ -353,6 +354,7 @@ func DefaultKeyMap() wig.ModeKeyMap {
 		},
 		wig.MODE_VISUAL_BLOCK: wig.KeyMap{
 			"Esc":    wig.CmdNormalMode,
+			":":      ui.CmdLineInit,
 			"ctrl+e": wig.CmdScrollDownLine,
 			"ctrl+y": wig.CmdScrollUpLine,
 			"j":      wig.WithSelection(wig.CmdCursorLineDown),
