@@ -295,10 +295,10 @@ func (u *UiPicker[T]) Render(view wig.View) {
 	pageSize := h - 6
 
 	// fill box
-	drawBox(view, x, y, w, h, wig.Color("default"))
+	drawBox2(view, x, y, w, h, wig.Color("default"))
 
 	if u.title != "" {
-		titleStr := " " + truncate(u.title, w-x-4) + " "
+		titleStr := " " + truncate(u.title, w-4) + " "
 		view.SetContent(x+2, y, titleStr, wig.Color("ui.popup.title"))
 	}
 
@@ -307,7 +307,7 @@ func (u *UiPicker[T]) Render(view wig.View) {
 	view.SetContent(x+1, y+1, prompt, wig.Color("default"))
 
 	// separator
-	line := strings.Repeat(string(tcell.RuneHLine), w-x-3)
+	line := strings.Repeat(string(tcell.RuneHLine), w-4)
 	view.SetContent(x+2, y+2, line, wig.Color("default"))
 
 	// pagination
@@ -330,9 +330,9 @@ func (u *UiPicker[T]) Render(view wig.View) {
 		}
 		if key+startIndex == u.activeItem {
 			u.activeItemT = &row
-			line = fmt.Sprintf("> %s %s", isCurrent, truncate(row.Name, w-x-8))
+			line = fmt.Sprintf("> %s %s", isCurrent, truncate(row.Name, w-8))
 		} else {
-			line = fmt.Sprintf("  %s %s", isCurrent, truncate(row.Name, w-x-8))
+			line = fmt.Sprintf("  %s %s", isCurrent, truncate(row.Name, w-8))
 		}
 		view.SetContent(x+2, y+i+3, line, wig.Color("default"))
 		i++
