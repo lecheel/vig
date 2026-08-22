@@ -53,13 +53,10 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 
 	isActiveWin := win == e.ActiveWindow()
 
+	textWidth := max(termWidth-leftPadding, 1)
 	skip := 0
-	if cur.Char > termWidth {
-		skip = cur.Char - termWidth
-	}
-	lineLen := len(currentLine.Value)
-	if skip >= lineLen {
-		skip = max(lineLen-1, 0)
+	if cur.Char >= textWidth {
+		skip = cur.Char - textWidth + 1
 	}
 
 	startLine := uint32(offset)
@@ -170,9 +167,19 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 			}
 			// End Line Numbers & Git Signs
 
+			// highlight current line background
+			if lineNum == cur.Line {
+				fillWidth := termWidth - leftPadding
+				if fillWidth > 0 {
+					cursorLineBg := wig.ApplyBg("ui.cursorline", wig.Color("default"))
+					bg := strings.Repeat(" ", fillWidth)
+					view.SetContent(leftPadding, y, bg, cursorLineBg)
+				}
+			}
+
 			// render line
 			currVisCol := 0
-			for j := 0; j < skip; j++ {
+			for j := 0; j < skip && j < len(currentLine.Value); j++ {
 				currVisCol += chlen(currentLine.Value[j])
 			}
 
@@ -193,11 +200,6 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 				// highlight current line
 				if lineNum == cur.Line {
 					textStyle = wig.ApplyBg("ui.cursorline", textStyle)
-					fillWidth := termWidth - x
-					if fillWidth > 0 {
-						bg := strings.Repeat(" ", fillWidth)
-						view.SetContent(x, y, bg, textStyle)
-					}
 				}
 
 				// selection
@@ -221,9 +223,17 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 
 				// highlight search
 				if len(searchMatches) > 0 {
+					matchLen := len(wig.LastSearchPattern)
 					for _, m := range searchMatches {
-						if i >= m[0] && i < m[1] {
-							textStyle = wig.ApplyBg("ui.selection", textStyle)
+						if len(m) > 0 {
+							start := m[0]
+							end := start + matchLen
+							if len(m) > 1 {
+								end = m[1]
+							}
+							if i >= start && i < end {
+								textStyle = wig.ApplyBg("ui.selection", textStyle)
+							}
 						}
 					}
 				}
@@ -276,7 +286,7 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 							}
 						}
 						if x >= 0 && x < termWidth && y >= 0 && y < termHeight {
-							view.SetContent(x, y, string(ch[0]), baseCursor)
+							view.SetContent(x, y, ch, baseCursor)
 						}
 					}
 				}

@@ -3,7 +3,7 @@
 ## ✅ Currently Implemented
 - **Modes**: Normal, Insert, Visual, Visual Line, Visual Block.
 - **Core Editing**: Text insert/delete, Undo/Redo (Myers diff based), Yank/Put (with block support), Auto-indent, Comment toggle.
-- **Movement**: `h/j/k/l`, `w/b`, `%` (match pair), `f/F/t/T` (find to), `0/$`, Page Up/Down, Scroll Up/Down.
+- **Movement**: `h/j/k/l`, `w/b`, `%` (match pair), `f/F/t/T` (find to), `0/$`, Page Up/Down, Scroll Up/Down, EasyMotion (`s` 2-character viewport jump with instant single-match teleport and home-row label overlays in Normal and Visual modes).
 - **Marks**: `m[a-z]` to set, `` ` `` popup with mark legends & line hints, `` `[a-z] `` to jump, ``` `` ``` pingpong jump toggle. Visual marks displayed in the gutter (yellow).
 - **Search**: Basic search (`/`), next/prev (`n`/`N`), project-wide ripgrep search, word under cursor search.
 - **File Management**: Open file, Save, Buffer picker, MRU Buffer Picker, File picker, Command Palette. Creating new files from command line if they don't exist.
@@ -11,7 +11,7 @@
 - **Git Integration**: Git gutter signs (ignores untracked files), Hunk navigation (`]h`/`[h`), Hunk revert/preview, Inline Git Blame, Blame commit detail, Git status panel. `l`/`L` jumps to the first item of the next/previous session in git status.
 - **LSP**: Completion, Goto definition, Hover, Signature help, Diagnostics.
 - **Syntax Highlighting**: Tree-sitter (Go, Rust, Odin, C, Python).
-- **UI Elements**: Statusline, Which-Key popup (multi-column, mode title, sub-prefix indicators, configurable formatting `which_key_format` for `words`/`camel`/`cmd`, bottom-right aligned), Command line, Search prompt, Hover popup, Autocomplete, Mini Help (shortcut alignment), Confirm prompts, Marks popup (themed `ui.mark`), unified popup styling (`ui.popup.title`).
+- **UI Elements**: Statusline, Which-Key popup (multi-column, mode title, sub-prefix indicators, configurable formatting `which_key_format` for `words`/`camel`/`cmd`, bottom-right aligned), EasyMotion visual jump labels overlay, Command line, Search prompt, Hover popup, Autocomplete, Mini Help (shortcut alignment), Confirm prompts, Marks popup (themed `ui.mark`), unified popup styling (`ui.popup.title`).
 - **System**: System clipboard support (copy `<Leader>y`, paste at cursor `<Leader>pv`, replace entire buffer `<Leader>pp`, bracketed paste), Position cache (remember cursor on reopen), CLI flags (`--help`, `--edit`, `--health`), Thread-safe event manager and buffer concurrency protection.
 - **Macros & Repeat**: Macro recording/playback (`q`/`@` with count support `3@a`), Dot-repeat (`.`) via command-based `LastRepeatableFn` with count preservation (`2dd`→`.` deletes 2 lines). Count support on `dd`, `dw`, `x`, `yy`. Repeatable Ex commands (`:cn`, `:cp`, git hunks) via `Repeatable` flag. Recursion guard prevents `.` inside macro playback.
 - **Configuration**:
