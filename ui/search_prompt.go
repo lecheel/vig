@@ -113,6 +113,7 @@ func (u *uiSearchPrompt) execute(ctx wig.Context, cmd string) {
 
 	if len(pat) > 0 {
 		cur := wig.ContextCursorGet(ctx)
+		ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, &u.origCur)
 		ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, cur)
 	}
 	u.e.Redraw()

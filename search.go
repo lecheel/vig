@@ -113,6 +113,10 @@ func SearchNext(ctx Context, pattern string) {
 	defer CmdEnsureCursorVisible(ctx)
 
 	cur := ContextCursorGet(ctx)
+	if cur == nil || ctx.Buf == nil {
+		return
+	}
+	origCur := *cur
 	line := CursorLine(ctx.Buf, cur)
 	lineNum := cur.Line
 	from := cur.Char + 1
@@ -135,9 +139,15 @@ func SearchNext(ctx Context, pattern string) {
 			return matches[i][0] < matches[j][0]
 		})
 
+		if ctx.Editor != nil && ctx.Editor.ActiveWindow() != nil {
+			ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, &origCur)
+		}
 		cur.Line = lineNum
 		cur.Char = matches[0][0] + from
 		cur.PreserveCharPosition = cur.Char
+		if ctx.Editor != nil && ctx.Editor.ActiveWindow() != nil {
+			ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, cur)
+		}
 		break
 	}
 }
@@ -146,6 +156,10 @@ func SearchPrev(ctx Context, pattern string) {
 	defer CmdEnsureCursorVisible(ctx)
 
 	cur := ContextCursorGet(ctx)
+	if cur == nil || ctx.Buf == nil {
+		return
+	}
+	origCur := *cur
 	line := CursorLine(ctx.Buf, cur)
 
 	ln := cur.Line
@@ -167,9 +181,15 @@ func SearchPrev(ctx Context, pattern string) {
 			return matches[i][0] > matches[j][0]
 		})
 
+		if ctx.Editor != nil && ctx.Editor.ActiveWindow() != nil {
+			ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, &origCur)
+		}
 		cur.Line = ln
 		cur.Char = matches[0][0]
 		cur.PreserveCharPosition = cur.Char
+		if ctx.Editor != nil && ctx.Editor.ActiveWindow() != nil {
+			ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, cur)
+		}
 		break
 	}
 }
