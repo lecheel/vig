@@ -189,33 +189,11 @@ func CmdSearchProject(ctx wig.Context) {
 }
 
 func CmdProjectSearchWordUnderCursor(ctx wig.Context) {
-	pat := ""
-	cur := wig.ContextCursorGet(ctx)
-	if cur == nil || ctx.Buf == nil {
+	word, ok := wig.WordOrSelectionUnderCursor(ctx)
+	if !ok {
+		ctx.Editor.EchoMessage("no word under cursor")
 		return
 	}
 
-	if ctx.Buf.Selection != nil {
-		pat = wig.SelectionToString(ctx.Buf, ctx.Buf.Selection)
-		wig.CmdNormalMode(ctx)
-	} else {
-		line := wig.CursorLine(ctx.Buf, cur)
-		if line == nil || line.Value.IsEmpty() {
-			ctx.Editor.EchoMessage("no word under cursor")
-			return
-		}
-		if wig.CursorChClass(ctx.Buf, cur) == 0 {
-			wig.CmdBackwardWord(ctx)
-		}
-		start, end := wig.TextObjectWord(ctx, true)
-		if end+1 > start {
-			line := wig.CursorLine(ctx.Buf, cur)
-			if line != nil {
-				pat = string(line.Value.Range(start, end+1))
-			}
-		}
-	}
-
-	pat = strings.TrimSpace(pat)
-	rgDoSearch(ctx, pat)
+	rgDoSearch(ctx, word)
 }

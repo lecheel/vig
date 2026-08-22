@@ -77,35 +77,8 @@ func rgSearchLocations(ctx wig.Context, word string) []wig.Location {
 // runs a ripgrep search, saves results to JSON, and opens the [rg]
 // grouped buffer full screen.
 func CmdRgUnderCursor(ctx wig.Context) {
-	word := ""
-	cur := wig.ContextCursorGet(ctx)
-	if cur == nil || ctx.Buf == nil {
-		return
-	}
-
-	if ctx.Buf.Selection != nil {
-		word = wig.SelectionToString(ctx.Buf, ctx.Buf.Selection)
-		wig.CmdNormalMode(ctx)
-	} else {
-		line := wig.CursorLine(ctx.Buf, cur)
-		if line == nil || line.Value.IsEmpty() {
-			ctx.Editor.EchoMessage("no word under cursor")
-			return
-		}
-		if wig.CursorChClass(ctx.Buf, cur) == 0 {
-			wig.CmdBackwardWord(ctx)
-		}
-		start, end := wig.TextObjectWord(ctx, true)
-		if end+1 > start {
-			line := wig.CursorLine(ctx.Buf, cur)
-			if line != nil {
-				word = string(line.Value.Range(start, end+1))
-			}
-		}
-	}
-
-	word = strings.TrimSpace(word)
-	if word == "" {
+	word, ok := wig.WordOrSelectionUnderCursor(ctx)
+	if !ok {
 		ctx.Editor.EchoMessage("no word under cursor")
 		return
 	}

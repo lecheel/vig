@@ -1,5 +1,47 @@
 package wig
 
+import "strings"
+
+// WordOrSelectionUnderCursor extracts the active selection or the word under the cursor.
+// If a selection is active, it switches the buffer back to normal mode.
+func WordOrSelectionUnderCursor(ctx Context) (string, bool) {
+	if ctx.Buf == nil {
+		return "", false
+	}
+
+	if ctx.Buf.Selection != nil {
+		word := SelectionToString(ctx.Buf, ctx.Buf.Selection)
+		CmdNormalMode(ctx)
+		word = strings.TrimSpace(word)
+		return word, word != ""
+	}
+
+	cur := ContextCursorGet(ctx)
+	if cur == nil {
+		return "", false
+	}
+
+	line := CursorLine(ctx.Buf, cur)
+	if line == nil || line.Value.IsEmpty() {
+		return "", false
+	}
+
+	if CursorChClass(ctx.Buf, cur) == 0 {
+		CmdBackwardWord(ctx)
+	}
+
+	start, end := TextObjectWord(ctx, true)
+	if end+1 > start {
+		line = CursorLine(ctx.Buf, cur)
+		if line != nil {
+			word := strings.TrimSpace(string(line.Value.Range(start, end+1)))
+			return word, word != ""
+		}
+	}
+
+	return "", false
+}
+
 func TextObjectWord(ctx Context, bigword bool) (start, end int) {
 	cur := ContextCursorGet(ctx)
 	start = cur.Char

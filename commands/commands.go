@@ -386,28 +386,9 @@ func reloadBufferPostFormat(ctx wig.Context) {
 }
 
 func CmdSearchWordUnderCursor(ctx wig.Context) {
-	pat := ""
-	defer func() {
-		wig.LastSearchPattern = pat
-		wig.SearchNext(ctx, pat)
-	}()
-
-	cur := wig.ContextCursorGet(ctx)
-	if wig.CursorChClass(ctx.Buf, cur) == 0 {
-		wig.CmdBackwardWord(ctx)
-	}
-
-	if ctx.Buf.Selection != nil {
-		pat = wig.SelectionToString(ctx.Buf, ctx.Buf.Selection)
-		wig.CmdNormalMode(ctx)
-		return
-	}
-
-	start, end := wig.TextObjectWord(ctx, true)
-	if end+1 > start {
-		line := wig.CursorLine(ctx.Buf, cur)
-		pat = string(line.Value.Range(start, end+1))
-	}
+	word, _ := wig.WordOrSelectionUnderCursor(ctx)
+	wig.LastSearchPattern = word
+	wig.SearchNext(ctx, word)
 }
 
 func CmdFormatBufferAndSave(ctx wig.Context) {
