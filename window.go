@@ -27,7 +27,14 @@ func (win *Window) VisitBuffer(ctx Context, cursor ...Cursor) {
 		win.cursors[ctx.Buf] = newCur
 	}
 
-	win.Jumps.Push(ctx.Buf, cur)
+	// Push the *destination* buffer's actual cursor position, not the
+	// cursor we just left behind in the old buffer. Previously this
+	// reused `cur` (the old buffer's line/char) paired with ctx.Buf,
+	// producing a corrupted jump-list entry every time buffers switched.
+	// That bogus entry is what made pingpong (CmdJumpToggle) and the
+	// jump-back/jump-forward navigation land on the wrong line.
+	destCur := WindowCursorGet(win, ctx.Buf)
+	win.Jumps.Push(ctx.Buf, destCur)
 	win.buf = ctx.Buf
 
 	ctx.Win = win
