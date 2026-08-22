@@ -19,6 +19,7 @@ type uiCommandLine struct {
 	e          *wig.Editor
 	keymap     *wig.KeyHandler
 	chBuf      []rune
+	cursorPos  int
 	historyIdx int
 	candidates []string
 	candIdx    int
@@ -32,6 +33,7 @@ func CmdLineInit(ctx wig.Context) {
 	u := &uiCommandLine{
 		e:          ctx.Editor,
 		chBuf:      make([]rune, 0, 32),
+		cursorPos:  0,
 		historyIdx: len(cmdHistory), // Start at the end of history
 		candidates: []string{},
 		candIdx:    -1,
@@ -85,34 +87,84 @@ func CmdLineInit(ctx wig.Context) {
 
 func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 	if ev.Modifiers()&tcell.ModCtrl != 0 {
-		return
-	}
-	if ev.Modifiers()&tcell.ModAlt != 0 {
-		return
-	}
-	if ev.Modifiers()&tcell.ModMeta != 0 {
-		return
-	}
-
-	// Removed tcell.KeyEnter handling here!
-	// If it was handled here, it bypassed the keymap's "Enter" handler,
-	// meaning the command was never executed and history was never saved.
-
-	if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
-		if len(u.chBuf) > 0 {
-			u.chBuf = u.chBuf[:len(u.chBuf)-1]
+		switch ev.Key() {
+		case tcell.KeyCtrlA:
+			u.cursorPos = 0
+		case tcell.KeyCtrlE:
+			u.cursorPos = len(u.chBuf)
+		case tcell.KeyCtrlU:
+			u.chBuf = u.chBuf[u.cursorPos:]
+			u.cursorPos = 0
+			u.candidates = []string{}
+			u.candIdx = -1
+		case tcell.KeyCtrlK:
+			u.chBuf = u.chBuf[:u.cursorPos]
+			u.candidates = []string{}
+			u.candIdx = -1
+		case tcell.KeyCtrlW:
+			if u.cursorPos == 0 {
+				return
+			}
+			start := u.cursorPos
+			for start > 0 && u.chBuf[start-1] == ' ' {
+				start--
+			}
+			for start > 0 && u.chBuf[start-1] != ' ' {
+				start--
+			}
+			u.chBuf = append(u.chBuf[:start], u.chBuf[u.cursorPos:]...)
+			u.cursorPos = start
+			u.candidates = []string{}
+			u.candIdx = -1
 		}
+		return
+	}
+
+	if ev.Modifiers()&tcell.ModAlt != 0 || ev.Modifiers()&tcell.ModMeta != 0 {
+		return
+	}
+
+	switch ev.Key() {
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if u.cursorPos > 0 {
+			u.chBuf = append(u.chBuf[:u.cursorPos-1], u.chBuf[u.cursorPos:]...)
+			u.cursorPos--
+			u.candidates = []string{}
+			u.candIdx = -1
+		}
+		return
+	case tcell.KeyDelete:
+		if u.cursorPos < len(u.chBuf) {
+			u.chBuf = append(u.chBuf[:u.cursorPos], u.chBuf[u.cursorPos+1:]...)
+			u.candidates = []string{}
+			u.candIdx = -1
+		}
+		return
+	case tcell.KeyLeft:
+		if u.cursorPos > 0 {
+			u.cursorPos--
+		}
+		return
+	case tcell.KeyRight:
+		if u.cursorPos < len(u.chBuf) {
+			u.cursorPos++
+		}
+		return
+	case tcell.KeyHome:
+		u.cursorPos = 0
+		return
+	case tcell.KeyEnd:
+		u.cursorPos = len(u.chBuf)
+		return
+	case tcell.KeyRune:
+		u.chBuf = append(u.chBuf, 0) // dummy to expand slice
+		copy(u.chBuf[u.cursorPos+1:], u.chBuf[u.cursorPos:])
+		u.chBuf[u.cursorPos] = ev.Rune()
+		u.cursorPos++
 		u.candidates = []string{}
 		u.candIdx = -1
 		return
 	}
-
-	if ev.Key() != tcell.KeyRune {
-		return
-	}
-	u.chBuf = append(u.chBuf, ev.Rune())
-	u.candidates = []string{}
-	u.candIdx = -1
 }
 
 func (u *uiCommandLine) autocomplete() {
@@ -130,6 +182,7 @@ func (u *uiCommandLine) autocomplete() {
 				u.candIdx = 0
 			}
 			u.chBuf = []rune(fmt.Sprintf("%s %s", cmdPart, u.candidates[u.candIdx]))
+			u.cursorPos = len(u.chBuf)
 			return
 		}
 
@@ -183,6 +236,7 @@ func (u *uiCommandLine) autocomplete() {
 		}
 
 		u.chBuf = []rune(fmt.Sprintf("%s %s", cmdPart, common))
+		u.cursorPos = len(u.chBuf)
 		u.candidates = matches
 		u.candIdx = -1 // Next Tab will cycle to 0
 		return
@@ -214,6 +268,7 @@ func (u *uiCommandLine) autocomplete() {
 
 	if len(matches) == 1 {
 		u.chBuf = []rune(matches[0])
+		u.cursorPos = len(u.chBuf)
 		u.candidates = matches
 		u.candIdx = 0
 		return
@@ -228,6 +283,7 @@ func (u *uiCommandLine) autocomplete() {
 		common = common[:i]
 	}
 	u.chBuf = []rune(common)
+	u.cursorPos = len(u.chBuf)
 	u.candidates = matches
 	u.candIdx = -1
 }
@@ -455,15 +511,33 @@ func (u *uiCommandLine) Keymap() *wig.KeyHandler {
 
 func (u *uiCommandLine) Render(view wig.View) {
 	vw, vh := view.Size()
-	prompt := fmt.Sprintf(":%s", string(u.chBuf))
+	promptPrefix := ":"
+
+	beforeCursor := string(u.chBuf[:u.cursorPos])
+	atCursorRune := " "
+	if u.cursorPos < len(u.chBuf) {
+		atCursorRune = string(u.chBuf[u.cursorPos])
+	}
+	afterCursor := ""
+	if u.cursorPos+1 < len(u.chBuf) {
+		afterCursor = string(u.chBuf[u.cursorPos+1:])
+	}
 
 	bgStyle := wig.Color("default")
-	view.SetContent(0, vh-1, strings.Repeat(" ", vw), bgStyle)
-	view.SetContent(0, vh-1, prompt, bgStyle)
 
+	// Clear line
+	view.SetContent(0, vh-1, strings.Repeat(" ", vw), bgStyle)
+
+	// Draw prefix and text before cursor
+	view.SetContent(0, vh-1, promptPrefix+beforeCursor, bgStyle)
+
+	// Draw cursor character (reversed)
 	cursorStyle := bgStyle.Reverse(true)
-	if len(prompt) < vw {
-		view.SetContent(len(prompt), vh-1, " ", cursorStyle)
+	view.SetContent(len(beforeCursor)+1, vh-1, atCursorRune, cursorStyle)
+
+	// Draw text after cursor
+	if len(afterCursor) > 0 {
+		view.SetContent(len(beforeCursor)+2, vh-1, afterCursor, bgStyle)
 	}
 
 	// Show candidates visually on the line above the prompt (like Vim)
