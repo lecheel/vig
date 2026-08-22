@@ -11,12 +11,12 @@
 - **Git Integration**: Git gutter signs (ignores untracked files), Hunk navigation (`]h`/`[h`), Hunk revert/preview, Inline Git Blame, Blame commit detail, Git status panel. `l`/`L` jumps to the first item of the next/previous session in git status.
 - **LSP**: Completion, Goto definition, Hover, Signature help, Diagnostics.
 - **Syntax Highlighting**: Tree-sitter (Go, Rust, Odin, C, Python).
-- **UI Elements**: Statusline, Which-Key popup, Command line, Search prompt, Hover popup, Autocomplete, Mini Help, Confirm prompts, Marks popup.
+- **UI Elements**: Statusline, Which-Key popup (centered), Command line, Search prompt, Hover popup, Autocomplete, Mini Help (shortcut alignment), Confirm prompts, Marks popup (themed `ui.mark`), unified popup styling (`ui.popup.title`).
 - **System**: System clipboard support (yank/paste, bracketed paste), Position cache (remember cursor on reopen), Basic macros, CLI flags (`--help`, `--edit`, `--health`).
 - **Configuration**: `config.toml` (settings, keys), `languages.toml` (LSP/Indent), Themes. Ability to disable keys via `CmdDummyNA`.
 - **Visual Block**: `Ctrl-v` rectangle selection, block insert (`I`), block yank (`y`), block delete (`d`/`x`).
 - **Result Navigation**: `:cn` and `:cp` to jump through search results.
-- **Command Line**: `:123` to jump to line, `:e <file>` to open/create files, basic Ex commands.
+- **Command Line**: `:123` to jump to line, `:e <file>` to open/create files, Search & Replace (`:s/...`, `:%s/...`, `:'<,'>s/...` with `c`/`g` flags), full line editing (`Ctrl-a`, `Ctrl-e`, `Ctrl-w`, `Ctrl-r Ctrl-w`).
 - **Completion**: LSP completions, manual local buffer completions (`Alt-/`), single-candidate auto-complete.
 
 ---
@@ -24,8 +24,8 @@
 ## 🚧 TODO: To be a "Real Vim"
 
 ### High Priority (Core Vim Features)
-- [ ] **Ex Mode / Command-line ranges**: Implement `:[range]s/old/new/g`, `:%s/...`, `:1,10d`, etc. Currently `:` only executes simple commands.
-- [ ] **Search & Replace**: Visual selection + `:s/.../...`, `:%s/.../...` with confirmation (`c` flag).
+- [v] **Ex Mode / Command-line ranges**: Implement `:[range]s/old/new/g`, `:%s/...`, `:'<,'>s/...` with confirm (`c`) and global (`g`) flags.
+- [v] **Search & Replace**: Visual selection + `:s/.../...`, `:%s/.../...` with confirmation (`c` flag).
 - [ ] **Horizontal Splits**: `:sp` / `ctrl+w s`. Currently only vertical splits are supported.
 - [v] **Marks**: m[a-z] to set mark, `[a-z] to jump to mark, `` for last position
 - [ ] **Advanced Text Objects**: `ci(`, `ci{`, `ci'`, `da"`, `ciw` inside punctuation/blocks.
