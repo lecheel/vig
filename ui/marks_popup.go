@@ -110,7 +110,7 @@ func (u *MarksPopupWidget) Render(view wig.View) {
 	drawBox2(view, x, y, boxW, boxH, style)
 
 	// Title on top border
-	view.SetContent(x+2, y, " Marks (` for pingpong) ", wig.Color("ui.linenr.selected"))
+	view.SetContent(x+2, y, " Marks (` for pingpong) ", wig.Color("ui.popup.title"))
 
 	textStyle := wig.Color("default")
 	markStyle := wig.Color("ui.mark")
