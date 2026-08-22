@@ -27,7 +27,7 @@
 - [ ] **Ex Mode / Command-line ranges**: Implement `:[range]s/old/new/g`, `:%s/...`, `:1,10d`, etc. Currently `:` only executes simple commands.
 - [ ] **Search & Replace**: Visual selection + `:s/.../...`, `:%s/.../...` with confirmation (`c` flag).
 - [ ] **Horizontal Splits**: `:sp` / `ctrl+w s`. Currently only vertical splits are supported.
-- [ ] **Marks**: `m[a-z]` to set mark, `'[a-z]` to jump to mark, `'0` for last position, `'<`/`'>` for visual selection.
+- [v] **Marks**: m[a-z] to set mark, `[a-z] to jump to mark, `` for last position
 - [ ] **Advanced Text Objects**: `ci(`, `ci{`, `ci'`, `da"`, `ciw` inside punctuation/blocks.
 - [ ] **Quickfix List**: `:copen`, `:cnext`, `:cprev` for LSP diagnostics and grep results.
 
