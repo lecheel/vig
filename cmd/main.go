@@ -77,6 +77,10 @@ func main() {
 		return ui.WhichKeyInit(e, k, mode, items)
 	})
 
+	wig.MarksPopupFactory = func(ctx wig.Context, marks map[rune]wig.Cursor) {
+		ui.MarksPopupInit(ctx, marks)
+	}
+
 	editor := wig.NewEditor(
 		render.NewMView(tscreen, 0, 0, w, h),
 		keys,

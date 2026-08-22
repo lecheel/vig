@@ -573,6 +573,18 @@ func CmdJumpForward(ctx Context) {
 	CmdCursorCenter(ctx)
 }
 
+// CmdJumpToggle pingpongs between the current and previous jump position.
+// If we have a forward jump available, it goes forward. Otherwise, it jumps back.
+func CmdJumpToggle(ctx Context) {
+	j := ctx.Editor.ActiveWindow().Jumps
+	if j.current != nil && j.current.Next() != nil {
+		j.JumpForward()
+	} else {
+		j.JumpBack()
+	}
+	CmdCursorCenter(ctx)
+}
+
 // Cycle between last two buffers in jump list
 func CmdBufferCycle(ctx Context) {
 	last := ctx.Editor.ActiveWindow().Jumps.List.Last()

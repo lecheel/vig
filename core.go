@@ -748,6 +748,29 @@ func CmdPaste(ctx Context) {
 	panic(1)
 }
 
+// CmdSetMark waits for a character input and sets a mark at the current cursor position.
+func CmdSetMark(ctx Context) func(Context) {
+	return func(ctx Context) {
+		if len(ctx.Char) == 0 {
+			return
+		}
+		r := rune(ctx.Char[0])
+		if ctx.Win.Marks == nil {
+			ctx.Win.Marks = make(map[rune]Cursor)
+		}
+		cur := ContextCursorGet(ctx)
+		ctx.Win.Marks[r] = *cur
+		ctx.Editor.EchoMessage("Mark '" + string(r) + "' set")
+	}
+}
+
+// CmdGotoMark opens the marks popup legend.
+func CmdGotoMark(ctx Context) {
+	if MarksPopupFactory != nil {
+		MarksPopupFactory(ctx, ctx.Win.Marks)
+	}
+}
+
 // CmdDummyNA is a no-op command used to disable or override keybindings in config.toml
 // by mapping them to this function (e.g. `x = "CmdDummyNA"`).
 func CmdDummyNA(ctx Context) {

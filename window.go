@@ -5,6 +5,7 @@ type Window struct {
 	cursors map[*Buffer]*Cursor
 
 	Jumps *Jumps
+	Marks map[rune]Cursor
 }
 
 // Jump to buffer and location. Records jump history.
@@ -63,6 +64,7 @@ func CreateWindow(parent *Window) *Window {
 			List: List[Jump]{},
 		},
 		cursors: cursors,
+		Marks:   make(map[rune]Cursor),
 	}
 }
 

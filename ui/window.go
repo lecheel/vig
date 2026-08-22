@@ -92,13 +92,28 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 
 			diagnostics := e.Lsp.Diagnostics(buf, lineNum)
 
-			// Line numbers & Git Signs & Blame
+			// Line numbers & Git Signs & Marks & Blame
 			if e.Config.ShowLineNumbers || hasGitSigns || buf.BlameEnabled {
 				xCur := 0
 				if hasGitSigns {
 					sign, ok := buf.GitSigns[lineNum+1] // GitSigns is 1-indexed
 					signStyle := wig.Color("default")
+
+					// Check for mark on this line
+					markChar := " "
+					markStyle := wig.Color("ui.linenr")
+					if win.Marks != nil {
+						for m, c := range win.Marks {
+							if c.Line == lineNum {
+								markChar = string(m)
+								markStyle = tcell.StyleDefault.Foreground(tcell.ColorYellow)
+								break
+							}
+						}
+					}
+
 					if xCur >= 0 && xCur < termWidth && y >= 0 && y < termHeight {
+						// Draw git sign in first col
 						if ok {
 							if sign == '+' {
 								signStyle = wig.Color("diff.plus")
@@ -111,6 +126,8 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 						} else {
 							view.SetContent(xCur, y, " ", signStyle)
 						}
+						// Draw mark character in second col
+						view.SetContent(xCur+1, y, markChar, markStyle)
 					}
 					xCur += signColWidth
 				}

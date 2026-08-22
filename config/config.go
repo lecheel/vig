@@ -196,6 +196,8 @@ func DefaultKeyMap() wig.ModeKeyMap {
 			"q":      wig.CmdMacroRecord,
 			"@":      wig.CmdMacroPlay,
 			".":      wig.CmdMacroRepeat,
+			"m":      wig.CmdSetMark,
+			"`":      wig.CmdGotoMark,
 			"c": wig.KeyMap{
 				"$": wig.CmdChangeEndOfLine,
 				"c": wig.CmdChangeLine,

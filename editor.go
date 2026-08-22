@@ -51,6 +51,10 @@ type Context struct {
 
 type AutocompleteFn func(Context) bool
 
+// MarksPopupFactory allows the `ui` package to register a popup for marks
+// without causing a circular import.
+var MarksPopupFactory func(ctx Context, marks map[rune]Cursor)
+
 var EditorInst *Editor
 
 type Layout int
