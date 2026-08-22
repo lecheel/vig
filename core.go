@@ -3,59 +3,70 @@ package wig
 import (
 	"slices"
 	"strings"
-	"text/scanner"
 	"time"
 	"unicode"
 	"unicode/utf8"
 )
 
 const minVisibleLines = 5
-const smode = scanner.ScanIdents | scanner.ScanFloats | scanner.ScanChars | scanner.ScanStrings | scanner.ScanRawStrings | scanner.ScanComments
 
 func TextInsert(buf *Buffer, line *Element[Line], pos int, text string) {
+	if buf == nil || line == nil || text == "" {
+		return
+	}
 	buf.Dirty = true
 	sline := CursorNumByLine(buf, line)
 
-	event := EventTextChange{
-		Buf:    buf,
-		Start:  Position{Line: sline, Char: pos},
-		End:    Position{Line: sline, Char: pos},
-		NewEnd: Position{Line: sline, Char: pos},
-		Text:   text,
-	}
+	// Normalize CRLF and CR to LF
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+
 	if pos < 0 {
 		pos = 0
 	}
-	size := utf8.RuneCountInString(line.Value.String())
-	if pos >= size {
+	size := len(line.Value)
+	if size > 0 && pos >= size {
 		pos = size - 1
 	}
 
-	s := scanner.Scanner{}
-	s.Init(strings.NewReader(text))
-	s.Whitespace ^= 1<<'\t' | 1<<'\n' | 1<<' '
-	s.Mode = smode
-	s.Error = func(s *scanner.Scanner, msg string) {}
+	prefix := line.Value[:pos]
+	suffix := line.Value[pos:]
 
-	for tok := s.Scan(); tok != scanner.EOF; tok = s.Scan() {
-		switch tok {
-		case '\n':
-			prefix := string(line.Value[:pos])
-			suffix := string(line.Value[pos:])
-			line.Value = []rune(prefix + "\n")
-			buf.Lines.insertValueAfter([]rune(suffix), line)
-			line = line.Next()
-			pos = 0
-			event.NewEnd.Line++
-			event.NewEnd.Char = 0
-		default:
-			line.Value = slices.Concat(line.Value[:pos], []rune(s.TokenText()), line.Value[pos:])
-			pos += utf8.RuneCountInString(s.TokenText())
-			event.NewEnd.Char++
+	lines := strings.Split(text, "\n")
+	numLines := len(lines)
+
+	event := EventTextChange{
+		Buf:   buf,
+		Start: Position{Line: sline, Char: pos},
+		End:   Position{Line: sline, Char: pos},
+		Text:  text,
+	}
+
+	if numLines == 1 {
+		line.Value = slices.Concat(prefix, []rune(lines[0]), suffix)
+		event.NewEnd = Position{Line: sline, Char: pos + utf8.RuneCountInString(lines[0])}
+	} else {
+		// First line receives prefix + lines[0] + newline
+		line.Value = slices.Concat(prefix, []rune(lines[0]+"\n"))
+		curr := line
+
+		// Intermediate lines receive lines[i] + newline
+		for i := 1; i < numLines-1; i++ {
+			curr = buf.Lines.insertValueAfter([]rune(lines[i]+"\n"), curr)
+		}
+
+		// Last line receives lines[numLines-1] + suffix
+		buf.Lines.insertValueAfter(slices.Concat([]rune(lines[numLines-1]), suffix), curr)
+
+		event.NewEnd = Position{
+			Line: sline + numLines - 1,
+			Char: utf8.RuneCountInString(lines[numLines-1]),
 		}
 	}
 
-	EditorInst.Events.Broadcast(event)
+	if EditorInst != nil && EditorInst.Events != nil {
+		EditorInst.Events.Broadcast(event)
+	}
 }
 
 func TextDelete(buf *Buffer, selection *Selection) {
@@ -682,6 +693,13 @@ func CmdSelectionDelete(ctx Context) {
 }
 
 func CmdSaveFile(ctx Context) {
+	if ctx.Char != "" && (ctx.Buf.FilePath == "" || ctx.Buf.FilePath == "[No Name]") {
+		ctx.Buf.FilePath = ctx.Char
+	}
+	if ctx.Buf.FilePath == "" || ctx.Buf.FilePath == "[No Name]" {
+		ctx.Editor.EchoMessage("No file name")
+		return
+	}
 	err := ctx.Buf.Save()
 	if err != nil {
 		ctx.Editor.LogMessage(err.Error())

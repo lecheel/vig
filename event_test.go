@@ -40,7 +40,7 @@ func add(a int, b int) {
 			Buf:    buf,
 			Start:  Position{Line: 4, Char: 22},
 			End:    Position{Line: 4, Char: 22},
-			NewEnd: Position{Line: 4, Char: 24},
+			NewEnd: Position{Line: 4, Char: 26},
 			Text:   " int",
 		}, event)
 	}()
