@@ -40,6 +40,19 @@ func gitUnquotePath(path string) string {
 	return path
 }
 
+func gitParsePorcelainPath(entryType byte, rawPath string) string {
+	path := rawPath
+	if entryType == '2' {
+		if idx := strings.Index(path, " "); idx >= 0 {
+			path = path[idx+1:]
+		}
+		if idx := strings.Index(path, "\t"); idx >= 0 {
+			path = path[:idx]
+		}
+	}
+	return gitUnquotePath(path)
+}
+
 // ── data: git status panel ───────────────────────────────
 
 // GetGitStatusItems builds the full git status panel data.
@@ -163,19 +176,7 @@ func GetGitStatusItems() []wig.GitViewItem {
 				continue
 			}
 			x, y := xy[0], xy[1]
-			path := parts[8]
-			// For '2' (rename/copy) entries, parts[8] is
-			// "<score> <path>\t<origPath>" — strip score then
-			// take the part before the tab.
-			if line[0] == '2' {
-				if idx := strings.Index(path, " "); idx >= 0 {
-					path = path[idx+1:]
-				}
-				if idx := strings.Index(path, "\t"); idx >= 0 {
-					path = path[:idx]
-				}
-			}
-			path = gitUnquotePath(path)
+			path := gitParsePorcelainPath(line[0], parts[8])
 			if x != '.' {
 				staged = append(staged, wig.GitViewItem{
 					Type: "file", Label: path, Status: "staged",
@@ -307,16 +308,7 @@ func GetGitStatusFiles() []string {
 		if len(parts) < 9 {
 			continue
 		}
-		path := parts[8]
-		if line[0] == '2' {
-			if idx := strings.Index(path, " "); idx >= 0 {
-				path = path[idx+1:]
-			}
-			if idx := strings.Index(path, "\t"); idx >= 0 {
-				path = path[:idx]
-			}
-		}
-		path = gitUnquotePath(path)
+		path := gitParsePorcelainPath(line[0], parts[8])
 		if !seen[path] {
 			seen[path] = true
 			paths = append(paths, path)
@@ -358,16 +350,7 @@ func GetGitFileStatusMap() map[string]string {
 			if len(xy) < 2 {
 				continue
 			}
-			path := parts[8]
-			if line[0] == '2' {
-				if idx := strings.Index(path, " "); idx >= 0 {
-					path = path[idx+1:]
-				}
-				if idx := strings.Index(path, "\t"); idx >= 0 {
-					path = path[:idx]
-				}
-			}
-			path = gitUnquotePath(path)
+			path := gitParsePorcelainPath(line[0], parts[8])
 			x, y := xy[0], xy[1]
 			code := "M"
 			switch {
