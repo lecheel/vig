@@ -6,6 +6,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/firstrow/wig"
 	"github.com/google/shlex"
@@ -20,9 +21,11 @@ type header struct {
 type pipeDrv struct {
 	e *wig.Editor
 	// TODO: store cmds per-command. so it will be possible to keep many long running commands in same buffer
+	mu     sync.Mutex
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	outBuf *wig.Buffer
+	waitWg sync.WaitGroup
 }
 
 func New(e *wig.Editor) *pipeDrv {
@@ -106,12 +109,15 @@ func (p *pipeDrv) outBufferFor(buf *wig.Buffer) *wig.Buffer {
 
 // TODO: add exit conditions to goroutines. handle buffer close.
 func (p *pipeDrv) send(opts header, outBuf *wig.Buffer, input string) {
+	p.mu.Lock()
 	if opts.append == false {
 		outBuf.ResetLines()
 	}
 
 	if p.cmd != nil && opts.interactive {
-		io.WriteString(p.stdin, input+"\n")
+		stdin := p.stdin
+		p.mu.Unlock()
+		io.WriteString(stdin, input+"\n")
 		return
 	}
 
@@ -124,16 +130,28 @@ func (p *pipeDrv) send(opts header, outBuf *wig.Buffer, input string) {
 		p.cmd = exec.Command(p.getCommand(opts.cmd), p.buildArgs(opts.cmd, input)...)
 	}
 
-	pout, _ := p.cmd.StdoutPipe()
-	perr, _ := p.cmd.StderrPipe()
+	cmd := p.cmd
+	pout, _ := cmd.StdoutPipe()
+	perr, _ := cmd.StderrPipe()
 
-	err := p.cmd.Start()
+	err := cmd.Start()
 	if err != nil {
 		outBuf.Append(err.Error())
 		p.e.Redraw()
+		p.cmd = nil
+		p.stdin = nil
+		p.mu.Unlock()
+		return
 	}
 
+	p.waitWg.Add(1)
+	p.mu.Unlock()
+
+	var ioWg sync.WaitGroup
+	ioWg.Add(2)
+
 	go func() {
+		defer ioWg.Done()
 		scanner := bufio.NewScanner(pout)
 		for scanner.Scan() {
 			outBuf.Append(scanner.Text())
@@ -142,6 +160,7 @@ func (p *pipeDrv) send(opts header, outBuf *wig.Buffer, input string) {
 	}()
 
 	go func() {
+		defer ioWg.Done()
 		scanner := bufio.NewScanner(perr)
 		for scanner.Scan() {
 			outBuf.Append(scanner.Text())
@@ -150,14 +169,24 @@ func (p *pipeDrv) send(opts header, outBuf *wig.Buffer, input string) {
 	}()
 
 	go func() {
-		err := p.cmd.Wait()
+		defer p.waitWg.Done()
+		ioWg.Wait()
+		err := cmd.Wait()
 		if err != nil {
 			outBuf.Append(err.Error())
 			p.e.Redraw()
 		}
-		p.cmd = nil
-		p.stdin = nil
+		p.mu.Lock()
+		if p.cmd == cmd {
+			p.cmd = nil
+			p.stdin = nil
+		}
+		p.mu.Unlock()
 	}()
+}
+
+func (p *pipeDrv) Wait() {
+	p.waitWg.Wait()
 }
 
 func (p *pipeDrv) Exec(e *wig.Editor, buf *wig.Buffer, line *wig.Element[wig.Line]) {

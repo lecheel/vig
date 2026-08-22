@@ -26,19 +26,22 @@ func add(a int, b int) {
 	buf.Append(source)
 	require.Equal(t, source+"\n", buf.String())
 
+	events := e.Events.Subscribe()
+	defer e.Events.Unsubscribe(events)
+
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		events := e.Events.Subscribe()
-		wg.Done()
+		defer wg.Done()
 		msg := <-events
 		msg.Wg.Done()
 		event := msg.Msg.(EventTextChange)
 		require.Equal(t, EventTextChange{
-			Buf:   buf,
-			Start: Position{Line: 4, Char: 22},
-			End:   Position{Line: 4, Char: 22},
-			Text:  " int",
+			Buf:    buf,
+			Start:  Position{Line: 4, Char: 22},
+			End:    Position{Line: 4, Char: 22},
+			NewEnd: Position{Line: 4, Char: 24},
+			Text:   " int",
 		}, event)
 	}()
 

@@ -35,10 +35,8 @@ type EventBufferReloaded struct {
 }
 
 type EventsManager struct {
-	source         chan any
-	listeners      []chan Event
-	newListener    chan chan Event
-	removeListener chan (<-chan Event)
+	mu        sync.RWMutex
+	listeners []chan Event
 }
 
 type EventKeyPressed struct {
@@ -46,40 +44,29 @@ type EventKeyPressed struct {
 }
 
 func NewEventsManager() *EventsManager {
-	e := &EventsManager{
-		source:         make(chan any, 32),
-		listeners:      make([]chan Event, 32),
-		newListener:    make(chan chan Event, 32),
-		removeListener: make(chan (<-chan Event), 32),
+	return &EventsManager{
+		listeners: make([]chan Event, 0),
 	}
-	go func() {
-		for {
-			select {
-			case l := <-e.newListener:
-				e.listeners = append(e.listeners, l)
-			case l := <-e.removeListener:
-				e.listeners = slices.DeleteFunc(e.listeners, func(delCh chan Event) bool {
-					if delCh == l {
-						close(delCh)
-						return true
-					}
-					return false
-				})
-			}
-		}
-	}()
-
-	return e
 }
 
 func (e *EventsManager) Subscribe() <-chan Event {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	c := make(chan Event)
-	e.newListener <- c
+	e.listeners = append(e.listeners, c)
 	return c
 }
 
 func (e *EventsManager) Unsubscribe(ch <-chan Event) {
-	e.removeListener <- ch
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.listeners = slices.DeleteFunc(e.listeners, func(delCh chan Event) bool {
+		if delCh == ch {
+			close(delCh)
+			return true
+		}
+		return false
+	})
 }
 
 type Event struct {
@@ -91,8 +78,17 @@ type Event struct {
 // we need sync processing to not mess up lsp and treesitter.
 // TODO: rewrite.
 func (e *EventsManager) Broadcast(msg any) {
+	e.mu.RLock()
+	if len(e.listeners) == 0 {
+		e.mu.RUnlock()
+		return
+	}
+	listeners := make([]chan Event, len(e.listeners))
+	copy(listeners, e.listeners)
+	e.mu.RUnlock()
+
 	wg := sync.WaitGroup{}
-	for _, l := range e.listeners {
+	for _, l := range listeners {
 		if l == nil {
 			continue
 		}

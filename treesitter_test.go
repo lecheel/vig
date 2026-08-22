@@ -87,11 +87,13 @@ func add(a int, b int) {
 	buf.Highlighter = TreeSitterHighlighterInitBuffer(e, buf)
 	highlighter := buf.Highlighter.(*TreeSitterHighlighter)
 
-	wg := sync.WaitGroup{}
+	events := e.Events.Subscribe()
+	defer e.Events.Unsubscribe(events)
+
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		events := e.Events.Subscribe()
-		wg.Done()
+		defer wg.Done()
 		msg := <-events
 		msg.Wg.Done()
 		event := msg.Msg.(EventTextChange)
@@ -108,13 +110,12 @@ func add(a int, b int) {
 			StartPosition:  sitter.Point{Row: 4, Column: 5},
 			OldEndPosition: sitter.Point{Row: 4, Column: 8},
 			NewEndPosition: sitter.Point{Row: 4, Column: 5},
-			StartByte:      uint(34),
-			OldEndByte:     uint(37),
-			NewEndByte:     uint(34),
+			StartByte:      uint(32),
+			OldEndByte:     uint(35),
+			NewEndByte:     uint(32),
 		}
 		require.Equal(t, expected, actual)
 	}()
-	wg.Wait()
 
 	line := CursorLineByNum(buf, 4)
 	TextDelete(buf, &Selection{
@@ -122,6 +123,7 @@ func add(a int, b int) {
 		End:   Cursor{Line: 4, Char: 8},
 	})
 	require.Equal(t, "func (a int, b int) {\n", line.Value.String())
+	wg.Wait()
 
 }
 
@@ -149,14 +151,14 @@ func add(a int, b int) {
 	buf.Highlighter = TreeSitterHighlighterInitBuffer(e, buf)
 	highlighter := buf.Highlighter.(*TreeSitterHighlighter)
 
-	wg := sync.WaitGroup{}
+	events := e.Events.Subscribe()
+	defer e.Events.Unsubscribe(events)
+
+	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		events := e.Events.Subscribe()
-		wg.Done()
+		defer wg.Done()
 		msg := <-events
-		msg.Wg.Done()
-		msg = <-events
 		msg.Wg.Done()
 		event := msg.Msg.(EventTextChange)
 		require.Equal(t, EventTextChange{
@@ -171,15 +173,14 @@ func add(a int, b int) {
 			StartPosition:  sitter.Point{Row: 4, Column: 0},
 			OldEndPosition: sitter.Point{Row: 5, Column: 0},
 			NewEndPosition: sitter.Point{Row: 4, Column: 0},
-			StartByte:      uint(29),
-			OldEndByte:     uint(54),
-			NewEndByte:     uint(29),
+			StartByte:      uint(27),
+			OldEndByte:     uint(52),
+			NewEndByte:     uint(27),
 		}
 
 		actual := highlighter.editEditInput(event)
 		require.Equal(t, expected, actual)
 	}()
-	wg.Wait()
 
 	CmdDeleteLine(Context{
 		Editor: e,
@@ -187,4 +188,5 @@ func add(a int, b int) {
 		Count:  0,
 		Char:   "",
 	})
+	wg.Wait()
 }

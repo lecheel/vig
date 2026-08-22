@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"strings"
+	"sync"
 )
 
 type Mode int
@@ -55,6 +56,7 @@ type BlameInfo struct {
 }
 
 type Buffer struct {
+	mu                sync.RWMutex
 	mode              Mode
 	FilePath          string
 	Lines             List[Line]
@@ -213,10 +215,13 @@ func (b *Buffer) Mode() Mode {
 }
 
 func (b *Buffer) Save() error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	f, err := os.Create(b.FilePath)
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 	line := b.Lines.First()
 	for line != nil {
 		// temp check
@@ -244,6 +249,8 @@ func (b *Buffer) Save() error {
 }
 
 func (b *Buffer) Append(s string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	// TODO: rewrite. use TextInsert as this messes up lsp and treesitter
 	lines := strings.Split(s, "\n")
 	// If the string ends with a newline, strings.Split produces a trailing empty string.
@@ -259,6 +266,8 @@ func (b *Buffer) Append(s string) {
 
 // Remove all lines
 func (b *Buffer) ResetLines() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	l := b.Lines.First()
 	for l != nil {
 		next := l.Next()
@@ -270,6 +279,8 @@ func (b *Buffer) ResetLines() {
 }
 
 func (b *Buffer) CountLines() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	i := 0
 	l := b.Lines.First()
 	for l != nil {
@@ -280,6 +291,8 @@ func (b *Buffer) CountLines() int {
 }
 
 func (b *Buffer) String() string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	buf := bytes.NewBuffer(nil)
 	line := b.Lines.First()
 	for line != nil {

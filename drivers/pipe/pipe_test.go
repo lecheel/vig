@@ -37,7 +37,7 @@ func TestPipe(t *testing.T) {
 
 	outBuf := e.BufferFindByFilePath("output", true)
 	p.send(h, outBuf, `ping pong`)
-	p.cmd.Wait()
+	p.Wait()
 
 	require.Contains(t, outBuf.String(), "ping pong")
 
