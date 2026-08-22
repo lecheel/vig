@@ -141,6 +141,31 @@ func (r *Renderer) RenderIndentGuides(win *wig.Window, view *mview) {
 	scrollX := 0 // Horizontal scroll is not explicitly tracked here, assuming 0
 	lineNum := cur.ScrollOffset
 	line := wig.CursorLineByNum(buf, lineNum)
+
+	// Precompute visual-block selection column bounds (if any) so indent
+	// guides don't render on top of the selection highlight in visual
+	// block mode, mirroring the same calculation in ui.WindowRender.
+	var selMinLine, selMaxLine, selMinVisCol, selMaxVisCol int
+	isVisualBlockSel := buf.Selection != nil && buf.Mode() == wig.MODE_VISUAL_BLOCK
+	if isVisualBlockSel {
+		sel := buf.Selection
+		startLineNode := wig.CursorLineByNum(buf, sel.Start.Line)
+		endLineNode := wig.CursorLineByNum(buf, sel.End.Line)
+		if startLineNode != nil && endLineNode != nil {
+			startVisCol := wig.VisualCol(startLineNode.Value, sel.Start.Char)
+			endVisCol := wig.VisualCol(endLineNode.Value, sel.End.Char)
+			selMinVisCol = min(startVisCol, endVisCol)
+			selMaxVisCol = max(startVisCol, endVisCol)
+			selMinLine = min(sel.Start.Line, sel.End.Line)
+			selMaxLine = max(sel.Start.Line, sel.End.Line)
+		} else {
+			isVisualBlockSel = false
+		}
+	}
+	// Character-wise (Visual / Visual Line) selections: tested per-cell via
+	// SelectionCursorInRange, same as ui.WindowRender does for text glyphs.
+	hasCharSel := buf.Selection != nil && (buf.Mode() == wig.MODE_VISUAL || buf.Mode() == wig.MODE_VISUAL_LINE)
+
 	for y := 0; y < viewH && line != nil; y++ {
 		lineRun := line.Value
 		// Blank lines have no leading whitespace of their own, which would
@@ -179,6 +204,16 @@ func (r *Renderer) RenderIndentGuides(win *wig.Window, view *mview) {
 			}
 			// Never draw over the actual cursor cell.
 			if isCursorLine && pos == cursorVisCol {
+				continue
+			}
+			// Never draw over an active selection highlight — otherwise the
+			// guide glyph paints its own (unselected) background on top of
+			// the selection color, making it look like the selection has a
+			// gap wherever an indent guide falls (e.g. pressing 'v' + 'j').
+			if isVisualBlockSel && lineNum >= selMinLine && lineNum <= selMaxLine && pos >= selMinVisCol && pos < selMaxVisCol {
+				continue
+			}
+			if hasCharSel && wig.SelectionCursorInRange(buf.Selection, wig.Cursor{Line: lineNum, Char: pos}) {
 				continue
 			}
 			screenX := textX + relX
