@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/firstrow/wig"
@@ -23,6 +24,7 @@ type uiCommandLine struct {
 	historyIdx int
 	candidates []string
 	candIdx    int
+	ctrlRMode  bool
 }
 
 func (u *uiCommandLine) Plane() wig.RenderPlane {
@@ -86,8 +88,62 @@ func CmdLineInit(ctx wig.Context) {
 }
 
 func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
+	// Handle Ctrl-r special mode
+	if u.ctrlRMode {
+		u.ctrlRMode = false
+		if ev.Key() == tcell.KeyCtrlW {
+			// Grab the full contiguous non-whitespace block under cursor from buffer
+			eCtx := u.e.NewContext()
+			if eCtx.Buf != nil {
+				cur := wig.ContextCursorGet(eCtx)
+				line := wig.CursorLine(eCtx.Buf, cur)
+				if line != nil && len(line.Value) > 0 {
+					chars := line.Value
+					idx := cur.Char
+					if idx >= len(chars) {
+						idx = len(chars) - 1
+					}
+
+					// Find start of word (move left if on space, then find word boundary)
+					start := idx
+					for start > 0 && unicode.IsSpace(chars[start]) {
+						start--
+					}
+					for start > 0 && !unicode.IsSpace(chars[start-1]) {
+						start--
+					}
+
+					// Find end of word
+					end := start
+					for end < len(chars)-1 && !unicode.IsSpace(chars[end]) {
+						end++
+					}
+
+					if end >= start && !unicode.IsSpace(chars[start]) {
+						word := string(chars[start:end])
+						wordRunes := []rune(word)
+
+						newBuf := make([]rune, len(u.chBuf)+len(wordRunes))
+						copy(newBuf, u.chBuf[:u.cursorPos])
+						copy(newBuf[u.cursorPos:], wordRunes)
+						copy(newBuf[u.cursorPos+len(wordRunes):], u.chBuf[u.cursorPos:])
+
+						u.chBuf = newBuf
+						u.cursorPos += len(wordRunes)
+						u.candidates = []string{}
+						u.candIdx = -1
+					}
+				}
+			}
+			return
+		}
+		// If not Ctrl-w, fall through and process normally
+	}
+
 	if ev.Modifiers()&tcell.ModCtrl != 0 {
 		switch ev.Key() {
+		case tcell.KeyCtrlR:
+			u.ctrlRMode = true
 		case tcell.KeyCtrlA:
 			u.cursorPos = 0
 		case tcell.KeyCtrlE:
@@ -531,9 +587,13 @@ func (u *uiCommandLine) Render(view wig.View) {
 	// Draw prefix and text before cursor
 	view.SetContent(0, vh-1, promptPrefix+beforeCursor, bgStyle)
 
-	// Draw cursor character (reversed)
+	// Draw cursor character (reversed) or the '^' for Ctrl-r mode
 	cursorStyle := bgStyle.Reverse(true)
-	view.SetContent(len(beforeCursor)+1, vh-1, atCursorRune, cursorStyle)
+	if u.ctrlRMode {
+		view.SetContent(len(beforeCursor)+1, vh-1, "^", cursorStyle)
+	} else {
+		view.SetContent(len(beforeCursor)+1, vh-1, atCursorRune, cursorStyle)
+	}
 
 	// Draw text after cursor
 	if len(afterCursor) > 0 {
