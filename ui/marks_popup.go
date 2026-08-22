@@ -104,29 +104,15 @@ func (u *MarksPopupWidget) Render(view wig.View) {
 	}
 	y := vh - boxH - 2
 
-	// Use a dedicated popup/border style for the box, fallback to statusline
-	style := wig.Color("ui.popup.border")
-	if style == wig.Color("default") {
-		style = wig.Color("ui.statusline")
-	}
-	if style == wig.Color("default") {
-		style = wig.Color("ui.linenr")
-	}
+	// Use default colors to match the file picker exactly
+	style := wig.Color("default")
 
 	drawBox2(view, x, y, boxW, boxH, style)
 
 	// Title on top border
-	titleStyle := wig.Color("ui.popup.title")
-	if titleStyle == wig.Color("default") {
-		titleStyle = style
-	}
-	view.SetContent(x+2, y, " Marks (` for pingpong) ", titleStyle)
+	view.SetContent(x+2, y, " Marks (` for pingpong) ", wig.Color("ui.linenr.selected"))
 
-	textStyle := wig.Color("ui.popup.text")
-	if textStyle == wig.Color("default") {
-		textStyle = wig.Color("ui.text")
-	}
-
+	textStyle := wig.Color("default")
 	markStyle := wig.Color("ui.mark")
 
 	if len(u.items) == 0 {

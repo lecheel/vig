@@ -67,23 +67,16 @@ func (u *MiniHelpWidget) Render(view wig.View) {
 	}
 	y := vh - boxH - 2 // Move 1 line up
 
-	// Use a dedicated popup/border style for the box, fallback to statusline, then linenr
+	// Use a dedicated popup/border style for the box
 	style := wig.Color("ui.popup.border")
 	if style == wig.Color("default") {
 		style = wig.Color("ui.statusline")
-	}
-	if style == wig.Color("default") {
-		style = wig.Color("ui.linenr")
 	}
 
 	drawBox2(view, x, y, boxW, boxH, style)
 
 	// Title on top border
-	titleStyle := wig.Color("ui.popup.title")
-	if titleStyle == wig.Color("default") {
-		titleStyle = style
-	}
-	view.SetContent(x+2, y, " F - Keys ", titleStyle)
+	view.SetContent(x+2, y, " F - Keys ", wig.Color("ui.linenr.selected"))
 
 	textStyle := wig.Color("ui.popup.text")
 	if textStyle == wig.Color("default") {

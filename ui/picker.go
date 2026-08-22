@@ -299,7 +299,7 @@ func (u *UiPicker[T]) Render(view wig.View) {
 
 	if u.title != "" {
 		titleStr := " " + truncate(u.title, w-x-4) + " "
-		view.SetContent(x+2, y, titleStr, wig.Color("ui.linenr"))
+		view.SetContent(x+2, y, titleStr, wig.Color("ui.linenr.selected"))
 	}
 
 	// prompt
