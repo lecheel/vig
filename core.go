@@ -138,6 +138,9 @@ func CmdReplaceChar(ctx Context) func(Context) {
 		}
 		SelectionDelete(ctx)
 		TextInsert(ctx.Buf, line, cur.Char, ctx.Char)
+
+		// Save closure for dot repeat
+		ctx.Editor.LastRepeatableFn = CmdReplaceChar(ctx)
 	}
 }
 
@@ -218,6 +221,17 @@ func CmdDeleteLine(ctx Context) {
 	yankSave(ctx)
 	SelectionDelete(ctx)
 	CmdNormalMode(ctx)
+
+	// Register for command repeat, capturing the count so `.` repeats
+	// with the same count (e.g. `2dd` → `.` deletes 2 lines, not 1).
+	// A count before `.` (e.g. `3.`) overrides the saved count, like Vim.
+	repeatCount := ctx.Count
+	ctx.Editor.LastRepeatableFn = func(c Context) {
+		if c.Count == 0 {
+			c.Count = repeatCount
+		}
+		CmdDeleteLine(c)
+	}
 }
 
 func CmdDeleteWord(ctx Context) {
@@ -232,6 +246,8 @@ func CmdDeleteWord(ctx Context) {
 	}
 	yankSave(ctx)
 	SelectionDelete(ctx)
+
+	ctx.Editor.LastRepeatableFn = CmdDeleteWord
 }
 
 func CmdChangeWord(ctx Context) {
@@ -244,6 +260,8 @@ func CmdChangeWord(ctx Context) {
 	CmdEnterInsertMode(ctx)
 	yankSave(ctx)
 	SelectionDelete(ctx)
+
+	ctx.Editor.LastRepeatableFn = CmdChangeWord
 }
 
 func CmdChangeWORD(ctx Context) {
@@ -341,6 +359,8 @@ func CmdToggleComment(ctx Context) {
 	}
 	defer CmdNormalMode(ctx)
 
+	ctx.Editor.LastRepeatableFn = CmdToggleComment
+
 	comment := "//"
 
 	// TODO: improve. make comments like all other normal editors!
@@ -405,6 +425,8 @@ func CmdSelectionDelete(ctx Context) {
 	}
 	yankSave(ctx)
 	SelectionDelete(ctx)
+
+	ctx.Editor.LastRepeatableFn = CmdSelectionDelete
 }
 
 func CmdSaveFile(ctx Context) {
@@ -682,7 +704,13 @@ func CmdMacroPlay(ctx Context) func(Context) {
 }
 
 func CmdMacroRepeat(ctx Context) {
-	ctx.Editor.Keys.Macros.Play(".")
+	// Repeat the last registered repeatable command (command-based repeat).
+	// Guard against infinite recursion when '.' is inside a macro playback.
+	if ctx.Editor.LastRepeatableFn != nil {
+		if !ctx.Editor.Keys.Macros.IsPlaying() {
+			ctx.Editor.LastRepeatableFn(ctx)
+		}
+	}
 }
 
 func CmdAutocompleteTrigger(ctx Context) {

@@ -80,16 +80,6 @@ func (k *KeyHandler) HandleKey(editor *Editor, ev *tcell.EventKey, mode Mode) {
 	ctx := editor.NewContext()
 	ctx.Count = uint32(k.GetCount())
 
-	// macro-repeat
-	{
-		if k.waitingForInput == nil && !k.Macros.recordRepeat {
-			k.Macros.StartRepeatRecording()
-		}
-		if k.Macros.recordRepeat && key != "." {
-			k.Macros.repeatKeys = append(k.Macros.repeatKeys, *ev)
-		}
-	}
-
 	if mode == MODE_INSERT && ev.Key() == tcell.KeyCtrlJ {
 		k.fallback(ctx, ev)
 		return
@@ -97,9 +87,6 @@ func (k *KeyHandler) HandleKey(editor *Editor, ev *tcell.EventKey, mode Mode) {
 	cmdExec := func(cmd func(ctx Context), ctx Context) {
 		cmd(ctx)
 		k.resetState()
-		if ctx.Buf.Mode() == MODE_NORMAL {
-			k.Macros.StopRepeatRecording()
-		}
 	}
 
 	switch v := k.waitingForInput.(type) {

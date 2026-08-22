@@ -83,6 +83,7 @@ type Editor struct {
 	AutocompleteTrigger AutocompleteFn
 	Snippets            *SnippetsManager
 	Config              EditorConfig
+	LastRepeatableFn    func(Context)
 }
 
 func NewEditor(
@@ -272,6 +273,8 @@ func (e *Editor) HandleInput(ev *tcell.EventKey) {
 		comp := e.UiComponents[len(e.UiComponents)-1]
 		k = comp.Keymap()
 		mode = comp.Mode()
+		// Share the main editor's macros manager so '.' records UI interactions too
+		k.Macros = e.Keys.Macros
 	}
 
 	k.HandleKey(e, ev, mode)

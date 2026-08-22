@@ -12,8 +12,7 @@ type MacrosManager struct {
 	recording bool
 	Register  string
 
-	recordRepeat bool
-	repeatKeys   []tcell.EventKey
+	playing int
 }
 
 func NewMacrosManager(keyHandler *KeyHandler) *MacrosManager {
@@ -42,9 +41,11 @@ func (m *MacrosManager) Recording() bool {
 
 func (m *MacrosManager) Play(reg string) {
 	if val, ok := m.registers[reg]; ok {
+		m.playing++
 		for _, eventKey := range val {
 			EditorInst.HandleInput(&eventKey)
 		}
+		m.playing--
 	}
 }
 
@@ -61,20 +62,6 @@ func (m *MacrosManager) Push(ev *tcell.EventKey) {
 	m.keys = append(m.keys, *ev)
 }
 
-func (m *MacrosManager) StartRepeatRecording() {
-	m.recordRepeat = true
-}
-
-func (m *MacrosManager) StopRepeatRecording() {
-	if m.recordRepeat == false {
-		return
-	}
-	m.recordRepeat = false
-	// Allow single-key commands (like Ctrl-j or x) to be repeated.
-	// Previously this required >= 2 keys, which broke repeating
-	// any single ctrl/alt command.
-	if len(m.repeatKeys) >= 1 {
-		m.registers["."] = m.repeatKeys
-	}
-	m.repeatKeys = []tcell.EventKey{}
+func (m *MacrosManager) IsPlaying() bool {
+	return m.playing > 0
 }

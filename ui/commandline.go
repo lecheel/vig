@@ -345,9 +345,13 @@ func (u *uiCommandLine) autocomplete() {
 }
 
 func (u *uiCommandLine) execute(cmd string) {
+	u.e.PopUi()
+	u.runCommand(cmd)
+}
+
+func (u *uiCommandLine) runCommand(cmd string) {
 	cmd = strings.TrimSpace(cmd)
 	if cmd == "" {
-		u.e.PopUi()
 		return
 	}
 
@@ -552,6 +556,10 @@ func (u *uiCommandLine) execute(cmd string) {
 	if def, ok := wig.AllCommands[restCmd]; ok {
 		ctx := u.e.NewContext()
 		if fn, ok := def.Fn.(func(wig.Context)); ok {
+			// Register for System 2 (command repeat) if marked Repeatable
+			if def.Repeatable {
+				u.e.LastRepeatableFn = fn
+			}
 			fn(ctx)
 		} else {
 			u.e.EchoMessage(fmt.Sprintf("Command %s is not executable", restCmd))
