@@ -119,6 +119,7 @@ func hunkFirstChangeLine(hunk GitHunk) int {
 func CmdGitHunkNext(ctx wig.Context) {
 	hunks, err := getGitHunks(ctx)
 	if err != nil || len(hunks) == 0 {
+		ctx.Editor.EchoMessage("No git hunks")
 		return
 	}
 	cur := wig.ContextCursorGet(ctx)
@@ -128,15 +129,20 @@ func CmdGitHunkNext(ctx wig.Context) {
 		if target > currentLine {
 			cur.Line = target - 1
 			cur.Char = 0
+			cur.PreserveCharPosition = 0
+			ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, cur)
 			ctx.Editor.EchoMessage("Hunk " + strconv.Itoa(target))
 			wig.CmdCursorCenter(ctx)
 			return
 		}
 	}
+	ctx.Editor.EchoMessage("No more git hunks")
 }
+
 func CmdGitHunkPrev(ctx wig.Context) {
 	hunks, err := getGitHunks(ctx)
 	if err != nil || len(hunks) == 0 {
+		ctx.Editor.EchoMessage("No git hunks")
 		return
 	}
 	cur := wig.ContextCursorGet(ctx)
@@ -147,11 +153,14 @@ func CmdGitHunkPrev(ctx wig.Context) {
 		if target < currentLine {
 			cur.Line = target - 1
 			cur.Char = 0
+			cur.PreserveCharPosition = 0
+			ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, cur)
 			ctx.Editor.EchoMessage("Hunk " + strconv.Itoa(target))
 			wig.CmdCursorCenter(ctx)
 			return
 		}
 	}
+	ctx.Editor.EchoMessage("No earlier git hunks")
 }
 func findHunkAtCursor(hunks []GitHunk, currentLine int) *GitHunk {
 	for i := range hunks {
