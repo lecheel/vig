@@ -412,6 +412,15 @@ func CmdBackwardChar(ctx Context) func(Context) {
 	}
 }
 func CmdWindowVSplit(ctx Context) {
+	ctx.Editor.Layout = LayoutVertical
+	cur := ContextCursorGet(ctx)
+	nwin := CreateWindow(ctx.Editor.ActiveWindow())
+	nwin.VisitBuffer(ctx, *cur)
+	ctx.Editor.Windows = append(ctx.Editor.Windows, nwin)
+}
+
+func CmdWindowHSplit(ctx Context) {
+	ctx.Editor.Layout = LayoutHorizontal
 	cur := ContextCursorGet(ctx)
 	nwin := CreateWindow(ctx.Editor.ActiveWindow())
 	nwin.VisitBuffer(ctx, *cur)

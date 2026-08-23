@@ -52,32 +52,48 @@ func (r *Renderer) Render() {
 
 	w, h := r.screen.Size()
 
-	var winW int
+	var winW, winH int
 	if r.e.Layout == wig.LayoutVertical {
 		winW = w / len(r.e.Windows)
+		winH = h
 	} else {
 		winW = w
+		winH = h / len(r.e.Windows)
 	}
 
 	var winView *mview
 	var activeWinView *mview
 	for i, win := range r.e.Windows {
-		x := winW * i
-		if i > 0 {
-			st := wig.Color("ui.virtual.indent-guide")
-			for i := 0; i <= h; i++ {
-				if x >= 0 && x < w {
-					r.SetContent(x, i, string(tcell.RuneVLine), st)
+		var x, y int
+		if r.e.Layout == wig.LayoutVertical {
+			x = winW * i
+			if i > 0 {
+				st := wig.Color("ui.virtual.indent-guide")
+				for j := 0; j <= h; j++ {
+					if x >= 0 && x < w {
+						r.SetContent(x, j, string(tcell.RuneVLine), st)
+					}
 				}
+				x += 1
 			}
-			x += 1
+		} else {
+			y = winH * i
+			if i > 0 {
+				st := wig.Color("ui.virtual.indent-guide")
+				for j := 0; j <= w; j++ {
+					if y >= 0 && y < h {
+						r.SetContent(j, y, string(tcell.RuneHLine), st)
+					}
+				}
+				y += 1
+			}
 		}
 
-		if winW <= 0 || h <= 0 {
+		if winW <= 0 || winH <= 0 {
 			continue
 		}
 
-		winView = NewMView(r.screen, x, 0, winW, h)
+		winView = NewMView(r.screen, x, y, winW, winH)
 
 		if win == r.e.ActiveWindow() {
 			activeWinView = winView

@@ -75,8 +75,9 @@ func init() {
 	wig.AllCommands["CmdGitBlameCommit"] = wig.CmdDefinition{Desc: "Git blame commit detail", Fn: CmdGitBlameCommit}
 
 	// Window management commands
+	wig.AllCommands["CmdWindowHSplit"] = wig.CmdDefinition{Desc: "Horizontal split", Fn: wig.CmdWindowHSplit}
 	wig.AllCommands["vs"] = wig.CmdDefinition{Desc: "Vertical split", Fn: wig.CmdWindowVSplit}
-	wig.AllCommands["sp"] = wig.CmdDefinition{Desc: "Horizontal split", Fn: wig.CmdWindowVSplit} // wig only has VSplit for now
+	wig.AllCommands["sp"] = wig.CmdDefinition{Desc: "Horizontal split", Fn: wig.CmdWindowHSplit}
 	wig.AllCommands["on"] = wig.CmdDefinition{Desc: "Close other windows", Fn: wig.CmdWindowCloseOther}
 	wig.AllCommands["only"] = wig.CmdDefinition{Desc: "Close other windows", Fn: wig.CmdWindowCloseOther}
 	wig.AllCommands["close"] = wig.CmdDefinition{Desc: "Close window", Fn: wig.CmdWindowClose}
