@@ -5,6 +5,7 @@ import (
 	"context"
 	"math"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	odin "github.com/firstrow/tree-sitter-odin/bindings/go"
 	ts_toml "github.com/tree-sitter-grammars/tree-sitter-toml/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
+	bash "github.com/tree-sitter/tree-sitter-bash/bindings/go"
 	clang "github.com/tree-sitter/tree-sitter-c/bindings/go"
 	golang "github.com/tree-sitter/tree-sitter-go/bindings/go"
 	ts_json "github.com/tree-sitter/tree-sitter-json/bindings/go"
@@ -84,6 +86,8 @@ func detectShebang(buf *Buffer) string {
 	switch {
 	case strings.Contains(lower, "python"):
 		return "python"
+	case strings.Contains(lower, "bash"), strings.Contains(lower, "sh"), strings.Contains(lower, "zsh"):
+		return "bash"
 	}
 	return ""
 }
@@ -93,6 +97,8 @@ func TreeSitterHighlighterInitBuffer(e *Editor, buf *Buffer) *TreeSitterHighligh
 	qpath := ""
 
 	shebang := detectShebang(buf)
+
+	base := filepath.Base(buf.FilePath)
 
 	switch {
 	case strings.HasSuffix(buf.FilePath, ".go"):
@@ -116,6 +122,10 @@ func TreeSitterHighlighterInitBuffer(e *Editor, buf *Buffer) *TreeSitterHighligh
 	case strings.HasSuffix(buf.FilePath, ".toml"):
 		treeSitterLang = ts_toml.Language()
 		qpath = "toml"
+	case strings.HasSuffix(buf.FilePath, ".sh"), strings.HasSuffix(buf.FilePath, ".bash"), strings.HasSuffix(buf.FilePath, ".zsh"),
+		base == ".bashrc" || base == ".bash_profile" || base == ".zshrc" || shebang == "bash":
+		treeSitterLang = bash.Language()
+		qpath = "bash"
 	default:
 		return nil
 	}
@@ -241,6 +251,7 @@ func (h *TreeSitterHighlighter) ListFunctions() []Location {
 	var treeSitterLang unsafe.Pointer
 
 	shebang := detectShebang(h.buf)
+	base := filepath.Base(h.buf.FilePath)
 
 	switch {
 	case strings.HasSuffix(h.buf.FilePath, ".go"):
@@ -255,6 +266,10 @@ func (h *TreeSitterHighlighter) ListFunctions() []Location {
 	case strings.HasSuffix(h.buf.FilePath, ".c"), strings.HasSuffix(h.buf.FilePath, ".h"):
 		queryStr = "(function_definition declarator: (function_declarator declarator: (identifier) @name))"
 		treeSitterLang = clang.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".sh"), strings.HasSuffix(h.buf.FilePath, ".bash"), strings.HasSuffix(h.buf.FilePath, ".zsh"),
+		base == ".bashrc" || base == ".bash_profile" || base == ".zshrc" || shebang == "bash":
+		queryStr = "(function_definition name: (word) @name)"
+		treeSitterLang = bash.Language()
 	default:
 		return nil
 	}

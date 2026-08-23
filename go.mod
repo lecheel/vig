@@ -37,6 +37,7 @@ require (
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.4.0 // indirect
 	github.com/tree-sitter-grammars/tree-sitter-toml v0.7.0 // indirect
+	github.com/tree-sitter/tree-sitter-bash v0.25.1 // indirect
 	github.com/tree-sitter/tree-sitter-javascript v0.25.0 // indirect
 	github.com/tree-sitter/tree-sitter-json v0.24.8 // indirect
 	go.lsp.dev/pkg v0.0.0-20210717090340-384b27a52fb2 // indirect
