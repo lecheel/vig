@@ -50,7 +50,7 @@ func TreeSitterHighlighterGo(e *Editor) {
 }
 
 func (h *TreeSitterHighlighter) TextChanged(event EventTextChange) {
-	if event.Buf == nil {
+	if h == nil || h.tree == nil || event.Buf == nil {
 		return
 	}
 
@@ -66,9 +66,33 @@ func (h *TreeSitterHighlighter) TextChanged(event EventTextChange) {
 	h.tree = tree
 }
 
+func detectShebang(buf *Buffer) string {
+	if buf == nil || buf.Lines.Len == 0 {
+		return ""
+	}
+	firstLineNode := buf.Lines.First()
+	if firstLineNode == nil {
+		return ""
+	}
+
+	firstLine := strings.TrimSpace(firstLineNode.Value.String())
+	if !strings.HasPrefix(firstLine, "#!") {
+		return ""
+	}
+
+	lower := strings.ToLower(firstLine)
+	switch {
+	case strings.Contains(lower, "python"):
+		return "python"
+	}
+	return ""
+}
+
 func TreeSitterHighlighterInitBuffer(e *Editor, buf *Buffer) *TreeSitterHighlighter {
 	var treeSitterLang unsafe.Pointer
 	qpath := ""
+
+	shebang := detectShebang(buf)
 
 	switch {
 	case strings.HasSuffix(buf.FilePath, ".go"):
@@ -80,7 +104,7 @@ func TreeSitterHighlighterInitBuffer(e *Editor, buf *Buffer) *TreeSitterHighligh
 	case strings.HasSuffix(buf.FilePath, ".c"), strings.HasSuffix(buf.FilePath, ".h"):
 		treeSitterLang = clang.Language()
 		qpath = "c"
-	case strings.HasSuffix(buf.FilePath, ".py"):
+	case strings.HasSuffix(buf.FilePath, ".py") || shebang == "python":
 		treeSitterLang = python.Language()
 		qpath = "python"
 	case strings.HasSuffix(buf.FilePath, ".rs"):
@@ -140,7 +164,11 @@ func NewHighlighterForPath(buf *Buffer, path string) Highlighter {
 	if EditorInst == nil {
 		return nil
 	}
-	return TreeSitterHighlighterInitBuffer(EditorInst, buf)
+	hl := TreeSitterHighlighterInitBuffer(EditorInst, buf)
+	if hl == nil {
+		return nil
+	}
+	return hl
 }
 
 func (h *TreeSitterHighlighter) HighlightLine(lineNum int) []Span {
@@ -212,6 +240,8 @@ func (h *TreeSitterHighlighter) ListFunctions() []Location {
 	var queryStr string
 	var treeSitterLang unsafe.Pointer
 
+	shebang := detectShebang(h.buf)
+
 	switch {
 	case strings.HasSuffix(h.buf.FilePath, ".go"):
 		queryStr = "(function_declaration name: (identifier) @name) (method_declaration name: (field_identifier) @name)"
@@ -219,7 +249,7 @@ func (h *TreeSitterHighlighter) ListFunctions() []Location {
 	case strings.HasSuffix(h.buf.FilePath, ".rs"):
 		queryStr = "(function_item name: (identifier) @name)"
 		treeSitterLang = rust.Language()
-	case strings.HasSuffix(h.buf.FilePath, ".py"):
+	case strings.HasSuffix(h.buf.FilePath, ".py") || shebang == "python":
 		queryStr = "(function_definition name: (identifier) @name)"
 		treeSitterLang = python.Language()
 	case strings.HasSuffix(h.buf.FilePath, ".c"), strings.HasSuffix(h.buf.FilePath, ".h"):
