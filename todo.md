@@ -38,6 +38,7 @@
 
 - **Window Management**
   - Vertical split (`:vs`, `CmdWindowVSplit`)
+  - Horizontal split (`:sp`, `CmdWindowHSplit`)
   - Window cycling (`ctrl+w w`, `CmdWindowNext`)
   - Window closing (`:close`, `:only`, close & kill buffer)
   - Layout toggling between horizontal and vertical layouts
@@ -114,7 +115,7 @@
 
 - **Completion**
   - LSP completions
-  - Local buffer word completion fallback (`Alt-/`)
+  - Local wordlist and buffer word completion fallback (`Alt-/` / `LocalComplete`)
   - Single-candidate automatic completion
 
 ---
@@ -125,7 +126,7 @@
 - [v] **Ex Mode / Command-line ranges**: `:[range]s/old/new/g`, `:%s/...`, `:'<,'>s/...` with `c` and `g` flags
 - [v] **Search & Replace**: Visual selection + `:s/.../...`, `:%s/.../...` with confirmation (`c` flag)
 - [v] **Dot Repeat & Count**: `.` repeats last change with count preservation (`2dd`→`.` deletes 2)
-- [ ] **Horizontal Splits**: `:sp` / `ctrl+w s` (currently only vertical splits supported)
+- [v] **Horizontal Splits**: `:sp` / `ctrl+w s`
 - [v] **Marks**: `m[a-z]` to set mark, `` `[a-z] `` to jump to mark, ``` `` ``` for last position
 - [v] **Advanced Text Objects**: `ci(`/`ci{`/`ci[`/`ci'`/`ci"`, `ca(`/`ca{`, `di(`/`da(`, `yi(`/`ya(`, `ciw`/`caw`
 - [v] **Quickfix List**: `:copen` opens LSP diagnostics in a split buffer (navigate with `:cn`/`:cp` or Enter)
