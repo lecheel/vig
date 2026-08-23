@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/firstrow/wig"
@@ -567,7 +569,33 @@ var GitAiCommit = false
 // GitAiTool specifies the command used to generate commit messages (default: "git-ai --tool")
 var GitAiTool = "git-ai --tool"
 
-func generateGitAiCommitMessage(ctx wig.Context) string {
+// GitAiTimeout is a safety-net upper bound on how long git-ai --tool is
+// allowed to run before wig kills it itself. git-ai already enforces its
+// own ~120s internal timeout; this just guards against that mechanism
+// failing. Manual cancellation (Esc) is the normal way to stop it early.
+var GitAiTimeout = 150 * time.Second
+
+var (
+	gitAiMu     sync.Mutex
+	gitAiCancel context.CancelFunc
+)
+
+func cancelActiveGitAi() bool {
+	gitAiMu.Lock()
+	defer gitAiMu.Unlock()
+	if gitAiCancel != nil {
+		gitAiCancel()
+		gitAiCancel = nil
+		return true
+	}
+	return false
+}
+
+// generateGitAiCommitMessage runs git-ai --tool under the given context, so
+// the caller can cancel it early (ctx cancelled) or let it run until
+// GitAiTimeout elapses. It must not touch anything on ctx.Buf/ctx.Win since
+// it's designed to be called from a background goroutine.
+func generateGitAiCommitMessage(cctx context.Context, editor *wig.Editor, rootDir string) string {
 	toolCmd := GitAiTool
 	if toolCmd == "" {
 		toolCmd = "git-ai --tool"
@@ -577,14 +605,20 @@ func generateGitAiCommitMessage(ctx wig.Context) string {
 		parts = []string{"git-ai", "--tool"}
 	}
 
-	rootDir := ctx.Editor.Projects.GetRoot()
-	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd := exec.CommandContext(cctx, parts[0], parts[1:]...)
 	if rootDir != "" {
 		cmd.Dir = rootDir
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		ctx.Editor.LogMessage("git-ai error: " + err.Error() + " output: " + string(out))
+		switch cctx.Err() {
+		case context.Canceled:
+			// User cancelled manually (e.g. pressed Esc); not an error worth logging.
+		case context.DeadlineExceeded:
+			editor.LogMessage(fmt.Sprintf("git-ai timed out after %s and was killed", GitAiTimeout))
+		default:
+			editor.LogMessage("git-ai error: " + err.Error() + " output: " + string(out))
+		}
 	}
 
 	// 1. Try reading /tmp/commit-edit.txt written by git-ai --tool
@@ -600,6 +634,49 @@ func generateGitAiCommitMessage(ctx wig.Context) string {
 	}
 
 	return ""
+}
+
+// runGitAiWithSpinner runs git-ai --tool in the background and animates a
+// spinner with elapsed seconds in the status bar echo area. Esc or q cancels
+// the async process early. When generation finishes, onSuccess is invoked.
+func runGitAiWithSpinner(ctx wig.Context, onSuccess func(msg string)) {
+	cancelActiveGitAi()
+
+	rootDir := ctx.Editor.Projects.GetRoot()
+	cctx, cancel := context.WithTimeout(context.Background(), GitAiTimeout)
+
+	gitAiMu.Lock()
+	gitAiCancel = cancel
+	gitAiMu.Unlock()
+
+	done := make(chan struct{})
+
+	go startSpinner(ctx.Editor, "Generating AI commit message... (Esc to cancel)", done)
+
+	go func() {
+		msg := generateGitAiCommitMessage(cctx, ctx.Editor, rootDir)
+		cancelled := cctx.Err() == context.Canceled
+
+		gitAiMu.Lock()
+		gitAiCancel = nil
+		gitAiMu.Unlock()
+		cancel()
+		close(done)
+
+		if cancelled {
+			ctx.Editor.EchoMessage("AI commit message generation cancelled")
+			ctx.Editor.Redraw()
+			return
+		}
+
+		if msg == "" {
+			ctx.Editor.EchoMessage("git-ai did not return a message; please enter manually")
+		} else {
+			ctx.Editor.EchoMessage("AI commit message generated")
+		}
+		onSuccess(msg)
+		ctx.Editor.Redraw()
+	}()
 }
 
 // GitStatusHighlighter provides syntax coloring for the buffer-based git status panel.
@@ -1218,6 +1295,9 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 				GitShowCommitBuffer(ctx)
 			},
 			"q": func(ctx wig.Context) {
+				if cancelActiveGitAi() {
+					return
+				}
 				pendingStash = nil
 				if len(ctx.Editor.Windows) > 1 {
 					wig.CmdWindowCloseAndKillBuffer(ctx)
@@ -1226,6 +1306,9 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 				}
 			},
 			"Esc": func(ctx wig.Context) {
+				if cancelActiveGitAi() {
+					return
+				}
 				if pendingStash != nil {
 					pendingStash = nil
 					ctx.Editor.EchoMessage("Cancelled")
@@ -1242,6 +1325,10 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 }
 
 func exitModeOrClose(ctx wig.Context) {
+	if cancelActiveGitAi() {
+		return
+	}
+
 	if ctx.Buf.Mode() != wig.MODE_NORMAL {
 		wig.CmdNormalMode(ctx)
 		return
@@ -1250,43 +1337,37 @@ func exitModeOrClose(ctx wig.Context) {
 	wig.CmdKillBuffer(ctx)
 }
 
-func GitShowCommitBuffer(ctx wig.Context, useAI ...bool) {
-	withAI := GitAiCommit
-	if len(useAI) > 0 {
-		withAI = useAI[0]
-	}
-
-	aiMsg := ""
-	if withAI {
-		aiMsg = generateGitAiCommitMessageWithSpinner(ctx)
-		if aiMsg != "" {
-			ctx.Editor.EchoMessage("AI commit message generated")
-		} else {
-			ctx.Editor.EchoMessage("git-ai did not return a message; please enter manually")
-		}
-	}
-
+// openGitCommitEditor opens (or refreshes) the "[git: edit commit message]"
+// buffer with aiMsg pre-filled (or blank if empty) and wires up its keys.
+func openGitCommitEditor(ctx wig.Context, aiMsg string) {
 	contents := gitRun("status", "-v")
 	diffBufName := "[git: edit commit message]"
 	dBuf := ctx.Editor.BufferFindByFilePath(diffBufName, true)
-	dBuf.ResetLines()
+
+	writeTemplate := func(bodyLines []string) {
+		dBuf.ResetLines()
+		if len(bodyLines) == 0 {
+			dBuf.Append("")
+			dBuf.Append("")
+		} else {
+			for _, l := range bodyLines {
+				dBuf.Append(l)
+			}
+		}
+		dBuf.Append("")
+		dBuf.Append("# Please enter your commit message and press ctrl+c to commit, 'a' to regenerate AI msg, or Esc to exit.")
+		dBuf.Append("")
+		for _, l := range strings.Split(contents, "\n") {
+			dBuf.Append(fmt.Sprintf("# %s", l))
+		}
+		dBuf.Highlighter = &DiffHighlighter{Buf: dBuf}
+	}
 
 	if aiMsg != "" {
-		for _, l := range strings.Split(aiMsg, "\n") {
-			dBuf.Append(l)
-		}
+		writeTemplate(strings.Split(aiMsg, "\n"))
 	} else {
-		dBuf.Append("")
-		dBuf.Append("")
+		writeTemplate(nil)
 	}
-
-	dBuf.Append("")
-	dBuf.Append("# Please enter your commit message and press ctrl+c to commit, 'a' to regenerate AI msg, or Esc to exit.")
-	dBuf.Append("")
-	for _, l := range strings.Split(contents, "\n") {
-		dBuf.Append(fmt.Sprintf("# %s", l))
-	}
-	dBuf.Highlighter = &DiffHighlighter{Buf: dBuf}
 
 	dBuf.KeyHandler = wig.DefaultKeyHandler(wig.ModeKeyMap{
 		wig.MODE_NORMAL: wig.KeyMap{
@@ -1294,26 +1375,9 @@ func GitShowCommitBuffer(ctx wig.Context, useAI ...bool) {
 			"q":      exitModeOrClose,
 			"ctrl+c": gitCommitFinish,
 			"a": func(c wig.Context) {
-				msg := generateGitAiCommitMessageWithSpinner(c)
-				if msg != "" {
-					dBuf.ResetLines()
-					for _, l := range strings.Split(msg, "\n") {
-						dBuf.Append(l)
-					}
-					dBuf.Append("")
-					dBuf.Append("# Please enter your commit message and press ctrl+c to commit, 'a' to regenerate AI msg, or Esc to exit.")
-					dBuf.Append("")
-					for _, l := range strings.Split(contents, "\n") {
-						dBuf.Append(fmt.Sprintf("# %s", l))
-					}
-					c.Editor.EchoMessage("AI commit message refreshed")
-					c.Buf = dBuf
-					wig.CmdEnterInsertMode(c)
-					c.Editor.ActiveWindow().VisitBuffer(c, wig.Cursor{Line: 0, Char: 0})
-					c.Editor.Redraw()
-				} else {
-					c.Editor.EchoMessage("git-ai did not return a message")
-				}
+				runGitAiWithSpinner(c, func(msg string) {
+					openGitCommitEditor(c, msg)
+				})
 			},
 		},
 		wig.MODE_INSERT: wig.KeyMap{
@@ -1327,29 +1391,33 @@ func GitShowCommitBuffer(ctx wig.Context, useAI ...bool) {
 	ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: 0, Char: 0})
 }
 
-var gitSpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+// GitShowCommitBuffer opens the commit message editor. If useAI (or
+// GitAiCommit) is set, it animates a spinner in the status bar echo area while
+// running git-ai --tool in the background; the commit editor opens once generation finishes.
+func GitShowCommitBuffer(ctx wig.Context, useAI ...bool) {
+	withAI := GitAiCommit
+	if len(useAI) > 0 {
+		withAI = useAI[0]
+	}
 
-// generateGitAiCommitMessageWithSpinner runs generateGitAiCommitMessage in a
-// goroutine and animates a spinner with elapsed seconds in the echo area
-// until it finishes.
-func generateGitAiCommitMessageWithSpinner(ctx wig.Context) string {
-	var msg string
-	done := make(chan struct{})
+	if !withAI {
+		openGitCommitEditor(ctx, "")
+		return
+	}
 
-	go func() {
-		msg = generateGitAiCommitMessage(ctx)
-		close(done)
-	}()
-
-	runWithSpinner(ctx.Editor, "Generating AI commit message...", done)
-
-	return msg
+	runGitAiWithSpinner(ctx, func(msg string) {
+		openGitCommitEditor(ctx, msg)
+	})
 }
 
-// runWithSpinner blocks the calling goroutine, animating a spinner with elapsed
-// seconds in the echo area, until the given done channel is closed. Call the
-// long-running work in its own goroutine and close done when it finishes.
-func runWithSpinner(editor *wig.Editor, label string, done <-chan struct{}) {
+var gitSpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// startSpinner animates a spinner with elapsed seconds in the echo area
+// until the given done channel is closed. It does not block the caller;
+// run it with `go startSpinner(...)` from a goroutine that is not the
+// input-handling goroutine, so keypresses (like Esc to cancel) keep working
+// while it runs.
+func startSpinner(editor *wig.Editor, label string, done <-chan struct{}) {
 	start := time.Now()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
@@ -1366,6 +1434,14 @@ func runWithSpinner(editor *wig.Editor, label string, done <-chan struct{}) {
 			frame++
 		}
 	}
+}
+
+// runWithSpinner blocks the calling goroutine, animating a spinner until the
+// given done channel is closed. Used for work that intentionally isn't
+// cancellable mid-flight (e.g. the final `git commit` call).
+func runWithSpinner(editor *wig.Editor, label string, done <-chan struct{}) {
+	go startSpinner(editor, label, done)
+	<-done
 }
 
 func gitCommitFinish(ctx wig.Context) {
