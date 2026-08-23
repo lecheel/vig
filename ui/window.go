@@ -61,6 +61,9 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 
 	startLine := uint32(offset)
 	var tsNodeCursor *wig.HighlighterCursor
+	if buf.Highlighter == nil && buf.FilePath != "" {
+		buf.Highlighter = wig.NewHighlighterForPath(buf, buf.FilePath)
+	}
 	if buf.Highlighter != nil {
 		// TODO: query new highlights only if visible are have changed.
 		// Now it reloads colors on j,k,l, basically on any key movement.

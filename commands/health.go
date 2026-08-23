@@ -227,8 +227,9 @@ func collectHealthSections() []healthSection {
 	sections = append(sections, coreSection)
 
 	// 3. Supported Languages (Go, Odin, Python)
+	// 3. Supported Languages & Data Formats (Go, Odin, Python, Rust, TOML, JSON)
 	langSection := healthSection{
-		title: "Supported Languages (Go, Odin, Python, Rust)",
+		title: "Supported Languages & Data Formats (Go, Odin, Python, Rust, TOML, JSON)",
 		items: []healthItem{
 			// Go
 			checkTool("go", "Go compiler & formatter (go fmt)", false, "version"),
@@ -249,8 +250,13 @@ func collectHealthSections() []healthSection {
 			checkTool("rustfmt", "Rust formatter (rustfmt)", false, "--version"),
 			checkTool("rust-analyzer", "Rust language server (LSP)", false, "--version"),
 			checkPath("  └ tree-sitter query (rust)", filepath.Join(queriesDir, "rust", "highlights.scm"), false),
+
+			// TOML & JSON
+			checkPath("  └ tree-sitter query (toml)", filepath.Join(queriesDir, "toml", "highlights.scm"), false),
+			checkPath("  └ tree-sitter query (json)", filepath.Join(queriesDir, "json", "highlights.scm"), false),
 		},
 	}
+	sections = append(sections, langSection)
 	sections = append(sections, langSection)
 
 	// 6. User Configuration & Runtime

@@ -117,6 +117,8 @@ func BufferReadFile(path string) (*Buffer, error) {
 		buf.Lines.PushBack([]rune(newLine))
 	}
 
+	buf.Highlighter = NewHighlighterForPath(buf, path)
+
 	return buf, nil
 }
 
