@@ -57,6 +57,9 @@ func init() {
 	wig.AllCommands["bl"] = wig.CmdDefinition{Desc: "Last buffer", Fn: wig.CmdBufferLast}
 	wig.AllCommands["CmdGitView"] = wig.CmdDefinition{Desc: "Git status panel", Fn: CmdGitView}
 	wig.AllCommands["gs"] = wig.CmdDefinition{Desc: "Git status", Fn: CmdGitView}
+	wig.AllCommands["CmdGitFilesPicker"] = wig.CmdDefinition{Desc: "Git changed files", Fn: CmdGitFilesPicker}
+	wig.AllCommands["CmdGitStatusFilePicker"] = wig.CmdDefinition{Desc: "Git changed files", Fn: CmdGitFilesPicker}
+	wig.AllCommands["gfiles"] = wig.CmdDefinition{Desc: "Git changed files", Fn: CmdGitFilesPicker}
 	wig.AllCommands["CmdGitBlame"] = wig.CmdDefinition{Desc: "Git blame", Fn: CmdGitBlame}
 	wig.AllCommands["blame"] = wig.CmdDefinition{Desc: "Git blame", Fn: CmdGitBlame}
 	wig.AllCommands["CmdGitBlameCommit"] = wig.CmdDefinition{Desc: "Git blame commit detail", Fn: CmdGitBlameCommit}

@@ -93,6 +93,169 @@ func CmdBufferPicker(ctx wig.Context) {
 	})
 }
 
+func CmdGitFilesPicker(ctx wig.Context) {
+	if !gitIsRepo() {
+		ctx.Editor.EchoMessage("Not a git repository")
+		return
+	}
+
+	posCache := wig.LoadPositionCache()
+	showStatus := true
+
+	buildStatusItems := func() []ui.PickerItem[string] {
+		out := gitRun("status", "--porcelain=v2")
+		lines := strings.Split(out, "\n")
+		var items []ui.PickerItem[string]
+		seen := make(map[string]bool)
+
+		for _, line := range lines {
+			if line == "" {
+				continue
+			}
+			var code, path string
+			switch line[0] {
+			case '1', '2':
+				parts := strings.SplitN(line, " ", 9)
+				if len(parts) < 9 {
+					continue
+				}
+				xy := parts[1]
+				if len(xy) < 2 {
+					continue
+				}
+				path = gitParsePorcelainPath(line[0], parts[8])
+				x, y := xy[0], xy[1]
+				switch {
+				case x != '.' && y != '.':
+					code = fmt.Sprintf("%c%c", x, y)
+				case x != '.':
+					code = fmt.Sprintf("%c ", x)
+				default:
+					code = fmt.Sprintf(" %c", y)
+				}
+			case '?':
+				path = gitUnquotePath(strings.TrimPrefix(line, "? "))
+				code = "??"
+			default:
+				continue
+			}
+
+			if path != "" && !seen[path] {
+				seen[path] = true
+				items = append(items, ui.PickerItem[string]{
+					Name:  fmt.Sprintf("[%s] %s", code, path),
+					Value: path,
+				})
+			}
+		}
+		return items
+	}
+
+	buildLastCommitItems := func() []ui.PickerItem[string] {
+		out := gitRun("diff-tree", "--no-commit-id", "--name-status", "-r", "HEAD")
+		lines := strings.Split(strings.TrimSpace(out), "\n")
+		var items []ui.PickerItem[string]
+		for _, l := range lines {
+			if l == "" {
+				continue
+			}
+			parts := strings.SplitN(l, "\t", 2)
+			if len(parts) < 2 {
+				continue
+			}
+			code := parts[0]
+			path := gitUnquotePath(parts[1])
+			items = append(items, ui.PickerItem[string]{
+				Name:  fmt.Sprintf("[%s] %s", code, path),
+				Value: path,
+			})
+		}
+		return items
+	}
+
+	buildItems := func() []ui.PickerItem[string] {
+		if showStatus {
+			return buildStatusItems()
+		}
+		return buildLastCommitItems()
+	}
+
+	action := func(p *ui.UiPicker[string], i *ui.PickerItem[string]) {
+		defer ctx.Editor.PopUi()
+		if i == nil {
+			return
+		}
+
+		filePath := i.Value
+		if !filepath.IsAbs(filePath) {
+			rootDir := ctx.Editor.Projects.GetRoot()
+			filePath = filepath.Join(rootDir, filePath)
+		}
+
+		var targetBuf *wig.Buffer
+		for _, b := range ctx.Editor.Buffers {
+			if b.FilePath == filePath {
+				targetBuf = b
+				break
+			}
+		}
+
+		if targetBuf != nil {
+			targetBuf.OpenCount++
+			ctx.Buf = targetBuf
+			ctx.Editor.ActiveWindow().VisitBuffer(ctx)
+		} else {
+			buf, err := ctx.Editor.OpenFile(filePath)
+			if err != nil {
+				ctx.Editor.EchoMessage("Cannot open: " + err.Error())
+				return
+			}
+			buf.OpenCount = posCache.Files[filePath].OpenCount + 1
+			ctx.Buf = buf
+
+			targetLine := posCache.Files[filePath].Line
+			if targetLine >= buf.Lines.Len {
+				targetLine = buf.Lines.Len - 1
+			}
+			ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: targetLine, Char: 0})
+			wig.CmdCursorCenter(ctx)
+		}
+	}
+
+	picker := ui.PickerInit(
+		ctx.Editor,
+		action,
+		buildItems(),
+	)
+
+	updateTitle := func() {
+		if showStatus {
+			picker.SetTitle("Git Files (Status) [Ins: Last Commit]")
+		} else {
+			hash := strings.TrimSpace(gitRun("rev-parse", "--short", "HEAD"))
+			if hash != "" {
+				picker.SetTitle(fmt.Sprintf("Git Files (Commit: %s) [Ins: Status]", hash))
+			} else {
+				picker.SetTitle("Git Files (Last Commit) [Ins: Status]")
+			}
+		}
+	}
+	updateTitle()
+
+	picker.OnKey("Insert", func(ctx wig.Context) {
+		showStatus = !showStatus
+		updateTitle()
+		picker.SetItems(buildItems())
+		ctx.Editor.Redraw()
+	})
+
+	picker.OnKey("ctrl+o", func(ctx wig.Context) {
+		wig.CmdWindowVSplit(ctx)
+		wig.CmdWindowNext(ctx)
+		picker.CallAction()
+	})
+}
+
 func CmdMRUBufferPicker(ctx wig.Context) {
 	posCache := wig.LoadPositionCache()
 	sortByRecent := true
