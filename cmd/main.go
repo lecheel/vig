@@ -20,18 +20,31 @@ import (
 )
 
 func main() {
-	for i, arg := range os.Args[1:] {
+	openGitFiles := false
+	var fileArgs []string
+
+	for _, arg := range os.Args[1:] {
 		if arg == "--help" || arg == "-h" {
 			fmt.Println("Usage: wig [options] [file ...]")
 			fmt.Println("\nOptions:")
+			fmt.Println("  --gf         Open git changed files picker on startup.")
 			fmt.Println("  --edit       Open configuration file for editing.")
 			fmt.Println("  --health     Check health of dependencies.")
 			fmt.Println("  --help, -h   Show this help message.")
 			fmt.Println("\nExamples:")
 			fmt.Println("  wig main.go          Open main.go")
 			fmt.Println("  wig newfile.txt      Create or open newfile.txt")
+			fmt.Println("  wig --gf             Open git changed files picker")
 			fmt.Println("  wig --edit           Edit config file")
 			return
+		}
+		if arg == "--health" || arg == "health" {
+			commands.PrintCLIHealth()
+			return
+		}
+		if arg == "--gf" || arg == "-gf" {
+			openGitFiles = true
+			continue
 		}
 		if arg == "--edit" || arg == "edit" {
 			home, _ := os.UserHomeDir()
@@ -41,12 +54,10 @@ func main() {
 			if _, err := os.Stat(configPath); os.IsNotExist(err) {
 				os.WriteFile(configPath, []byte{}, 0644)
 			}
-			os.Args[i+1] = configPath
+			fileArgs = append(fileArgs, configPath)
+			continue
 		}
-		if arg == "--health" || arg == "health" {
-			commands.PrintCLIHealth()
-			return
-		}
+		fileArgs = append(fileArgs, arg)
 	}
 
 	tscreen, err := tcell.NewScreen()
@@ -95,13 +106,13 @@ func main() {
 	gutterMgr := commands.NewGitGutterManager(editor)
 
 	posCache := wig.LoadPositionCache()
-	args := os.Args
-	if len(args) > 1 {
+	args := fileArgs
+	if len(args) > 0 {
 		targetLine := -1
 		var openedFile string
 
 		// Open all files provided as arguments, skipping line number args like +10
-		for _, arg := range args[1:] {
+		for _, arg := range args {
 			if strings.HasPrefix(arg, "+") {
 				if num, err := strconv.Atoi(arg[1:]); err == nil {
 					targetLine = num - 1
@@ -141,6 +152,10 @@ func main() {
 		}
 	} else {
 		wig.CmdNewBuffer(editor.NewContext())
+	}
+
+	if openGitFiles {
+		commands.CmdGitFilesPicker(editor.NewContext())
 	}
 
 	// Initial git gutter update for all open buffers
