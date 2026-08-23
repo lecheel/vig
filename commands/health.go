@@ -389,111 +389,45 @@ func GenerateHealthReport(colored bool) string {
 
 // HealthHighlighter provides syntax highlighting for the [Health] buffer
 type HealthHighlighter struct {
-	buf   *wig.Buffer
-	nodes wig.List[wig.HighlighterNode]
+	buf *wig.Buffer
 }
 
-func (h *HealthHighlighter) TextChanged(wig.EventTextChange) {
-	h.Build()
-}
+func (h *HealthHighlighter) TextChanged(wig.EventTextChange) {}
+func (h *HealthHighlighter) Build()                          {}
 
-func (h *HealthHighlighter) Build() {
+func (h *HealthHighlighter) HighlightLine(lineNum int) []wig.Span {
 	if h.buf == nil {
-		return
+		return nil
 	}
-	h.nodes = wig.List[wig.HighlighterNode]{}
-
-	line := h.buf.Lines.First()
-	lineNum := uint32(0)
-
-	for line != nil {
-		str := line.Value.String()
-		trimmed := strings.TrimRight(str, "\r\n")
-
-		if strings.HasPrefix(trimmed, "==") {
-			h.nodes.PushBack(wig.HighlighterNode{
-				NodeName:  "comment",
-				StartLine: lineNum,
-				StartChar: 0,
-				EndLine:   lineNum,
-				EndChar:   uint32(len(trimmed)),
-			})
-		} else if strings.HasPrefix(trimmed, "  WIG HEALTH CHECK REPORT") {
-			h.nodes.PushBack(wig.HighlighterNode{
-				NodeName:  "keyword",
-				StartLine: lineNum,
-				StartChar: 0,
-				EndLine:   lineNum,
-				EndChar:   uint32(len(trimmed)),
-			})
-		} else if strings.HasPrefix(trimmed, "## ") {
-			h.nodes.PushBack(wig.HighlighterNode{
-				NodeName:  "function",
-				StartLine: lineNum,
-				StartChar: 0,
-				EndLine:   lineNum,
-				EndChar:   uint32(len(trimmed)),
-			})
-		} else {
-			if idx := strings.Index(trimmed, "[ OK ]"); idx != -1 {
-				h.nodes.PushBack(wig.HighlighterNode{
-					NodeName:  "diff.plus",
-					StartLine: lineNum,
-					StartChar: uint32(idx),
-					EndLine:   lineNum,
-					EndChar:   uint32(idx + 6),
-				})
-			} else if idx := strings.Index(trimmed, "[WARN]"); idx != -1 {
-				h.nodes.PushBack(wig.HighlighterNode{
-					NodeName:  "diff.delta",
-					StartLine: lineNum,
-					StartChar: uint32(idx),
-					EndLine:   lineNum,
-					EndChar:   uint32(idx + 6),
-				})
-			} else if idx := strings.Index(trimmed, "[FAIL]"); idx != -1 {
-				h.nodes.PushBack(wig.HighlighterNode{
-					NodeName:  "diff.minus",
-					StartLine: lineNum,
-					StartChar: uint32(idx),
-					EndLine:   lineNum,
-					EndChar:   uint32(idx + 6),
-				})
-			} else if idx := strings.Index(trimmed, "[INFO]"); idx != -1 {
-				h.nodes.PushBack(wig.HighlighterNode{
-					NodeName:  "type",
-					StartLine: lineNum,
-					StartChar: uint32(idx),
-					EndLine:   lineNum,
-					EndChar:   uint32(idx + 6),
-				})
-			} else if strings.HasPrefix(trimmed, "         path") {
-				h.nodes.PushBack(wig.HighlighterNode{
-					NodeName:  "comment",
-					StartLine: lineNum,
-					StartChar: 0,
-					EndLine:   lineNum,
-					EndChar:   uint32(len(trimmed)),
-				})
-			}
-		}
-
-		line = line.Next()
-		lineNum++
+	line := wig.CursorLineByNum(h.buf, lineNum)
+	if line == nil {
+		return nil
 	}
-}
+	str := line.Value.String()
+	trimmed := strings.TrimRight(str, "\r\n")
+	lineLen := uint16(len([]rune(trimmed)))
+	if lineLen == 0 {
+		return nil
+	}
 
-func (h *HealthHighlighter) ForRange(startLine, endLine uint32) *wig.HighlighterCursor {
-	node := h.nodes.First()
-	for node != nil {
-		if node.Value.EndLine >= startLine {
-			break
-		}
-		node = node.Next()
+	if strings.HasPrefix(trimmed, "==") {
+		return []wig.Span{{StartCol: 0, EndCol: lineLen, Style: wig.Color("comment")}}
+	} else if strings.HasPrefix(trimmed, "  WIG HEALTH CHECK REPORT") {
+		return []wig.Span{{StartCol: 0, EndCol: lineLen, Style: wig.Color("keyword")}}
+	} else if strings.HasPrefix(trimmed, "## ") {
+		return []wig.Span{{StartCol: 0, EndCol: lineLen, Style: wig.Color("function")}}
+	} else if idx := strings.Index(trimmed, "[ OK ]"); idx != -1 {
+		return []wig.Span{{StartCol: uint16(idx), EndCol: uint16(idx + 6), Style: wig.Color("diff.plus")}}
+	} else if idx := strings.Index(trimmed, "[WARN]"); idx != -1 {
+		return []wig.Span{{StartCol: uint16(idx), EndCol: uint16(idx + 6), Style: wig.Color("diff.delta")}}
+	} else if idx := strings.Index(trimmed, "[FAIL]"); idx != -1 {
+		return []wig.Span{{StartCol: uint16(idx), EndCol: uint16(idx + 6), Style: wig.Color("diff.minus")}}
+	} else if idx := strings.Index(trimmed, "[INFO]"); idx != -1 {
+		return []wig.Span{{StartCol: uint16(idx), EndCol: uint16(idx + 6), Style: wig.Color("type")}}
+	} else if strings.HasPrefix(trimmed, "         path") {
+		return []wig.Span{{StartCol: 0, EndCol: lineLen, Style: wig.Color("comment")}}
 	}
-	return &wig.HighlighterCursor{
-		Cursor: node,
-	}
+	return nil
 }
 
 // PrintCLIHealth outputs the ANSI color-coded health check directly to stdout and exits

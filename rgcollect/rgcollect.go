@@ -56,13 +56,9 @@ func Init(ctx wig.Context, title string, items []wig.Location) {
 
 type TestHighlighter struct{}
 
-func (h *TestHighlighter) Build() {
-}
-
-func (h *TestHighlighter) TextChanged(wig.EventTextChange) {
-}
-
-func (h *TestHighlighter) ForRange(startLine, endLine uint32) *wig.HighlighterCursor {
+func (h *TestHighlighter) Build()                          {}
+func (h *TestHighlighter) TextChanged(wig.EventTextChange) {}
+func (h *TestHighlighter) HighlightLine(lineNum int) []wig.Span {
 	return nil
 }
 
@@ -102,72 +98,57 @@ type RgHighlighter struct {
 func (h *RgHighlighter) Build()                          {}
 func (h *RgHighlighter) TextChanged(wig.EventTextChange) {}
 
-func (h *RgHighlighter) ForRange(startLine, endLine uint32) *wig.HighlighterCursor {
+func (h *RgHighlighter) HighlightLine(lineNum int) []wig.Span {
 	if h.Buf == nil {
 		return nil
 	}
-
-	nodes := wig.List[wig.HighlighterNode]{}
-
-	line := wig.CursorLineByNum(h.Buf, int(startLine))
-	for lineNum := startLine; line != nil && lineNum <= endLine; lineNum++ {
-		text := line.Value.String()
-		runes := []rune(text)
-		lineLen := uint32(len(runes))
-
-		if lineLen > 0 {
-			// Check if line starts with digits + ':'
-			colonIdx := -1
-			for i, r := range runes {
-				if r == ':' {
-					colonIdx = i
-					break
-				}
-				if !unicode.IsDigit(r) {
-					break
-				}
-			}
-
-			if colonIdx > 0 {
-				// Result line: color from 0 to colon (inclusive)
-				nodes.PushBack(wig.HighlighterNode{
-					NodeName:  "ui.linenr",
-					StartLine: lineNum,
-					StartChar: 0,
-					EndLine:   lineNum,
-					EndChar:   uint32(colonIdx + 1),
-				})
-			} else {
-				// Check if blank (only whitespace)
-				isBlank := true
-				for _, r := range runes {
-					if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
-						isBlank = false
-						break
-					}
-				}
-
-				if !isBlank {
-					// File header: color entire line
-					nodes.PushBack(wig.HighlighterNode{
-						NodeName:  "ui.statusline",
-						StartLine: lineNum,
-						StartChar: 0,
-						EndLine:   lineNum,
-						EndChar:   lineLen,
-					})
-				}
-			}
-		}
-
-		line = line.Next()
+	line := wig.CursorLineByNum(h.Buf, lineNum)
+	if line == nil {
+		return nil
 	}
-
-	if nodes.First() == nil {
+	text := line.Value.String()
+	runes := []rune(text)
+	lineLen := uint16(len(runes))
+	if lineLen == 0 {
 		return nil
 	}
 
-	return &wig.HighlighterCursor{Cursor: nodes.First()}
+	colonIdx := -1
+	for i, r := range runes {
+		if r == ':' {
+			colonIdx = i
+			break
+		}
+		if !unicode.IsDigit(r) {
+			break
+		}
+	}
+
+	if colonIdx > 0 {
+		return []wig.Span{{
+			StartCol: 0,
+			EndCol:   uint16(colonIdx + 1),
+			Style:    wig.Color("ui.linenr"),
+		}}
+	}
+
+	isBlank := true
+	for _, r := range runes {
+		if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
+			isBlank = false
+			break
+		}
+	}
+
+	if !isBlank {
+		return []wig.Span{{
+			StartCol: 0,
+			EndCol:   lineLen,
+			Style:    wig.Color("ui.statusline"),
+		}}
+	}
+
+	return nil
 }
 
 // InitGrouped opens a full-screen [rg] buffer with grouped search results.

@@ -27,38 +27,24 @@ type QuickfixHighlighter struct {
 func (h *QuickfixHighlighter) Build()                          {}
 func (h *QuickfixHighlighter) TextChanged(wig.EventTextChange) {}
 
-func (h *QuickfixHighlighter) ForRange(startLine, endLine uint32) *wig.HighlighterCursor {
+func (h *QuickfixHighlighter) HighlightLine(lineNum int) []wig.Span {
 	if h.Buf == nil {
 		return nil
 	}
-
-	nodes := wig.List[wig.HighlighterNode]{}
-
-	line := wig.CursorLineByNum(h.Buf, int(startLine))
-	for lineNum := startLine; line != nil && lineNum <= endLine; lineNum++ {
-		text := line.Value.String()
-		lineLen := uint32(len([]rune(text)))
-
-		if lineLen > 0 {
-			spaceIdx := strings.Index(text, " ")
-			if spaceIdx > 0 {
-				nodes.PushBack(wig.HighlighterNode{
-					NodeName:  "ui.linenr",
-					StartLine: lineNum,
-					StartChar: 0,
-					EndLine:   lineNum,
-					EndChar:   uint32(spaceIdx),
-				})
-			}
-		}
-
-		line = line.Next()
-	}
-
-	if nodes.First() == nil {
+	line := wig.CursorLineByNum(h.Buf, lineNum)
+	if line == nil {
 		return nil
 	}
-	return &wig.HighlighterCursor{Cursor: nodes.First()}
+	text := line.Value.String()
+	spaceIdx := strings.Index(text, " ")
+	if spaceIdx > 0 {
+		return []wig.Span{{
+			StartCol: 0,
+			EndCol:   uint16(spaceIdx),
+			Style:    wig.Color("ui.linenr"),
+		}}
+	}
+	return nil
 }
 
 // quickfixState holds the parsed entries for the [quickfix] buffer.

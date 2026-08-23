@@ -104,54 +104,44 @@ type DiffHighlighter struct {
 func (h *DiffHighlighter) Build()                          {}
 func (h *DiffHighlighter) TextChanged(wig.EventTextChange) {}
 
-func (h *DiffHighlighter) ForRange(startLine, endLine uint32) *wig.HighlighterCursor {
+func (h *DiffHighlighter) HighlightLine(lineNum int) []wig.Span {
 	if h.Buf == nil {
 		return nil
 	}
-
-	nodes := wig.List[wig.HighlighterNode]{}
-
-	line := wig.CursorLineByNum(h.Buf, int(startLine))
-	for lineNum := startLine; line != nil && lineNum <= endLine; lineNum++ {
-		text := line.Value.String()
-		lineLen := uint32(len([]rune(text)))
-
-		if lineLen > 0 {
-			var nodeName string
-			switch {
-			case strings.HasPrefix(text, "diff --git"), strings.HasPrefix(text, "index "),
-				strings.HasPrefix(text, "commit "), strings.HasPrefix(text, "Author:"),
-				strings.HasPrefix(text, "Date:"):
-				nodeName = "ui.statusline"
-			case strings.HasPrefix(text, "---") || strings.HasPrefix(text, "+++"):
-				nodeName = "ui.linenr"
-			case strings.HasPrefix(text, "@@"):
-				nodeName = "ui.linenr.selected"
-			case strings.HasPrefix(text, "+"):
-				nodeName = "diff.plus"
-			case strings.HasPrefix(text, "-"):
-				nodeName = "diff.minus"
-			}
-
-			if nodeName != "" {
-				nodes.PushBack(wig.HighlighterNode{
-					NodeName:  nodeName,
-					StartLine: lineNum,
-					StartChar: 0,
-					EndLine:   lineNum,
-					EndChar:   lineLen,
-				})
-			}
-		}
-
-		line = line.Next()
+	line := wig.CursorLineByNum(h.Buf, lineNum)
+	if line == nil {
+		return nil
 	}
-
-	if nodes.First() == nil {
+	text := line.Value.String()
+	lineLen := uint16(len([]rune(text)))
+	if lineLen == 0 {
 		return nil
 	}
 
-	return &wig.HighlighterCursor{Cursor: nodes.First()}
+	var nodeName string
+	switch {
+	case strings.HasPrefix(text, "diff --git"), strings.HasPrefix(text, "index "),
+		strings.HasPrefix(text, "commit "), strings.HasPrefix(text, "Author:"),
+		strings.HasPrefix(text, "Date:"):
+		nodeName = "ui.statusline"
+	case strings.HasPrefix(text, "---") || strings.HasPrefix(text, "+++"):
+		nodeName = "ui.linenr"
+	case strings.HasPrefix(text, "@@"):
+		nodeName = "ui.linenr.selected"
+	case strings.HasPrefix(text, "+"):
+		nodeName = "diff.plus"
+	case strings.HasPrefix(text, "-"):
+		nodeName = "diff.minus"
+	}
+
+	if nodeName != "" {
+		return []wig.Span{{
+			StartCol: 0,
+			EndCol:   lineLen,
+			Style:    wig.Color(nodeName),
+		}}
+	}
+	return nil
 }
 
 // CmdGitBlame toggles inline git blame annotations for the current buffer.

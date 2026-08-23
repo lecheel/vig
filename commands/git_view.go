@@ -688,159 +688,133 @@ type GitStatusHighlighter struct {
 func (h *GitStatusHighlighter) Build()                          {}
 func (h *GitStatusHighlighter) TextChanged(wig.EventTextChange) {}
 
-func (h *GitStatusHighlighter) ForRange(startLine, endLine uint32) *wig.HighlighterCursor {
+func (h *GitStatusHighlighter) HighlightLine(lineNum int) []wig.Span {
 	if h.Buf == nil || h.LineMap == nil {
 		return nil
 	}
-
-	nodes := wig.List[wig.HighlighterNode]{}
-
-	line := wig.CursorLineByNum(h.Buf, int(startLine))
-	for lineNum := startLine; line != nil && lineNum <= endLine; lineNum++ {
-		entry, ok := h.LineMap[int(lineNum)]
-		text := line.Value.String()
-		runes := []rune(text)
-		lineLen := uint32(len(runes))
-
-		if ok && lineLen > 0 {
-			switch entry.kind {
-			case "shortcut":
-				inBracket := false
-				lastIdx := 0
-				for idx, r := range runes {
-					if r == '[' {
-						if idx > lastIdx {
-							nodes.PushBack(wig.HighlighterNode{
-								NodeName:  "comment",
-								StartLine: lineNum,
-								StartChar: uint32(lastIdx),
-								EndLine:   lineNum,
-								EndChar:   uint32(idx),
-							})
-						}
-						inBracket = true
-						lastIdx = idx
-					} else if r == ']' && inBracket {
-						nodes.PushBack(wig.HighlighterNode{
-							NodeName:  "constant",
-							StartLine: lineNum,
-							StartChar: uint32(lastIdx),
-							EndLine:   lineNum,
-							EndChar:   uint32(idx + 1),
-						})
-						inBracket = false
-						lastIdx = idx + 1
-					}
-				}
-				if lastIdx < len(runes) {
-					nodes.PushBack(wig.HighlighterNode{
-						NodeName:  "comment",
-						StartLine: lineNum,
-						StartChar: uint32(lastIdx),
-						EndLine:   lineNum,
-						EndChar:   uint32(len(runes)),
-					})
-				}
-			case "header":
-				nodes.PushBack(wig.HighlighterNode{
-					NodeName:  "ui.statusline",
-					StartLine: lineNum,
-					StartChar: 0,
-					EndLine:   lineNum,
-					EndChar:   lineLen,
-				})
-			case "file":
-				codeStyle := "ui.text"
-				switch entry.item.Code {
-				case "M", "R":
-					codeStyle = "diff.delta"
-				case "A":
-					codeStyle = "diff.plus"
-				case "D":
-					codeStyle = "diff.minus"
-				case "?":
-					codeStyle = "ui.linenr"
-				}
-				if lineLen >= 3 {
-					nodes.PushBack(wig.HighlighterNode{
-						NodeName:  codeStyle,
-						StartLine: lineNum,
-						StartChar: 2,
-						EndLine:   lineNum,
-						EndChar:   3,
-					})
-				}
-				if lineLen >= 5 {
-					nodes.PushBack(wig.HighlighterNode{
-						NodeName:  "ui.text",
-						StartLine: lineNum,
-						StartChar: 5,
-						EndLine:   lineNum,
-						EndChar:   lineLen,
-					})
-				}
-			case "branch":
-				if entry.item.Status == "active_branch" {
-					nodes.PushBack(wig.HighlighterNode{
-						NodeName:  "diff.plus",
-						StartLine: lineNum,
-						StartChar: 0,
-						EndLine:   lineNum,
-						EndChar:   min(4, lineLen),
-					})
-					nodes.PushBack(wig.HighlighterNode{
-						NodeName:  "ui.linenr.selected",
-						StartLine: lineNum,
-						StartChar: min(4, lineLen),
-						EndLine:   lineNum,
-						EndChar:   lineLen,
-					})
-				} else {
-					nodes.PushBack(wig.HighlighterNode{
-						NodeName:  "ui.text",
-						StartLine: lineNum,
-						StartChar: 0,
-						EndLine:   lineNum,
-						EndChar:   lineLen,
-					})
-				}
-			case "stash":
-				colonIdx := strings.Index(text, ":")
-				if colonIdx > 0 {
-					nodes.PushBack(wig.HighlighterNode{
-						NodeName:  "constant",
-						StartLine: lineNum,
-						StartChar: 2,
-						EndLine:   lineNum,
-						EndChar:   uint32(colonIdx),
-					})
-					nodes.PushBack(wig.HighlighterNode{
-						NodeName:  "ui.text",
-						StartLine: lineNum,
-						StartChar: uint32(colonIdx),
-						EndLine:   lineNum,
-						EndChar:   lineLen,
-					})
-				}
-			case "empty":
-				nodes.PushBack(wig.HighlighterNode{
-					NodeName:  "ui.linenr",
-					StartLine: lineNum,
-					StartChar: 0,
-					EndLine:   lineNum,
-					EndChar:   lineLen,
-				})
-			}
-		}
-
-		line = line.Next()
+	entry, ok := h.LineMap[lineNum]
+	if !ok {
+		return nil
 	}
-
-	if nodes.First() == nil {
+	line := wig.CursorLineByNum(h.Buf, lineNum)
+	if line == nil {
+		return nil
+	}
+	text := line.Value.String()
+	runes := []rune(text)
+	lineLen := uint16(len(runes))
+	if lineLen == 0 {
 		return nil
 	}
 
-	return &wig.HighlighterCursor{Cursor: nodes.First()}
+	var spans []wig.Span
+	switch entry.kind {
+	case "shortcut":
+		inBracket := false
+		lastIdx := 0
+		for idx, r := range runes {
+			if r == '[' {
+				if idx > lastIdx {
+					spans = append(spans, wig.Span{
+						StartCol: uint16(lastIdx),
+						EndCol:   uint16(idx),
+						Style:    wig.Color("comment"),
+					})
+				}
+				inBracket = true
+				lastIdx = idx
+			} else if r == ']' && inBracket {
+				spans = append(spans, wig.Span{
+					StartCol: uint16(lastIdx),
+					EndCol:   uint16(idx + 1),
+					Style:    wig.Color("constant"),
+				})
+				inBracket = false
+				lastIdx = idx + 1
+			}
+		}
+		if lastIdx < len(runes) {
+			spans = append(spans, wig.Span{
+				StartCol: uint16(lastIdx),
+				EndCol:   uint16(len(runes)),
+				Style:    wig.Color("comment"),
+			})
+		}
+	case "header":
+		spans = append(spans, wig.Span{
+			StartCol: 0,
+			EndCol:   lineLen,
+			Style:    wig.Color("ui.statusline"),
+		})
+	case "file":
+		codeStyle := "ui.text"
+		switch entry.item.Code {
+		case "M", "R":
+			codeStyle = "diff.delta"
+		case "A":
+			codeStyle = "diff.plus"
+		case "D":
+			codeStyle = "diff.minus"
+		case "?":
+			codeStyle = "ui.linenr"
+		}
+		if lineLen >= 3 {
+			spans = append(spans, wig.Span{
+				StartCol: 2,
+				EndCol:   3,
+				Style:    wig.Color(codeStyle),
+			})
+		}
+		if lineLen >= 5 {
+			spans = append(spans, wig.Span{
+				StartCol: 5,
+				EndCol:   lineLen,
+				Style:    wig.Color("ui.text"),
+			})
+		}
+	case "branch":
+		if entry.item.Status == "active_branch" {
+			cut := uint16(min(4, int(lineLen)))
+			spans = append(spans, wig.Span{
+				StartCol: 0,
+				EndCol:   cut,
+				Style:    wig.Color("diff.plus"),
+			})
+			spans = append(spans, wig.Span{
+				StartCol: cut,
+				EndCol:   lineLen,
+				Style:    wig.Color("ui.linenr.selected"),
+			})
+		} else {
+			spans = append(spans, wig.Span{
+				StartCol: 0,
+				EndCol:   lineLen,
+				Style:    wig.Color("ui.text"),
+			})
+		}
+	case "stash":
+		colonIdx := strings.Index(text, ":")
+		if colonIdx > 0 {
+			spans = append(spans, wig.Span{
+				StartCol: 2,
+				EndCol:   uint16(colonIdx),
+				Style:    wig.Color("constant"),
+			})
+			spans = append(spans, wig.Span{
+				StartCol: uint16(colonIdx),
+				EndCol:   lineLen,
+				Style:    wig.Color("ui.text"),
+			})
+		}
+	case "empty":
+		spans = append(spans, wig.Span{
+			StartCol: 0,
+			EndCol:   lineLen,
+			Style:    wig.Color("ui.linenr"),
+		})
+	}
+
+	return spans
 }
 
 func getGitStatusLineMap(buf *wig.Buffer) map[int]gitStatusLine {

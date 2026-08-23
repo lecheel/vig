@@ -5,19 +5,10 @@ import (
 	"strings"
 
 	str "github.com/boyter/go-string"
-	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/firstrow/wig"
 )
-
-func nodeToColor(node *wig.Element[wig.HighlighterNode]) tcell.Style {
-	if node == nil {
-		return wig.Color("default")
-	}
-
-	return wig.Color(node.Value.NodeName)
-}
 
 func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 	buf := win.Buffer()
@@ -59,15 +50,8 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 		skip = cur.Char - textWidth + 1
 	}
 
-	startLine := uint32(offset)
-	var tsNodeCursor *wig.HighlighterCursor
 	if buf.Highlighter == nil && buf.FilePath != "" {
 		buf.Highlighter = wig.NewHighlighterForPath(buf, buf.FilePath)
-	}
-	if buf.Highlighter != nil {
-		// TODO: query new highlights only if visible are have changed.
-		// Now it reloads colors on j,k,l, basically on any key movement.
-		tsNodeCursor = buf.Highlighter.ForRange(uint32(startLine), startLine+uint32(termHeight))
 	}
 
 	// Precalculate visual block bounds for efficient rendering
@@ -186,15 +170,21 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 				currVisCol += chlen(currentLine.Value[j])
 			}
 
+			var lineSpans []wig.Span
+			if buf.Highlighter != nil {
+				lineSpans = buf.Highlighter.HighlightLine(lineNum)
+			}
+			spanIdx := 0
+
 			for i := skip; i < len(currentLine.Value); i++ {
 				// render selection
 				textStyle := wig.Color("default")
 
-				if tsNodeCursor != nil {
-					colorNode, ok := tsNodeCursor.Seek(uint32(lineNum), uint32(i))
-					if ok {
-						textStyle = nodeToColor(colorNode)
-					}
+				for spanIdx < len(lineSpans) && int(lineSpans[spanIdx].EndCol) <= i {
+					spanIdx++
+				}
+				if spanIdx < len(lineSpans) && int(lineSpans[spanIdx].StartCol) <= i && int(lineSpans[spanIdx].EndCol) > i {
+					textStyle = lineSpans[spanIdx].Style
 				}
 
 				// Colors and styles

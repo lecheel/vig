@@ -1,17 +1,22 @@
 package wig
 
 import (
+	"cmp"
 	"context"
+	"math"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"unicode/utf8"
 	"unsafe"
 
 	odin "github.com/firstrow/tree-sitter-odin/bindings/go"
+	ts_toml "github.com/tree-sitter-grammars/tree-sitter-toml/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	clang "github.com/tree-sitter/tree-sitter-c/bindings/go"
 	golang "github.com/tree-sitter/tree-sitter-go/bindings/go"
+	ts_json "github.com/tree-sitter/tree-sitter-json/bindings/go"
 	python "github.com/tree-sitter/tree-sitter-python/bindings/go"
 	rust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
 )
@@ -69,14 +74,10 @@ func TreeSitterHighlighterInitBuffer(e *Editor, buf *Buffer) *TreeSitterHighligh
 	case strings.HasSuffix(buf.FilePath, ".go"):
 		treeSitterLang = golang.Language()
 		qpath = "go"
-
 	case strings.HasSuffix(buf.FilePath, ".odin"):
 		treeSitterLang = odin.Language()
 		qpath = "odin"
-	case strings.HasSuffix(buf.FilePath, ".c"):
-		treeSitterLang = clang.Language()
-		qpath = "c"
-	case strings.HasSuffix(buf.FilePath, ".h"):
+	case strings.HasSuffix(buf.FilePath, ".c"), strings.HasSuffix(buf.FilePath, ".h"):
 		treeSitterLang = clang.Language()
 		qpath = "c"
 	case strings.HasSuffix(buf.FilePath, ".py"):
@@ -85,6 +86,12 @@ func TreeSitterHighlighterInitBuffer(e *Editor, buf *Buffer) *TreeSitterHighligh
 	case strings.HasSuffix(buf.FilePath, ".rs"):
 		treeSitterLang = rust.Language()
 		qpath = "rust"
+	case strings.HasSuffix(buf.FilePath, ".json"), strings.HasSuffix(buf.FilePath, ".jsonc"):
+		treeSitterLang = ts_json.Language()
+		qpath = "json"
+	case strings.HasSuffix(buf.FilePath, ".toml"):
+		treeSitterLang = ts_toml.Language()
+		qpath = "toml"
 	default:
 		return nil
 	}
@@ -129,40 +136,69 @@ func (h *TreeSitterHighlighter) Build() {
 	h.tree = tree
 }
 
-func (h *TreeSitterHighlighter) ForRange(lineStart, lineEnd uint32) *HighlighterCursor {
+func NewHighlighterForPath(buf *Buffer, path string) Highlighter {
+	if EditorInst == nil {
+		return nil
+	}
+	return TreeSitterHighlighterInitBuffer(EditorInst, buf)
+}
+
+func (h *TreeSitterHighlighter) HighlightLine(lineNum int) []Span {
 	tslock.Lock()
 	defer tslock.Unlock()
 
+	if h == nil || h.tree == nil || h.q == nil {
+		return nil
+	}
+
 	qc := sitter.NewQueryCursor()
 	qc.SetPointRange(
-		sitter.Point{Row: uint(lineStart), Column: 0},
-		sitter.Point{Row: uint(lineEnd), Column: 0},
+		sitter.Point{Row: uint(lineNum), Column: 0},
+		sitter.Point{Row: uint(lineNum + 1), Column: 0},
 	)
 	defer qc.Close()
 
 	matches := qc.Matches(h.q, h.tree.RootNode(), h.sourceCode)
 
-	nodes := List[HighlighterNode]{}
-
+	var spans []Span
 	for match := matches.Next(); match != nil; match = matches.Next() {
 		for _, capture := range match.Captures {
-			row := capture.Node.StartPosition().Row
-			col := capture.Node.StartPosition().Column
-			erow := capture.Node.EndPosition().Row
-			ecol := capture.Node.EndPosition().Column
-			nodes.PushBack(HighlighterNode{
-				NodeName:  h.q.CaptureNames()[capture.Index],
-				StartLine: uint32(row),
-				StartChar: uint32(col),
-				EndLine:   uint32(erow),
-				EndChar:   uint32(ecol),
+			startPos := capture.Node.StartPosition()
+			endPos := capture.Node.EndPosition()
+
+			if int(startPos.Row) > lineNum || int(endPos.Row) < lineNum {
+				continue
+			}
+
+			startCol := uint16(0)
+			if int(startPos.Row) == lineNum {
+				startCol = uint16(startPos.Column)
+			}
+
+			endCol := uint16(math.MaxUint16)
+			if int(endPos.Row) == lineNum {
+				endCol = uint16(endPos.Column)
+			}
+
+			nodeName := h.q.CaptureNames()[capture.Index]
+			style := Color(nodeName)
+
+			spans = append(spans, Span{
+				StartCol: startCol,
+				EndCol:   endCol,
+				Style:    style,
 			})
 		}
 	}
 
-	return &HighlighterCursor{
-		Cursor: nodes.First(),
-	}
+	slices.SortFunc(spans, func(a, b Span) int {
+		if a.StartCol != b.StartCol {
+			return cmp.Compare(a.StartCol, b.StartCol)
+		}
+		return cmp.Compare(a.EndCol, b.EndCol)
+	})
+
+	return spans
 }
 
 func (h *TreeSitterHighlighter) ListFunctions() []Location {
