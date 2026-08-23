@@ -28,6 +28,7 @@ type EditorSettings struct {
 	FormatOnSave        *bool   `toml:"format_on_save"`
 	GitStatusView       *string `toml:"git_status_view"`
 	GitBlameView        *string `toml:"git_blame_view"`
+	QuickfixView        *string `toml:"quickfix_view"`
 	IndentGuides        *bool   `toml:"indent_guides"`
 	LspEnabled          *bool   `toml:"lsp_enabled"`
 	WhichKeyFormat      *string `toml:"which_key_format"`
@@ -65,6 +66,7 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		FormatOnSave:        false,
 		GitStatusView:       "full",
 		GitBlameView:        "split",
+		QuickfixView:        "split",
 		IndentGuides:        false,
 		LspEnabled:          true,
 		WhichKeyFormat:      "words",
@@ -124,6 +126,9 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	}
 	if cfg.Editor.GitBlameView != nil {
 		editorCfg.GitBlameView = *cfg.Editor.GitBlameView
+	}
+	if cfg.Editor.QuickfixView != nil {
+		editorCfg.QuickfixView = *cfg.Editor.QuickfixView
 	}
 	if cfg.Editor.IndentGuides != nil {
 		editorCfg.IndentGuides = *cfg.Editor.IndentGuides

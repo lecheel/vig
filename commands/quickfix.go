@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/firstrow/wig"
+	"github.com/firstrow/wig/ui"
 )
 
 // QuickfixEntry is a single diagnostic serialized to JSON for persistence.
@@ -107,8 +108,8 @@ func populateQuickfixBuffer(buf *wig.Buffer, entries []QuickfixEntry) map[int]in
 }
 
 // CmdQuickfixOpen collects LSP diagnostics from the current buffer and
-// displays them in a [quickfix] buffer. Results are persisted to
-// ~/.config/wig/quickfix.json so :copen can reopen the last set.
+// displays them in a [quickfix] buffer or popup list depending on configuration.
+// Results are persisted to ~/.config/wig/quickfix.json so :copen can reopen the last set.
 // Navigate with :cn/:cp or Enter.
 func CmdQuickfixOpen(ctx wig.Context) {
 	diags := ctx.Editor.Lsp.AllDiagnostics(ctx.Buf)
@@ -120,7 +121,7 @@ func CmdQuickfixOpen(ctx wig.Context) {
 			return
 		}
 		quickfixState.entries = entries
-		openQuickfixBuffer(ctx, entries)
+		openQuickfixView(ctx, entries)
 		ctx.Editor.EchoMessage("Loaded saved quickfix results")
 		return
 	}
@@ -150,7 +151,67 @@ func CmdQuickfixOpen(ctx wig.Context) {
 	}
 
 	quickfixState.entries = entries
-	openQuickfixBuffer(ctx, entries)
+	openQuickfixView(ctx, entries)
+}
+
+func openQuickfixView(ctx wig.Context, entries []QuickfixEntry) {
+	if strings.ToLower(ctx.Editor.Config.QuickfixView) == "popup" {
+		openQuickfixPopup(ctx, entries)
+	} else {
+		openQuickfixBuffer(ctx, entries)
+	}
+}
+
+func openQuickfixPopup(ctx wig.Context, entries []QuickfixEntry) {
+	qfBuf := ctx.Editor.BufferFindByFilePath("[quickfix]", true)
+	lineMap := populateQuickfixBuffer(qfBuf, entries)
+	quickfixState.lineMap = lineMap
+	qfBuf.Highlighter = &QuickfixHighlighter{Buf: qfBuf}
+	wig.SetVisitSource(qfBuf)
+
+	// Seed cursor position to first entry
+	if cur := wig.WindowCursorGet(ctx.Editor.ActiveWindow(), qfBuf); cur != nil {
+		cur.Line = 1
+		cur.Char = 0
+	}
+
+	items := make([]ui.QuickfixItem, len(entries))
+	for i, e := range entries {
+		items[i] = ui.QuickfixItem{
+			FilePath: e.FilePath,
+			Line:     e.Line,
+			Char:     e.Char,
+			Message:  e.Message,
+		}
+	}
+
+	ui.QuickfixPopupInit(ctx, items, func(item ui.QuickfixItem) {
+		// Sync quickfix buffer line so subsequent :cn/:cp continues from this item
+		for line, idx := range quickfixState.lineMap {
+			if idx >= 0 && idx < len(quickfixState.entries) {
+				entry := quickfixState.entries[idx]
+				if entry.FilePath == item.FilePath && entry.Line == item.Line && entry.Char == item.Char {
+					if cur := wig.WindowCursorGet(ctx.Editor.ActiveWindow(), qfBuf); cur != nil {
+						cur.Line = line
+						cur.Char = 0
+					}
+					break
+				}
+			}
+		}
+
+		targetBuf, err := ctx.Editor.OpenFile(item.FilePath)
+		if err != nil {
+			ctx.Editor.EchoMessage("Cannot open: " + err.Error())
+			return
+		}
+		ctx.Buf = targetBuf
+		ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{
+			Line: item.Line,
+			Char: item.Char,
+		})
+		wig.CmdCursorCenter(ctx)
+	})
 }
 
 func openQuickfixBuffer(ctx wig.Context, entries []QuickfixEntry) {
@@ -273,6 +334,7 @@ func visitQuickfixLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig
 		Line: e.Line,
 		Char: e.Char,
 	})
+	ctx.Editor.EchoMessage(fmt.Sprintf("[%d/%d] %s", entryIdx+1, len(quickfixState.entries), e.Message))
 	wig.CmdCursorCenter(ctx)
 
 	return true

@@ -19,6 +19,7 @@ type EditorConfig struct {
 	FormatOnSave        bool
 	GitStatusView       string // "full" or "split"
 	GitBlameView        string // "full" or "split"
+	QuickfixView        string // "split" (default) or "popup"
 	IndentGuides        bool
 	LspEnabled          bool   // If false, LSP servers are never started and all LSP features are no-ops
 	WhichKeyFormat      string // "words", "camel", or "cmd"
