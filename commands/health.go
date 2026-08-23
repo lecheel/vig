@@ -258,7 +258,6 @@ func collectHealthSections() []healthSection {
 		},
 	}
 	sections = append(sections, langSection)
-	sections = append(sections, langSection)
 
 	// 6. User Configuration & Runtime
 	configSection := healthSection{
