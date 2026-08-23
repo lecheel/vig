@@ -32,6 +32,8 @@ type EditorSettings struct {
 	LspEnabled          *bool   `toml:"lsp_enabled"`
 	WhichKeyFormat      *string `toml:"which_key_format"`
 	NotifyOnSave        *bool   `toml:"notify_on_save"`
+	GitAiCommit         *bool   `toml:"git_ai_commit"`
+	GitAiTool           *string `toml:"git_ai_tool"`
 }
 
 type UserKeysConfig struct {
@@ -133,8 +135,16 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		editorCfg.WhichKeyFormat = *cfg.Editor.WhichKeyFormat
 	}
 	commands.NotifyOnSave = false
+	commands.GitAiCommit = false
+	commands.GitAiTool = "git-ai --tool"
 	if cfg.Editor.NotifyOnSave != nil {
 		commands.NotifyOnSave = *cfg.Editor.NotifyOnSave
+	}
+	if cfg.Editor.GitAiCommit != nil {
+		commands.GitAiCommit = *cfg.Editor.GitAiCommit
+	}
+	if cfg.Editor.GitAiTool != nil {
+		commands.GitAiTool = *cfg.Editor.GitAiTool
 	}
 	resolve := func(name string) any {
 		if def, ok := wig.AllCommands[name]; ok {

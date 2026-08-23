@@ -560,6 +560,47 @@ type gitStatusLine struct {
 	filePath string
 }
 
+// GitAiCommit controls whether git commit automatically uses AI to generate commit message
+var GitAiCommit = false
+
+// GitAiTool specifies the command used to generate commit messages (default: "git-ai --tool")
+var GitAiTool = "git-ai --tool"
+
+func generateGitAiCommitMessage(ctx wig.Context) string {
+	toolCmd := GitAiTool
+	if toolCmd == "" {
+		toolCmd = "git-ai --tool"
+	}
+	parts := strings.Fields(toolCmd)
+	if len(parts) == 0 {
+		parts = []string{"git-ai", "--tool"}
+	}
+
+	rootDir := ctx.Editor.Projects.GetRoot()
+	cmd := exec.Command(parts[0], parts[1:]...)
+	if rootDir != "" {
+		cmd.Dir = rootDir
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		ctx.Editor.LogMessage("git-ai error: " + err.Error() + " output: " + string(out))
+	}
+
+	// 1. Try reading /tmp/commit-edit.txt written by git-ai --tool
+	data, err := os.ReadFile("/tmp/commit-edit.txt")
+	if err == nil && len(strings.TrimSpace(string(data))) > 0 {
+		return strings.TrimSpace(string(data))
+	}
+
+	// 2. Fallback to command stdout if any
+	outStr := strings.TrimSpace(string(out))
+	if len(outStr) > 0 && !strings.Contains(outStr, "error") {
+		return outStr
+	}
+
+	return ""
+}
+
 // GitStatusHighlighter provides syntax coloring for the buffer-based git status panel.
 type GitStatusHighlighter struct {
 	Buf     *wig.Buffer
@@ -739,7 +780,7 @@ func populateGitStatusBuffer(buf *wig.Buffer) (map[int]gitStatusLine, int) {
 	lines := make([]string, 0, len(items)+2)
 
 	// Top shortcuts guide bar
-	lines = append(lines, "  [Enter] Open/Stash  [s] Stage  [d] Diff  [c] Commit  [p] Push  [z] Stash  [r] Refresh  [Esc] Close")
+	lines = append(lines, "  [Enter] Open/Stash  [s] Stage  [d] Diff  [c] Commit  [a] AI Commit  [p] Push  [z] Stash  [r] Refresh  [Esc] Close")
 	lineMap[0] = gitStatusLine{kind: "shortcut"}
 	lines = append(lines, "")
 	lineMap[1] = gitStatusLine{kind: "none"}
@@ -1165,7 +1206,14 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 				refresh(ctx, "")
 				ctx.Editor.EchoMessage("Git status refreshed")
 			},
+			"a": func(ctx wig.Context) {
+				GitStageAll()
+				refresh(ctx, "")
+				GitShowCommitBuffer(ctx, true)
+			},
 			"c": func(ctx wig.Context) {
+				GitStageAll()
+				refresh(ctx, "")
 				GitShowCommitBuffer(ctx)
 			},
 			"q": func(ctx wig.Context) {
@@ -1201,15 +1249,40 @@ func exitModeOrClose(ctx wig.Context) {
 	wig.CmdKillBuffer(ctx)
 }
 
-func GitShowCommitBuffer(ctx wig.Context) {
+func GitShowCommitBuffer(ctx wig.Context, useAI ...bool) {
+	withAI := GitAiCommit
+	if len(useAI) > 0 {
+		withAI = useAI[0]
+	}
+
+	aiMsg := ""
+	if withAI {
+		ctx.Editor.EchoMessage("Generating AI commit message with git-ai...")
+		ctx.Editor.Redraw()
+		aiMsg = generateGitAiCommitMessage(ctx)
+		if aiMsg != "" {
+			ctx.Editor.EchoMessage("AI commit message generated")
+		} else {
+			ctx.Editor.EchoMessage("git-ai did not return a message; please enter manually")
+		}
+	}
+
 	contents := gitRun("status", "-v")
 	diffBufName := "[git: edit commit message]"
 	dBuf := ctx.Editor.BufferFindByFilePath(diffBufName, true)
 	dBuf.ResetLines()
 
+	if aiMsg != "" {
+		for _, l := range strings.Split(aiMsg, "\n") {
+			dBuf.Append(l)
+		}
+	} else {
+		dBuf.Append("")
+		dBuf.Append("")
+	}
+
 	dBuf.Append("")
-	dBuf.Append("")
-	dBuf.Append("# Please enter your commit message and press ctrl+c for commit or Esc for exit.")
+	dBuf.Append("# Please enter your commit message and press ctrl+c to commit, 'a' to regenerate AI msg, or Esc to exit.")
 	dBuf.Append("")
 	for _, l := range strings.Split(contents, "\n") {
 		dBuf.Append(fmt.Sprintf("# %s", l))
@@ -1218,12 +1291,51 @@ func GitShowCommitBuffer(ctx wig.Context) {
 
 	dBuf.KeyHandler = wig.DefaultKeyHandler(wig.ModeKeyMap{
 		wig.MODE_NORMAL: wig.KeyMap{
-			"Esc":    exitModeOrClose,
-			"ctrl+c": gitCommitFinish,
+			"Esc": exitModeOrClose,
+			"q":   exitModeOrClose,
+			"ctrl+c": func(c wig.Context) {
+				c.Editor.LogMessage("commit buf (normal): ctrl+c key handler fired")
+				gitCommitFinish(c)
+			},
+			"ctrl+s": func(c wig.Context) {
+				c.Editor.LogMessage("commit buf (normal): ctrl+s key handler fired")
+				gitCommitFinish(c)
+			},
+			"a": func(c wig.Context) {
+				c.Editor.EchoMessage("Regenerating AI commit message...")
+				c.Editor.Redraw()
+				msg := generateGitAiCommitMessage(c)
+				if msg != "" {
+					dBuf.ResetLines()
+					for _, l := range strings.Split(msg, "\n") {
+						dBuf.Append(l)
+					}
+					dBuf.Append("")
+					dBuf.Append("# Please enter your commit message and press ctrl+c to commit, 'a' to regenerate AI msg, or Esc to exit.")
+					dBuf.Append("")
+					for _, l := range strings.Split(contents, "\n") {
+						dBuf.Append(fmt.Sprintf("# %s", l))
+					}
+					c.Editor.EchoMessage("AI commit message refreshed")
+					c.Buf = dBuf
+					wig.CmdEnterInsertMode(c)
+					c.Editor.ActiveWindow().VisitBuffer(c, wig.Cursor{Line: 0, Char: 0})
+					c.Editor.Redraw()
+				} else {
+					c.Editor.EchoMessage("git-ai did not return a message")
+				}
+			},
 		},
 		wig.MODE_INSERT: wig.KeyMap{
-			"Esc":    exitModeOrClose,
-			"ctrl+c": gitCommitFinish,
+			"Esc": exitModeOrClose,
+			"ctrl+c": func(c wig.Context) {
+				c.Editor.LogMessage("commit buf (insert): ctrl+c key handler fired")
+				gitCommitFinish(c)
+			},
+			"ctrl+s": func(c wig.Context) {
+				c.Editor.LogMessage("commit buf (insert): ctrl+s key handler fired")
+				gitCommitFinish(c)
+			},
 		},
 	})
 
@@ -1233,17 +1345,47 @@ func GitShowCommitBuffer(ctx wig.Context) {
 }
 
 func gitCommitFinish(ctx wig.Context) {
-	ctx.Buf.FilePath = "/tmp/commit_msg.txt"
-	ctx.Buf.Save()
-	out := gitRun("commit", "-F", "/tmp/commit_msg.txt", "--cleanup=strip")
+	wig.EditorInst.LogMessage("gitCommitFinish: invoked")
+	wig.EditorInst.EchoMessage("[debug] gitCommitFinish called")
+	cBuf := ctx.Buf
+	if cBuf == nil || cBuf.FilePath != "[git: edit commit message]" {
+		cBuf = ctx.Editor.BufferFindByFilePath("[git: edit commit message]", false)
+	}
+	if cBuf == nil {
+		ctx.Editor.EchoMessage("No commit buffer found")
+		return
+	}
+
+	cBuf.FilePath = "/tmp/commit_msg.txt"
+	if err := cBuf.Save(); err != nil {
+		ctx.Editor.EchoMessage("Failed to save commit message: " + err.Error())
+		return
+	}
+
+	rootDir := ctx.Editor.Projects.GetRoot()
+	cmd := exec.Command("git", "commit", "-F", "/tmp/commit_msg.txt", "--cleanup=strip")
+	if rootDir != "" {
+		cmd.Dir = rootDir
+	}
+	out, err := cmd.CombinedOutput()
+	outStr := strings.TrimSpace(string(out))
+
+	if err != nil {
+		if outStr == "" {
+			outStr = err.Error()
+		}
+		outStr = strings.ReplaceAll(outStr, "\n", " ")
+		ctx.Editor.EchoMessage("Commit failed: " + outStr)
+		return
+	}
+
 	wig.CmdKillBuffer(ctx)
 
 	gitBuf := ctx.Editor.BufferFindByFilePath("[git]", false)
-	if gitBuf == nil {
-		return
+	if gitBuf != nil {
+		populateGitStatusBuffer(gitBuf)
 	}
-	populateGitStatusBuffer(gitBuf)
-	msg := FormatCommitSummary(out)
+	msg := FormatCommitSummary(outStr)
 	if msg == "" {
 		msg = "commit done"
 	}
@@ -1265,6 +1407,12 @@ func GitStageItem(item wig.GitViewItem) {
 // GitStashUnstaged stashes unstaged changes, keeping staged changes and untracked files.
 func GitStashUnstaged() {
 	gitRun("stash", "push", "--keep-index", "-m", "Stashed unstaged changes")
+}
+
+// GitStageAll stages all unstaged changes for already-tracked files (modified/deleted),
+// equivalent to `git add -u`. Untracked files are left alone.
+func GitStageAll() {
+	gitRun("add", "-u")
 }
 
 // GitStashAction drops or pops a stash.

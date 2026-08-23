@@ -220,6 +220,7 @@ func collectHealthSections() []healthSection {
 			checkTool("git", "Git version control (project root, diffs, git gutter, hunks)", true, "--version"),
 			checkPath("  └ tree-sitter query (diff)", filepath.Join(queriesDir, "diff", "highlights.scm"), false),
 			checkPath("  └ tree-sitter query (git)", filepath.Join(queriesDir, "git", "highlights.scm"), false),
+			checkTool("git-ai", "AI commit generator (git-ai --tool)", false, "--help"),
 			checkTool("rg", "Ripgrep (project search & file finder)", true, "--version"),
 			checkTool("make", "Make build tool (make run, make test)", false, "--version"),
 		},
