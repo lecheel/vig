@@ -558,16 +558,36 @@ func CmdFormatBufferAndSave(ctx wig.Context) {
 	// Temporarily disable FormatOnSave to avoid double formatting inside CmdSaveFile
 	origFormatOnSave := ctx.Editor.Config.FormatOnSave
 	ctx.Editor.Config.FormatOnSave = false
+	// This first save ensures the formatter has the latest content from the buffer.
 	wig.CmdSaveFile(ctx)
 	ctx.Editor.Config.FormatOnSave = origFormatOnSave
 
-	CmdFormatBuffer(ctx) // Writes formatted content to disk + reloads buffer transactionally
-	wig.CmdSaveFile(ctx) // Marks dirty=false and sets SavedAtPosition
+	CmdFormatBuffer(ctx) // This formats the content and writes it to disk, also reloads buffer transactionally.
+	// After formatting and reloading, we call the save function again to ensure
+	// the buffer's dirty state is correctly reset and SavedAtPosition is updated,
+	// and to provide feedback for the 'save' part of 'format and save'.
+	CmdSaveFileWithFeedback(ctx)
 
 	ctx.Editor.Lsp.DidClose(ctx.Buf)
 	ctx.Editor.Lsp.DidOpen(ctx.Buf)
 	if ctx.Buf.Highlighter != nil {
 		ctx.Buf.Highlighter.Build()
+	}
+}
+
+// CmdSaveFileWithFeedback calls wig.CmdSaveFile and displays a "Saved" message.
+// This function assumes that wig.CmdSaveFile (defined in the wig package)
+// handles the core logic of writing the buffer to disk and updating its dirty state.
+func CmdSaveFileWithFeedback(ctx wig.Context) {
+	// Call the original save command provided by the wig package.
+	// This function (wig.CmdSaveFile) is assumed to exist and take wig.Context.
+	wig.CmdSaveFile(ctx)
+
+	// Provide enhanced feedback to the user via the editor's echo message.
+	if ctx.Buf != nil && ctx.Buf.FilePath != "" && !strings.HasPrefix(ctx.Buf.FilePath, "[") {
+		ctx.Editor.EchoMessage(fmt.Sprintf("Saved \"%s\"", ctx.Buf.GetName()))
+	} else {
+		ctx.Editor.EchoMessage("Saved")
 	}
 }
 

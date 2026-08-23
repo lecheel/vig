@@ -42,7 +42,7 @@ func StatuslineRender(
 
 	leftSide := fmt.Sprintf("%s %s %s ", buf.Mode().String(), buf.GetName(), macroStatus)
 
-	if win.Buffer() == e.ActiveWindow().Buffer() && len(e.Message) > 0 {
+	if (win == e.ActiveWindow() || win.Buffer() == e.ActiveWindow().Buffer()) && len(e.Message) > 0 {
 		leftSide = e.Message
 	}
 

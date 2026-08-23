@@ -22,7 +22,7 @@ func init() {
 	wig.AllCommands["CmdBufferLast"] = wig.CmdDefinition{Desc: "Last buffer", Fn: wig.CmdBufferLast}
 	wig.AllCommands["CmdWindowNext"] = wig.CmdDefinition{Desc: "Next window", Fn: wig.CmdWindowNext}
 	wig.AllCommands["CmdKillBuffer"] = wig.CmdDefinition{Desc: "Kill buffer", Fn: wig.CmdKillBuffer}
-	wig.AllCommands["CmdSaveFile"] = wig.CmdDefinition{Desc: "Save file", Fn: wig.CmdSaveFile}
+	wig.AllCommands["CmdSaveFile"] = wig.CmdDefinition{Desc: "Save file", Fn: CmdSaveFileWithFeedback}
 	wig.AllCommands["CmdGitHunkRevert"] = wig.CmdDefinition{Desc: "Revert git hunk", Fn: CmdGitHunkRevert}
 	wig.AllCommands["CmdSelectRegister"] = wig.CmdDefinition{Desc: "Select register", Fn: wig.CmdSelectRegister}
 	wig.AllCommands["CmdInsertRegister"] = wig.CmdDefinition{Desc: "Insert register", Fn: wig.CmdInsertRegister}
@@ -46,9 +46,9 @@ func init() {
 	// Command-line basics
 	wig.AllCommands["q"] = wig.CmdDefinition{Desc: "Quit", Fn: CmdExit}
 	wig.AllCommands["q!"] = wig.CmdDefinition{Desc: "Quit without saving", Fn: CmdForceExit}
-	wig.AllCommands["w"] = wig.CmdDefinition{Desc: "Save", Fn: wig.CmdSaveFile}
+	wig.AllCommands["w"] = wig.CmdDefinition{Desc: "Save", Fn: CmdSaveFileWithFeedback} // Enhanced feedback for :w
 	wig.AllCommands["wq"] = wig.CmdDefinition{Desc: "Save and quit", Fn: func(ctx wig.Context) {
-		wig.CmdSaveFile(ctx)
+		CmdSaveFileWithFeedback(ctx) // Enhanced feedback for :wq
 		CmdExit(ctx)
 	}}
 	wig.AllCommands["bd"] = wig.CmdDefinition{Desc: "Delete buffer", Fn: wig.CmdKillBuffer}
