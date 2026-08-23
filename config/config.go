@@ -239,6 +239,7 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 			"x":      wig.CmdDeleteCharForward,
 			"X":      wig.CmdDeleteCharBackward,
 			"Delete": wig.CmdDeleteCharForward,
+			"Insert": commands.CmdToggleBool,
 			"^":      wig.CmdCursorFirstNonBlank,
 			"$":      wig.CmdGotoLineEnd,
 			"0":      wig.CmdCursorBeginningOfTheLine,

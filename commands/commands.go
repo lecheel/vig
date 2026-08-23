@@ -575,6 +575,120 @@ func CmdFormatBufferAndSave(ctx wig.Context) {
 	}
 }
 
+// CmdToggleBool toggles boolean and binary values under the cursor (true/false, True/False, TRUE/FALSE, etc.)
+func CmdToggleBool(ctx wig.Context) {
+	if ctx.Buf == nil {
+		return
+	}
+
+	cur := wig.ContextCursorGet(ctx)
+	if cur == nil {
+		return
+	}
+
+	line := wig.CursorLine(ctx.Buf, cur)
+	if line == nil || len(line.Value) == 0 {
+		return
+	}
+
+	chars := line.Value
+	idx := cur.Char
+	if idx >= len(chars) {
+		idx = len(chars) - 1
+	}
+
+	isWordChar := func(r rune) bool {
+		return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
+	}
+
+	if !isWordChar(chars[idx]) {
+		if idx > 0 && isWordChar(chars[idx-1]) {
+			idx--
+		} else {
+			return
+		}
+	}
+
+	start := idx
+	for start > 0 && isWordChar(chars[start-1]) {
+		start--
+	}
+
+	end := idx
+	for end < len(chars) && isWordChar(chars[end]) {
+		end++
+	}
+
+	if start >= end {
+		return
+	}
+
+	word := string(chars[start:end])
+	var newWord string
+	switch word {
+	case "true":
+		newWord = "false"
+	case "false":
+		newWord = "true"
+	case "True":
+		newWord = "False"
+	case "False":
+		newWord = "True"
+	case "TRUE":
+		newWord = "FALSE"
+	case "FALSE":
+		newWord = "TRUE"
+	case "yes":
+		newWord = "no"
+	case "no":
+		newWord = "yes"
+	case "Yes":
+		newWord = "No"
+	case "No":
+		newWord = "Yes"
+	case "YES":
+		newWord = "NO"
+	case "NO":
+		newWord = "YES"
+	case "on":
+		newWord = "off"
+	case "off":
+		newWord = "on"
+	case "On":
+		newWord = "Off"
+	case "Off":
+		newWord = "On"
+	case "ON":
+		newWord = "OFF"
+	case "OFF":
+		newWord = "ON"
+	case "1":
+		newWord = "0"
+	case "0":
+		newWord = "1"
+	default:
+		return
+	}
+
+	if ctx.Buf.TxStart() {
+		defer ctx.Buf.TxEnd()
+	}
+
+	wig.TextDelete(ctx.Buf, &wig.Selection{
+		Start: wig.Cursor{Line: cur.Line, Char: start},
+		End:   wig.Cursor{Line: cur.Line, Char: end},
+	})
+	lineNode := wig.CursorLineByNum(ctx.Buf, cur.Line)
+	if lineNode != nil {
+		wig.TextInsert(ctx.Buf, lineNode, start, newWord)
+	}
+
+	if cur.Char > start+len(newWord) {
+		cur.Char = start + len(newWord)
+	}
+	ctx.Editor.Redraw()
+}
+
 // CmdSaveFileWithFeedback saves the current buffer to disk and displays status bar & notification feedback.
 // Handles both :w and :w <filename> for unnamed [No Name] buffers.
 func CmdSaveFileWithFeedback(ctx wig.Context) {
