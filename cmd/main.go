@@ -21,6 +21,7 @@ import (
 
 func main() {
 	openGitFiles := false
+	openGitStatus := false
 	var fileArgs []string
 
 	for _, arg := range os.Args[1:] {
@@ -28,6 +29,7 @@ func main() {
 			fmt.Println("Usage: wig [options] [file ...]")
 			fmt.Println("\nOptions:")
 			fmt.Println("  --gf         Open git changed files picker on startup.")
+			fmt.Println("  --gs         Open git status panel on startup.")
 			fmt.Println("  --edit       Open configuration file for editing.")
 			fmt.Println("  --health     Check health of dependencies.")
 			fmt.Println("  --help, -h   Show this help message.")
@@ -35,6 +37,7 @@ func main() {
 			fmt.Println("  wig main.go          Open main.go")
 			fmt.Println("  wig newfile.txt      Create or open newfile.txt")
 			fmt.Println("  wig --gf             Open git changed files picker")
+			fmt.Println("  wig --gs             Open git status panel")
 			fmt.Println("  wig --edit           Edit config file")
 			return
 		}
@@ -44,6 +47,10 @@ func main() {
 		}
 		if arg == "--gf" || arg == "-gf" {
 			openGitFiles = true
+			continue
+		}
+		if arg == "--gs" || arg == "-gs" {
+			openGitStatus = true
 			continue
 		}
 		if arg == "--edit" || arg == "edit" {
@@ -154,7 +161,9 @@ func main() {
 		wig.CmdNewBuffer(editor.NewContext())
 	}
 
-	if openGitFiles {
+	if openGitStatus {
+		commands.CmdGitView(editor.NewContext())
+	} else if openGitFiles {
 		commands.CmdGitFilesPicker(editor.NewContext())
 	}
 
