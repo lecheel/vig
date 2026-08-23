@@ -13,7 +13,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-var keyTokenizer = regexp.MustCompile(`(<[^>]+>|ctrl\+[a-zA-Z0-9]+|alt\+[a-zA-Z0-9]+|shift\+[a-zA-Z0-9]+|meta\+[a-zA-Z0-9]+|.)`)
+var keyTokenizer = regexp.MustCompile(`(<[^>]+>|(?i:ctrl)\+\S+|(?i:alt)\+\S+|(?i:shift)\+\S+|(?i:meta)\+\S+|[A-Z][a-zA-Z0-9]*|.)`)
 
 func tokenizeKey(k string) []string {
 	return keyTokenizer.FindAllString(k, -1)
@@ -198,18 +198,47 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		if t == "<space>" || token == " " {
 			return "Space"
 		}
+
+		// Handle <c-x>, <a-x>, etc.
 		if strings.HasPrefix(t, "<c-") && strings.HasSuffix(t, ">") {
 			return "ctrl+" + strings.ToLower(token[3:len(token)-1])
+		}
+		if strings.HasPrefix(t, "<ctrl-") && strings.HasSuffix(t, ">") {
+			return "ctrl+" + strings.ToLower(token[6:len(token)-1])
 		}
 		if strings.HasPrefix(t, "<a-") && strings.HasSuffix(t, ">") {
 			return "alt+" + strings.ToLower(token[3:len(token)-1])
 		}
+		if strings.HasPrefix(t, "<alt-") && strings.HasSuffix(t, ">") {
+			return "alt+" + strings.ToLower(token[5:len(token)-1])
+		}
 		if strings.HasPrefix(t, "<m-") && strings.HasSuffix(t, ">") {
 			return "meta+" + strings.ToLower(token[3:len(token)-1])
+		}
+		if strings.HasPrefix(t, "<meta-") && strings.HasSuffix(t, ">") {
+			return "meta+" + strings.ToLower(token[6:len(token)-1])
 		}
 		if strings.HasPrefix(t, "<s-") && strings.HasSuffix(t, ">") {
 			return "shift+" + strings.ToLower(token[3:len(token)-1])
 		}
+		if strings.HasPrefix(t, "<shift-") && strings.HasSuffix(t, ">") {
+			return "shift+" + strings.ToLower(token[7:len(token)-1])
+		}
+
+		// Handle ctrl+x, alt+x, etc. (case-insensitive matching)
+		if strings.HasPrefix(t, "ctrl+") {
+			return t
+		}
+		if strings.HasPrefix(t, "alt+") {
+			return t
+		}
+		if strings.HasPrefix(t, "shift+") {
+			return t
+		}
+		if strings.HasPrefix(t, "meta+") {
+			return t
+		}
+
 		return token
 	}
 
