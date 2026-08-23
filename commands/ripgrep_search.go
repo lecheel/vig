@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/firstrow/wig"
+	"github.com/firstrow/wig/rgcollect"
 	"github.com/firstrow/wig/ui"
 )
 
@@ -190,6 +191,7 @@ func rgDoSearch(ctx wig.Context, pat string) {
 			ctx.Editor.EchoMessage("no search results to export")
 			return
 		}
+		_ = rgcollect.SaveResults(locs)
 		OpenLocationsInQuickfix(c, locs)
 	})
 }

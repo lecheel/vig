@@ -107,26 +107,37 @@ func populateQuickfixBuffer(buf *wig.Buffer, entries []QuickfixEntry) map[int]in
 	return lineMap
 }
 
-// CmdQuickfixOpen collects LSP diagnostics from the current buffer and
-// displays them in a [quickfix] buffer or popup list depending on configuration.
-// Results are persisted to ~/.config/wig/quickfix.json so :copen can reopen the last set.
+// CmdQuickfixOpen opens the quickfix view (split window or popup) for the current
+// quickfix entries, or loads previously saved entries from ~/.config/wig/quickfix.json.
 // Navigate with :cn/:cp or Enter.
 func CmdQuickfixOpen(ctx wig.Context) {
-	diags := ctx.Editor.Lsp.AllDiagnostics(ctx.Buf)
-	if len(diags) == 0 {
-		// Try loading saved results
-		entries := loadQuickfixResults()
+	entries := quickfixState.entries
+	if len(entries) == 0 {
+		entries = loadQuickfixResults()
 		if len(entries) == 0 {
-			ctx.Editor.EchoMessage("No diagnostics and no saved results")
+			ctx.Editor.EchoMessage("No quickfix entries (run :rg <query> or use Ctrl-r in search picker)")
 			return
 		}
 		quickfixState.entries = entries
-		openQuickfixView(ctx, entries)
-		ctx.Editor.EchoMessage("Loaded saved quickfix results")
+	}
+
+	openQuickfixView(ctx, entries)
+}
+
+// CmdLspDiagnosticsToQuickfix explicitly collects LSP diagnostics for the current buffer,
+// saves them to quickfix.json, and opens the quickfix view.
+func CmdLspDiagnosticsToQuickfix(ctx wig.Context) {
+	if ctx.Buf == nil {
+		ctx.Editor.EchoMessage("No active buffer")
 		return
 	}
 
-	// Sort by line, then char
+	diags := ctx.Editor.Lsp.AllDiagnostics(ctx.Buf)
+	if len(diags) == 0 {
+		ctx.Editor.EchoMessage("No LSP diagnostics for current buffer")
+		return
+	}
+
 	sort.Slice(diags, func(i, j int) bool {
 		if diags[i].Range.Start.Line != diags[j].Range.Start.Line {
 			return diags[i].Range.Start.Line < diags[j].Range.Start.Line
@@ -134,7 +145,6 @@ func CmdQuickfixOpen(ctx wig.Context) {
 		return diags[i].Range.Start.Character < diags[j].Range.Start.Character
 	})
 
-	// Convert to entries
 	entries := make([]QuickfixEntry, len(diags))
 	for i, d := range diags {
 		entries[i] = QuickfixEntry{
@@ -145,21 +155,20 @@ func CmdQuickfixOpen(ctx wig.Context) {
 		}
 	}
 
-	// Persist
 	if err := saveQuickfixResults(entries); err != nil {
 		ctx.Editor.LogMessage("failed to save quickfix: " + err.Error())
 	}
 
 	quickfixState.entries = entries
 	openQuickfixView(ctx, entries)
+	ctx.Editor.EchoMessage(fmt.Sprintf("%d diagnostics loaded into quickfix", len(entries)))
 }
 
-// OpenLocationsInQuickfix converts search locations into Quickfix entries,
-// saves them, sets up the visit source for :cn/:cp, and opens via popup or split panel.
-func OpenLocationsInQuickfix(ctx wig.Context, locations []wig.Location) {
+// SetQuickfixLocations converts search locations into Quickfix entries,
+// saves them to ~/.config/wig/quickfix.json, and syncs in-memory state for :copen / :cn / :cp.
+func SetQuickfixLocations(locations []wig.Location) []QuickfixEntry {
 	if len(locations) == 0 {
-		ctx.Editor.EchoMessage("No locations to display")
-		return
+		return nil
 	}
 
 	entries := make([]QuickfixEntry, len(locations))
@@ -177,11 +186,26 @@ func OpenLocationsInQuickfix(ctx wig.Context, locations []wig.Location) {
 	}
 
 	if err := saveQuickfixResults(entries); err != nil {
-		ctx.Editor.LogMessage("failed to save quickfix: " + err.Error())
+		if wig.EditorInst != nil {
+			wig.EditorInst.LogMessage("failed to save quickfix: " + err.Error())
+		}
 	}
 
 	quickfixState.entries = entries
+	return entries
+}
+
+// OpenLocationsInQuickfix converts search locations into Quickfix entries,
+// saves them, sets up the visit source for :cn/:cp, and opens via popup or split panel.
+func OpenLocationsInQuickfix(ctx wig.Context, locations []wig.Location) {
+	entries := SetQuickfixLocations(locations)
+	if len(entries) == 0 {
+		ctx.Editor.EchoMessage("No locations to display")
+		return
+	}
+
 	openQuickfixView(ctx, entries)
+	ctx.Editor.EchoMessage(fmt.Sprintf("%d matches loaded into quickfix (navigate with :cn / :cp)", len(entries)))
 }
 
 func openQuickfixView(ctx wig.Context, entries []QuickfixEntry) {
@@ -306,6 +330,17 @@ func visitQuickfixLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig
 		return false
 	}
 
+	if len(quickfixState.entries) == 0 {
+		entries := loadQuickfixResults()
+		if len(entries) == 0 {
+			ctx.Editor.EchoMessage("No quickfix entries")
+			return true
+		}
+		quickfixState.entries = entries
+		lineMap := populateQuickfixBuffer(sourceBuf, entries)
+		quickfixState.lineMap = lineMap
+	}
+
 	var sourceWin *wig.Window
 	for _, win := range ctx.Editor.Windows {
 		if win.Buffer() == sourceBuf {
@@ -364,7 +399,7 @@ func visitQuickfixLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig
 		Line: e.Line,
 		Char: e.Char,
 	})
-	ctx.Editor.EchoMessage(fmt.Sprintf("[%d/%d] %s", entryIdx+1, len(quickfixState.entries), e.Message))
+	ctx.Editor.EchoMessage(fmt.Sprintf("[%d/%d matches] %s", entryIdx+1, len(quickfixState.entries), e.Message))
 	wig.CmdCursorCenter(ctx)
 
 	return true

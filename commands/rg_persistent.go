@@ -75,6 +75,8 @@ func rgSearchLocations(ctx wig.Context, word string) []wig.Location {
 
 // CmdRg performs a ripgrep search for the query provided in ctx.Char (e.g. `:rg <pattern>`)
 // or falls back to the word/selection under the cursor if no pattern is specified.
+// Saves results to rg_search.json (for F11 grouped view), syncs to quickfix.json (for :copen / :cn / :cp),
+// and opens the [rg] grouped buffer.
 func CmdRg(ctx wig.Context) {
 	query := strings.TrimSpace(ctx.Char)
 	if query == "" {
@@ -92,16 +94,20 @@ func CmdRg(ctx wig.Context) {
 		return
 	}
 
+	// 1. Save to rg_search.json for F11 grouped view
 	if err := rgcollect.SaveResults(locations); err != nil {
-		ctx.Editor.EchoMessage("failed to save results: " + err.Error())
+		ctx.Editor.LogMessage("failed to save rg results: " + err.Error())
 	}
 
+	// 2. Parse & sync to quickfix.json for :copen, :cn, :cp
+	SetQuickfixLocations(locations)
+
+	// 3. Open grouped [rg] buffer view
 	rgcollect.InitGrouped(ctx, query, locations)
 }
 
 // CmdRgUnderCursor extracts the word under the cursor (or selection),
-// runs a ripgrep search, saves results to JSON, and opens the [rg]
-// grouped buffer full screen.
+// runs a ripgrep search, saves to rg_search.json & quickfix.json, and opens the [rg] grouped buffer.
 func CmdRgUnderCursor(ctx wig.Context) {
 	word, ok := wig.WordOrSelectionUnderCursor(ctx)
 	if !ok {
@@ -113,8 +119,8 @@ func CmdRgUnderCursor(ctx wig.Context) {
 	CmdRg(ctx)
 }
 
-// CmdOpenSavedSearch reads the saved search results from JSON and opens
-// the [rg] grouped buffer full screen.
+// CmdOpenSavedSearch (F11) reads the saved search results from rg_search.json
+// and opens the [rg] grouped buffer full screen, syncing quickfix state.
 func CmdOpenSavedSearch(ctx wig.Context) {
 	locations := rgcollect.LoadResults()
 	if len(locations) == 0 {
@@ -122,5 +128,6 @@ func CmdOpenSavedSearch(ctx wig.Context) {
 		return
 	}
 
+	SetQuickfixLocations(locations)
 	rgcollect.InitGrouped(ctx, "saved", locations)
 }

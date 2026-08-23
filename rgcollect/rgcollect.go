@@ -517,6 +517,7 @@ func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.
 		Line: max(result.Line-1, 0),
 		Char: result.Char,
 	})
+	ctx.Editor.EchoMessage(fmt.Sprintf("[%d/%d matches] %s", entry.resultIdx+1, len(rgState.results), strings.TrimSpace(result.Text)))
 	wig.CmdCursorCenter(ctx)
 
 	return true

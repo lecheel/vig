@@ -88,7 +88,6 @@ func init() {
 	wig.AllCommands["CmdGotoDefinition"] = wig.CmdDefinition{Desc: "Go to definition", Fn: CmdGotoDefinition}
 	wig.AllCommands["CmdLspStatus"] = wig.CmdDefinition{Desc: "Show LSP connection status", Fn: CmdLspStatus}
 	wig.AllCommands["lspstatus"] = wig.CmdDefinition{Desc: "Show LSP connection status", Fn: CmdLspStatus}
-	wig.AllCommands["CmdLspStatus"] = wig.CmdDefinition{Desc: "Show LSP connection status", Fn: CmdLspStatus}
 	wig.AllCommands["CmdGotoDefinitionOtherWindow"] = wig.CmdDefinition{Desc: "Go to definition in other window", Fn: CmdGotoDefinitionOtherWindow}
 	wig.AllCommands["CmdViewDefinitionOtherWindow"] = wig.CmdDefinition{Desc: "View definition in other window", Fn: CmdViewDefinitionOtherWindow}
 	wig.AllCommands["CmdLspShowSignature"] = wig.CmdDefinition{Desc: "Show LSP signature", Fn: CmdLspShowSignature}
@@ -130,6 +129,9 @@ func init() {
 	wig.AllCommands["CmdOpenSavedSearch"] = wig.CmdDefinition{Desc: "Reopen rg search", Fn: CmdOpenSavedSearch}
 	wig.AllCommands["copen"] = wig.CmdDefinition{Desc: "Open quickfix list", Fn: CmdQuickfixOpen}
 	wig.AllCommands["CmdQuickfixOpen"] = wig.CmdDefinition{Desc: "Open quickfix list", Fn: CmdQuickfixOpen}
+	wig.AllCommands["CmdLspDiagnosticsToQuickfix"] = wig.CmdDefinition{Desc: "Diagnostics to quickfix", Fn: CmdLspDiagnosticsToQuickfix}
+	wig.AllCommands["diagnostics"] = wig.CmdDefinition{Desc: "Diagnostics to quickfix", Fn: CmdLspDiagnosticsToQuickfix}
+	wig.AllCommands["diags"] = wig.CmdDefinition{Desc: "Diagnostics to quickfix", Fn: CmdLspDiagnosticsToQuickfix}
 	wig.AllCommands["cclose"] = wig.CmdDefinition{Desc: "Close quickfix window", Fn: func(ctx wig.Context) {
 		if len(ctx.Editor.Windows) > 1 {
 			wig.CmdWindowClose(ctx)
