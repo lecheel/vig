@@ -35,6 +35,9 @@ func TextInsert(buf *Buffer, line *Element[Line], pos int, text string) {
 
 	prefix := line.Value[:pos]
 	suffix := line.Value[pos:]
+	if len(suffix) == 0 || suffix[len(suffix)-1] != '\n' {
+		suffix = append(suffix, '\n')
+	}
 
 	lines := strings.Split(text, "\n")
 	numLines := len(lines)

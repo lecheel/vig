@@ -154,24 +154,23 @@ func ReloadBufferContent(ctx Context, content string) {
 		defer buf.TxEnd()
 	}
 
-	// Delete everything: from (0,0) to the end of the last line (incl. its '\n').
-	if buf.Lines.Len > 0 {
-		lastLine := buf.Lines.Last()
-		TextDelete(buf, &Selection{
-			Start: Cursor{Line: 0, Char: 0},
-			End:   Cursor{Line: buf.Lines.Len - 1, Char: len(lastLine.Value)},
-		})
+	// Normalize CRLF and CR to LF
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
+
+	lines := strings.Split(content, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
 	}
 
-	// Insert new content. Newline handling: TextInsert splits on '\n'.
-	firstLine := buf.Lines.First()
-	if firstLine == nil {
-		// Buffer is empty — seed with an empty line first.
+	buf.ResetLines()
+
+	if len(lines) == 0 {
 		buf.Lines.PushBack([]rune("\n"))
-		firstLine = buf.Lines.First()
-	}
-	if content != "" {
-		TextInsert(buf, firstLine, 0, content)
+	} else {
+		for _, l := range lines {
+			buf.Lines.PushBack([]rune(l + "\n"))
+		}
 	}
 }
 
@@ -226,22 +225,11 @@ func (b *Buffer) Save() error {
 	defer f.Close()
 	line := b.Lines.First()
 	for line != nil {
-		// temp check
-		{
-			count := 0
-			for _, c := range line.Value {
-				if c == '\n' {
-					count++
-				}
-			}
-			if count != 1 {
-				EditorInst.LogMessage("wrong number of new lines")
-				buf := EditorInst.BufferFindByFilePath("[Messages]", true)
-				EditorInst.EnsureBufferIsVisible(buf)
-			}
+		str := string(line.Value)
+		if !strings.HasSuffix(str, "\n") {
+			str += "\n"
 		}
-
-		_, err := f.WriteString(string(line.Value))
+		_, err := f.WriteString(str)
 		if err != nil {
 			return err
 		}
