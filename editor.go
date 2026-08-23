@@ -10,19 +10,20 @@ import (
 )
 
 type EditorConfig struct {
-	Leader              string
-	CommentStyle        string // "standard" (supports motions: gcc, gcj, gcip, gc$) or "simple" (direct gc toggle)
-	Theme               string
-	ShowLineNumbers     bool
-	RelativeLineNumbers bool
-	CurrentLineAbsolute bool // If true, shows absolute line number on current line when relative is on
-	FormatOnSave        bool
-	GitStatusView       string // "full" or "split"
-	GitBlameView        string // "full" or "split"
-	QuickfixView        string // "split" (default) or "popup"
-	IndentGuides        bool
-	LspEnabled          bool   // If false, LSP servers are never started and all LSP features are no-ops
-	WhichKeyFormat      string // "words", "camel", or "cmd"
+	Leader              string `toml:"leader"`
+	CommentStyle        string `toml:"comment_style"` // "standard" (supports motions: gcc, gcj, gcip, gc$) or "simple" (direct gc toggle)
+	Theme               string `toml:"theme"`
+	ShowLineNumbers     bool   `toml:"show_line_numbers"`
+	RelativeLineNumbers bool   `toml:"relative_line_numbers"`
+	CurrentLineAbsolute bool   `toml:"current_line_absolute"` // If true, shows absolute line number on current line when relative is on
+	FormatOnSave        bool   `toml:"format_on_save"`
+	GitStatusView       string `toml:"git_status_view"` // "full" or "split"
+	GitBlameView        string `toml:"git_blame_view"`  // "full" or "split"
+	QuickfixView        string `toml:"quickfix_view"`   // "split" (default) or "popup"
+	IndentGuides        bool   `toml:"indent_guides"`
+	LspEnabled          bool   `toml:"lsp_enabled"`           // If false, LSP servers are never started and all LSP features are no-ops
+	WhichKeyFormat      string `toml:"which_key_format"`      // "words", "camel", or "cmd"
+	SameStatuslineColor bool   `toml:"same_statusline_color"` // If true, keeps statusline color consistent across modes (disables distinct insert color)
 }
 
 type View interface {

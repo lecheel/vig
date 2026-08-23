@@ -25,7 +25,7 @@ func StatuslineRender(
 	if win == e.ActiveWindow() {
 		st = wig.Color("ui.statusline")
 
-		if buf.Mode() == wig.MODE_INSERT {
+		if !e.Config.SameStatuslineColor && buf.Mode() == wig.MODE_INSERT {
 			st = wig.Color("ui.statusline.insert")
 		}
 	}

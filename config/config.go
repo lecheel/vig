@@ -64,6 +64,7 @@ type EditorSettings struct {
 	IndentGuides        *bool   `toml:"indent_guides"`
 	LspEnabled          *bool   `toml:"lsp_enabled"`
 	WhichKeyFormat      *string `toml:"which_key_format"`
+	SameStatuslineColor *bool   `toml:"same_statusline_color"`
 	NotifyOnSave        *bool   `toml:"notify_on_save"`
 	GitAiCommit         *bool   `toml:"git_ai_commit"`
 	GitAiTool           *string `toml:"git_ai_tool"`
@@ -102,6 +103,7 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		IndentGuides:        false,
 		LspEnabled:          true,
 		WhichKeyFormat:      "words",
+		SameStatuslineColor: false,
 	}
 	userMap := wig.ModeKeyMap{
 		wig.MODE_NORMAL:       wig.KeyMap{},
@@ -170,6 +172,9 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	}
 	if cfg.Editor.WhichKeyFormat != nil {
 		editorCfg.WhichKeyFormat = *cfg.Editor.WhichKeyFormat
+	}
+	if cfg.Editor.SameStatuslineColor != nil {
+		editorCfg.SameStatuslineColor = *cfg.Editor.SameStatuslineColor
 	}
 	commands.NotifyOnSave = false
 	commands.GitAiCommit = false
