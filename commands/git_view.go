@@ -1291,16 +1291,9 @@ func GitShowCommitBuffer(ctx wig.Context, useAI ...bool) {
 
 	dBuf.KeyHandler = wig.DefaultKeyHandler(wig.ModeKeyMap{
 		wig.MODE_NORMAL: wig.KeyMap{
-			"Esc": exitModeOrClose,
-			"q":   exitModeOrClose,
-			"ctrl+c": func(c wig.Context) {
-				c.Editor.LogMessage("commit buf (normal): ctrl+c key handler fired")
-				gitCommitFinish(c)
-			},
-			"ctrl+s": func(c wig.Context) {
-				c.Editor.LogMessage("commit buf (normal): ctrl+s key handler fired")
-				gitCommitFinish(c)
-			},
+			"Esc":    exitModeOrClose,
+			"q":      exitModeOrClose,
+			"ctrl+c": gitCommitFinish,
 			"a": func(c wig.Context) {
 				c.Editor.EchoMessage("Regenerating AI commit message...")
 				c.Editor.Redraw()
@@ -1327,15 +1320,8 @@ func GitShowCommitBuffer(ctx wig.Context, useAI ...bool) {
 			},
 		},
 		wig.MODE_INSERT: wig.KeyMap{
-			"Esc": exitModeOrClose,
-			"ctrl+c": func(c wig.Context) {
-				c.Editor.LogMessage("commit buf (insert): ctrl+c key handler fired")
-				gitCommitFinish(c)
-			},
-			"ctrl+s": func(c wig.Context) {
-				c.Editor.LogMessage("commit buf (insert): ctrl+s key handler fired")
-				gitCommitFinish(c)
-			},
+			"Esc":    exitModeOrClose,
+			"ctrl+c": gitCommitFinish,
 		},
 	})
 
@@ -1345,8 +1331,6 @@ func GitShowCommitBuffer(ctx wig.Context, useAI ...bool) {
 }
 
 func gitCommitFinish(ctx wig.Context) {
-	wig.EditorInst.LogMessage("gitCommitFinish: invoked")
-	wig.EditorInst.EchoMessage("[debug] gitCommitFinish called")
 	cBuf := ctx.Buf
 	if cBuf == nil || cBuf.FilePath != "[git: edit commit message]" {
 		cBuf = ctx.Editor.BufferFindByFilePath("[git: edit commit message]", false)
