@@ -110,8 +110,7 @@ func (l *LspManager) DidOpen(buf *Buffer) {
 			// starts server and returns client conn
 			newClient, err := l.startAndInitializeServer(conf, buf)
 			if err != nil {
-				l.e.LogMessage("failed to start tcp server")
-				l.e.EchoMessage("failed to start tcp server")
+				l.e.EchoMessage("failed to start lsp server: " + err.Error())
 				return
 			}
 			l.rw.Lock()
@@ -348,7 +347,7 @@ func (l *LspManager) Definition(buf *Buffer, cursor Cursor) (filePath string, cu
 		var definitionResp2 protocol.Location
 		_, err2 := client.rpcConn.Call(ctx, protocol.MethodTextDocumentDefinition, definitionReq, &definitionResp2)
 		if err2 != nil {
-			l.e.EchoMessage(err2.Error())
+			l.e.EchoMessage("gd failed: " + err2.Error())
 		} else {
 			definitionResp = append(definitionResp, definitionResp2)
 		}
@@ -403,7 +402,6 @@ func (l *LspManager) Completion(buf *Buffer) (res CompletionItems) {
 	defer cancel()
 	_, err := client.rpcConn.Call(ctx, protocol.MethodTextDocumentCompletion, req, &res)
 	if err != nil {
-		l.e.LogMessage("lsp completion error:", err.Error())
 	}
 
 	return
@@ -467,9 +465,10 @@ func (l *LspManager) startAndInitializeServer(conf LanguageServerConfig, buf *Bu
 
 	go func() {
 		cmd.Wait()
-		l.e.LogMessage("lsp server exited")
 		// cleanup all connections
+		l.rw.Lock()
 		l.conns = make(map[string]*lspConn)
+		l.rw.Unlock()
 	}()
 
 	st := &pipeWrapper{
@@ -564,11 +563,13 @@ func (l *LspManager) startAndInitializeServer(conf LanguageServerConfig, buf *Bu
 	_, err = c.Call(context.Background(), protocol.MethodInitialize, r, &result)
 	if err != nil {
 		l.e.LogError(err)
+		return nil, err
 	}
 
 	err = c.Notify(context.Background(), protocol.MethodInitialized, protocol.InitializedParams{})
 	if err != nil {
 		l.e.LogError(err)
+		return nil, err
 	}
 
 	return &lspConn{

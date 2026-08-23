@@ -581,11 +581,15 @@ func CmdMatchPair(ctx Context) {
 
 func CmdJumpBack(ctx Context) {
 	ctx.Editor.ActiveWindow().Jumps.JumpBack()
+	// Update ctx.Buf to the newly active buffer so CmdCursorCenter
+	// centers the correct cursor!
+	ctx.Buf = ctx.Editor.ActiveBuffer()
 	CmdCursorCenter(ctx)
 }
 
 func CmdJumpForward(ctx Context) {
 	ctx.Editor.ActiveWindow().Jumps.JumpForward()
+	ctx.Buf = ctx.Editor.ActiveBuffer()
 	CmdCursorCenter(ctx)
 }
 
@@ -598,6 +602,7 @@ func CmdJumpToggle(ctx Context) {
 	} else {
 		j.JumpBack()
 	}
+	ctx.Buf = ctx.Editor.ActiveBuffer()
 	CmdCursorCenter(ctx)
 }
 

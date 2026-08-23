@@ -87,9 +87,12 @@ type Jumps struct {
 }
 
 func (j *Jumps) Push(b *Buffer, cur *Cursor) {
-	// track only line jumps
+	// Track jumps including character position, so that jumping to a
+	// definition on the same line (e.g. from column 7 to column 5) is
+	// recorded as a distinct jump and can be jumped back from.
 	if j.List.Last() != nil {
-		if j.List.Last().Value.FilePath == b.FilePath && j.List.Last().Value.Cursor.Line == cur.Line {
+		last := j.List.Last().Value
+		if last.FilePath == b.FilePath && last.Cursor.Line == cur.Line && last.Cursor.Char == cur.Char {
 			return
 		}
 	}

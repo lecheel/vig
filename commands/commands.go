@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+
 	"github.com/firstrow/wig"
 	"github.com/firstrow/wig/drivers/pipe"
 	"github.com/firstrow/wig/ui"
@@ -844,13 +845,18 @@ func CmdSearchLine(ctx wig.Context) {
 
 func CmdGotoDefinition(ctx wig.Context) {
 	cur := wig.ContextCursorGet(ctx)
+	ctx.Editor.EchoMessage(fmt.Sprintf("gd: calling LSP definition at %d:%d", cur.Line, cur.Char))
 	filePath, cursor := ctx.Editor.Lsp.Definition(ctx.Buf, *cur)
 	if filePath == "" {
+		ctx.Editor.EchoMessage("gd: LSP returned no definition (not started, no result, or error)")
 		return
 	}
 
+	ctx.Editor.EchoMessage(fmt.Sprintf("gd: jumping to %s:%d:%d", filePath, cursor.Line, cursor.Char))
+
 	nbuf, err := ctx.Editor.OpenFile(filePath)
 	if err != nil {
+		ctx.Editor.EchoMessage("gd: open file error: " + err.Error())
 		return
 	}
 
@@ -918,6 +924,48 @@ func CmdReloadBuffer(ctx wig.Context) {
 	}
 	ctx.Buf.Highlighter.Build()
 	ctx.Editor.Events.Broadcast(wig.EventBufferReloaded{Buf: ctx.Buf})
+}
+
+// CmdLspStatus shows current LSP connection state and diagnostics for the
+// active buffer's project root. Useful for debugging "gd not working".
+func CmdLspStatus(ctx wig.Context) {
+	buf := ctx.Buf
+	if buf == nil {
+		ctx.Editor.EchoMessage("no active buffer")
+		return
+	}
+	root, _ := ctx.Editor.Projects.FindRoot(buf)
+	ext := filepath.Ext(buf.FilePath)
+	conf, confFound := wig.LspConfigByFileName(buf.FilePath)
+	diags := ctx.Editor.Lsp.AllDiagnostics(buf)
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("File: %s\n", buf.FilePath))
+	sb.WriteString(fmt.Sprintf("Ext: %s\n", ext))
+	sb.WriteString(fmt.Sprintf("Root: %s\n", root))
+	sb.WriteString(fmt.Sprintf("LSP enabled (config): %v\n", ctx.Editor.Config.LspEnabled))
+	sb.WriteString(fmt.Sprintf("Language config found: %v", confFound))
+	if confFound {
+		sb.WriteString(fmt.Sprintf(" (cmd=%s args=%v)", conf.Command, conf.Args))
+	}
+	sb.WriteString("\n")
+	sb.WriteString(fmt.Sprintf("Diagnostics: %d\n", len(diags)))
+	for i, d := range diags {
+		if i >= 5 {
+			sb.WriteString(fmt.Sprintf("  ... +%d more\n", len(diags)-5))
+			break
+		}
+		msg := strings.ReplaceAll(d.Message, "\n", " ")
+		if len(msg) > 80 {
+			msg = msg[:77] + "..."
+		}
+		sb.WriteString(fmt.Sprintf("  L%d:C%d [%s] %s\n",
+			d.Range.Start.Line+1, d.Range.Start.Character+1, d.Severity, msg))
+	}
+	// Print to messages buffer AND echo the first line
+	ctx.Editor.LogMessage(sb.String())
+	ctx.Editor.EchoMessage(fmt.Sprintf("LSP: root=%s ext=%s confFound=%v enabled=%v diags=%d (see :messages for details)",
+		root, ext, confFound, ctx.Editor.Config.LspEnabled, len(diags)))
 }
 
 // CmdInfo sends a notification to the top-right notification area.
