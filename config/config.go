@@ -31,6 +31,7 @@ type EditorSettings struct {
 	IndentGuides        *bool   `toml:"indent_guides"`
 	LspEnabled          *bool   `toml:"lsp_enabled"`
 	WhichKeyFormat      *string `toml:"which_key_format"`
+	NotifyOnSave        *bool   `toml:"notify_on_save"`
 }
 
 type UserKeysConfig struct {
@@ -130,6 +131,10 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	}
 	if cfg.Editor.WhichKeyFormat != nil {
 		editorCfg.WhichKeyFormat = *cfg.Editor.WhichKeyFormat
+	}
+	commands.NotifyOnSave = false
+	if cfg.Editor.NotifyOnSave != nil {
+		commands.NotifyOnSave = *cfg.Editor.NotifyOnSave
 	}
 	resolve := func(name string) any {
 		if def, ok := wig.AllCommands[name]; ok {

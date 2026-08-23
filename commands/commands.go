@@ -689,6 +689,10 @@ func CmdToggleBool(ctx wig.Context) {
 	ctx.Editor.Redraw()
 }
 
+// NotifyOnSave controls whether a visual toast popup notification is shown on successful save (default: false).
+// Configured via notify_on_save in ~/.config/wig/config.toml under [editor].
+var NotifyOnSave = false
+
 // CmdSaveFileWithFeedback saves the current buffer to disk and displays status bar & notification feedback.
 // Handles both :w and :w <filename> for unnamed [No Name] buffers.
 func CmdSaveFileWithFeedback(ctx wig.Context) {
@@ -735,7 +739,9 @@ func CmdSaveFileWithFeedback(ctx wig.Context) {
 
 	msg := fmt.Sprintf("\"%s\" %dL, %dB written", ctx.Buf.GetName(), lineCount, byteCount)
 	ctx.Editor.EchoMessage(msg)
-	ui.Notify(msg, ui.NotifySuccess)
+	if NotifyOnSave {
+		ui.Notify(msg, ui.NotifySuccess)
+	}
 }
 
 func CmdMakeBuild(ctx wig.Context) {
