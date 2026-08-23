@@ -15,8 +15,13 @@ func CmdFunctionList(ctx wig.Context) {
 
 	items := []ui.PickerItem[wig.Location]{}
 
+	if buf.Highlighter == nil {
+		ctx.Editor.EchoMessage("No functions found")
+		return
+	}
+
 	// Try tree sitter
-	if ts, ok := buf.Highlighter.(*wig.TreeSitterHighlighter); ok {
+	if ts, ok := buf.Highlighter.(*wig.TreeSitterHighlighter); ok && ts != nil {
 		locations := ts.ListFunctions()
 		for _, loc := range locations {
 			items = append(items, ui.PickerItem[wig.Location]{
