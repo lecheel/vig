@@ -1,6 +1,8 @@
 package autocomplete
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -137,15 +139,203 @@ func getBufferCompletions(ctx wig.Context) wig.CompletionItems {
 	return items
 }
 
-// BufferComplete triggers manual completion for local buffer words.
-func BufferComplete(ctx wig.Context) {
+// wordlistCache holds the cached contents of ~/.config/wig/wordlist.txt.
+var wordlistCache []string
+var wordlistLoaded bool
+
+// loadWordlist reads ~/.config/wig/wordlist.txt once and caches the result.
+func loadWordlist() []string {
+	if wordlistLoaded {
+		return wordlistCache
+	}
+	wordlistLoaded = true
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	path := filepath.Join(home, ".config", "wig", "wordlist.txt")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		word := strings.TrimSpace(line)
+		if word != "" {
+			wordlistCache = append(wordlistCache, word)
+		}
+	}
+	return wordlistCache
+}
+
+// makeCompletionTextEdit builds a CompletionTextEdit that replaces the
+// range [start, end) on the given line with newText.
+func makeCompletionTextEdit(newText string, line, start, end int) *wig.CompletionTextEdit {
+	return &wig.CompletionTextEdit{
+		NewText: newText,
+		Insert: struct {
+			Start struct {
+				Line      int `json:"line"`
+				Character int `json:"character"`
+			} `json:"start"`
+			End struct {
+				Line      int `json:"line"`
+				Character int `json:"character"`
+			} `json:"end"`
+		}{
+			Start: struct {
+				Line      int `json:"line"`
+				Character int `json:"character"`
+			}{Line: line, Character: start},
+			End: struct {
+				Line      int `json:"line"`
+				Character int `json:"character"`
+			}{Line: line, Character: end},
+		},
+		Replace: struct {
+			Start struct {
+				Line      int `json:"line"`
+				Character int `json:"character"`
+			} `json:"start"`
+			End struct {
+				Line      int `json:"line"`
+				Character int `json:"character"`
+			} `json:"end"`
+		}{
+			Start: struct {
+				Line      int `json:"line"`
+				Character int `json:"character"`
+			}{Line: line, Character: start},
+			End: struct {
+				Line      int `json:"line"`
+				Character int `json:"character"`
+			}{Line: line, Character: end},
+		},
+	}
+}
+
+// getWordlistCompletions returns completion items from ~/.config/wig/wordlist.txt
+// matching the prefix under the cursor.
+func getWordlistCompletions(ctx wig.Context) wig.CompletionItems {
+	cur := wig.ContextCursorGet(ctx)
+	line := wig.CursorLine(ctx.Buf, cur)
+	if line == nil {
+		return wig.CompletionItems{}
+	}
+
+	lineRunes := line.Value
+	charIdx := cur.Char
+	if charIdx >= len(lineRunes) {
+		charIdx = len(lineRunes) - 1
+	}
+
+	start := charIdx
+	for start > 0 {
+		r := lineRunes[start-1]
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+			start--
+		} else {
+			break
+		}
+	}
+
+	prefix := string(lineRunes[start:charIdx])
+	items := wig.CompletionItems{}
+
+	if len(prefix) < 1 {
+		return items
+	}
+
+	words := loadWordlist()
+	lowerPrefix := strings.ToLower(prefix)
+	seen := make(map[string]bool)
+	for _, word := range words {
+		if strings.HasPrefix(strings.ToLower(word), lowerPrefix) && word != prefix {
+			if !seen[word] {
+				seen[word] = true
+				te := makeCompletionTextEdit(word, cur.Line, start, charIdx)
+				items.AddItem(word, word, te)
+			}
+		}
+	}
+
+	return items
+}
+
+// LocalComplete triggers manual completion using both wordlist.txt and local buffer words.
+// Words from wordlist.txt are shown first, followed by matches from the current buffer.
+func LocalComplete(ctx wig.Context) {
 	refreshFn := func() wig.CompletionItems {
-		return getBufferCompletions(ctx)
+		wlItems := getWordlistCompletions(ctx)
+		bufItems := getBufferCompletions(ctx)
+
+		seen := make(map[string]bool)
+		items := wig.CompletionItems{}
+		// Add wordlist completions first
+		for _, item := range wlItems.Items {
+			if !seen[item.Label] {
+				seen[item.Label] = true
+				items.Items = append(items.Items, item)
+			}
+		}
+		// Add buffer completions second
+		for _, item := range bufItems.Items {
+			if !seen[item.Label] {
+				seen[item.Label] = true
+				items.Items = append(items.Items, item)
+			}
+		}
+		return items
 	}
 
 	items := refreshFn()
 	if len(items.Items) == 0 {
 		ctx.Editor.EchoMessage("No local completions found")
+		return
+	}
+
+	// If there is only one candidate, auto-complete it immediately without showing the popup.
+	if len(items.Items) == 1 {
+		item := items.Items[0]
+		cur := wig.ContextCursorGet(ctx)
+		line := wig.CursorLine(ctx.Buf, cur)
+
+		if ctx.Buf.TxStart() {
+			defer ctx.Buf.TxEnd()
+		}
+
+		wig.TextDelete(ctx.Buf, &wig.Selection{
+			Start: wig.Cursor{Line: cur.Line, Char: item.TextEdit.Replace.Start.Character},
+			End:   wig.Cursor{Line: cur.Line, Char: item.TextEdit.Replace.End.Character},
+		})
+
+		wig.TextInsert(ctx.Buf, line, item.TextEdit.Replace.Start.Character, item.TextEdit.NewText)
+		cur.Char = item.TextEdit.Replace.Start.Character + utf8.RuneCountInString(item.TextEdit.NewText)
+		return
+	}
+
+	cur := wig.ContextCursorGet(ctx)
+	ui.AutocompleteInit(
+		ctx,
+		wig.Position{
+			Line: cur.Line,
+			Char: cur.Char,
+		},
+		items,
+		refreshFn,
+	)
+}
+
+// WordlistComplete triggers manual completion from ~/.config/wig/wordlist.txt.
+func WordlistComplete(ctx wig.Context) {
+	refreshFn := func() wig.CompletionItems {
+		return getWordlistCompletions(ctx)
+	}
+
+	items := refreshFn()
+	if len(items.Items) == 0 {
+		ctx.Editor.EchoMessage("No wordlist completions found")
 		return
 	}
 
