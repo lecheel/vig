@@ -93,7 +93,7 @@ func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 	if u.ctrlRMode {
 		u.ctrlRMode = false
 		if ev.Key() == tcell.KeyCtrlW {
-			// Grab the full contiguous non-whitespace block under cursor from buffer
+			// Grab the word under cursor from buffer (letters, digits, underscores, excluding delimiters like .([)
 			eCtx := u.e.NewContext()
 			if eCtx.Buf != nil {
 				cur := wig.ContextCursorGet(eCtx)
@@ -105,34 +105,41 @@ func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 						idx = len(chars) - 1
 					}
 
-					// Find start of word (move left if on space, then find word boundary)
-					start := idx
-					for start > 0 && unicode.IsSpace(chars[start]) {
-						start--
-					}
-					for start > 0 && !unicode.IsSpace(chars[start-1]) {
-						start--
+					isWordChar := func(r rune) bool {
+						return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 					}
 
-					// Find end of word
-					end := start
-					for end < len(chars)-1 && !unicode.IsSpace(chars[end]) {
-						end++
+					if !isWordChar(chars[idx]) {
+						if idx > 0 && isWordChar(chars[idx-1]) {
+							idx--
+						}
 					}
 
-					if end >= start && !unicode.IsSpace(chars[start]) {
-						word := string(chars[start:end])
-						wordRunes := []rune(word)
+					if isWordChar(chars[idx]) {
+						start := idx
+						for start > 0 && isWordChar(chars[start-1]) {
+							start--
+						}
 
-						newBuf := make([]rune, len(u.chBuf)+len(wordRunes))
-						copy(newBuf, u.chBuf[:u.cursorPos])
-						copy(newBuf[u.cursorPos:], wordRunes)
-						copy(newBuf[u.cursorPos+len(wordRunes):], u.chBuf[u.cursorPos:])
+						end := idx
+						for end < len(chars) && isWordChar(chars[end]) {
+							end++
+						}
 
-						u.chBuf = newBuf
-						u.cursorPos += len(wordRunes)
-						u.candidates = []string{}
-						u.candIdx = -1
+						if end > start {
+							word := string(chars[start:end])
+							wordRunes := []rune(word)
+
+							newBuf := make([]rune, len(u.chBuf)+len(wordRunes))
+							copy(newBuf, u.chBuf[:u.cursorPos])
+							copy(newBuf[u.cursorPos:], wordRunes)
+							copy(newBuf[u.cursorPos+len(wordRunes):], u.chBuf[u.cursorPos:])
+
+							u.chBuf = newBuf
+							u.cursorPos += len(wordRunes)
+							u.candidates = []string{}
+							u.candIdx = -1
+						}
 					}
 				}
 			}

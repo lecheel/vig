@@ -124,6 +124,8 @@ func init() {
 	wig.AllCommands["CmdFormatBufferAndSave"] = wig.CmdDefinition{Desc: "Format buffer and save", Fn: CmdFormatBufferAndSave}
 	wig.AllCommands["CmdMakeBuild"] = wig.CmdDefinition{Desc: "Make build", Fn: CmdMakeBuild}
 	wig.AllCommands["CmdMakeTest"] = wig.CmdDefinition{Desc: "Make test", Fn: CmdMakeTest}
+	wig.AllCommands["CmdRg"] = wig.CmdDefinition{Desc: "Ripgrep search", Fn: CmdRg}
+	wig.AllCommands["rg"] = wig.CmdDefinition{Desc: "Ripgrep search", Fn: CmdRg}
 	wig.AllCommands["CmdRgUnderCursor"] = wig.CmdDefinition{Desc: "Ripgrep search under cursor", Fn: CmdRgUnderCursor}
 	wig.AllCommands["CmdOpenSavedSearch"] = wig.CmdDefinition{Desc: "Reopen rg search", Fn: CmdOpenSavedSearch}
 	wig.AllCommands["copen"] = wig.CmdDefinition{Desc: "Open quickfix list", Fn: CmdQuickfixOpen}

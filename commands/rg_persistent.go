@@ -73,6 +73,32 @@ func rgSearchLocations(ctx wig.Context, word string) []wig.Location {
 	return locations
 }
 
+// CmdRg performs a ripgrep search for the query provided in ctx.Char (e.g. `:rg <pattern>`)
+// or falls back to the word/selection under the cursor if no pattern is specified.
+func CmdRg(ctx wig.Context) {
+	query := strings.TrimSpace(ctx.Char)
+	if query == "" {
+		word, ok := wig.WordOrSelectionUnderCursor(ctx)
+		if !ok {
+			ctx.Editor.EchoMessage("no search pattern provided")
+			return
+		}
+		query = word
+	}
+
+	locations := rgSearchLocations(ctx, query)
+	if len(locations) == 0 {
+		ctx.Editor.EchoMessage("no results found for: " + query)
+		return
+	}
+
+	if err := rgcollect.SaveResults(locations); err != nil {
+		ctx.Editor.EchoMessage("failed to save results: " + err.Error())
+	}
+
+	rgcollect.InitGrouped(ctx, query, locations)
+}
+
 // CmdRgUnderCursor extracts the word under the cursor (or selection),
 // runs a ripgrep search, saves results to JSON, and opens the [rg]
 // grouped buffer full screen.
@@ -83,17 +109,8 @@ func CmdRgUnderCursor(ctx wig.Context) {
 		return
 	}
 
-	locations := rgSearchLocations(ctx, word)
-	if len(locations) == 0 {
-		ctx.Editor.EchoMessage("no results found for: " + word)
-		return
-	}
-
-	if err := rgcollect.SaveResults(locations); err != nil {
-		ctx.Editor.EchoMessage("failed to save results: " + err.Error())
-	}
-
-	rgcollect.InitGrouped(ctx, word, locations)
+	ctx.Char = word
+	CmdRg(ctx)
 }
 
 // CmdOpenSavedSearch reads the saved search results from JSON and opens
