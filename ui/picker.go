@@ -190,6 +190,16 @@ func (u *UiPicker[T]) GetActiveItem() *PickerItem[T] {
 	return nil
 }
 
+func (u *UiPicker[T]) GetFilteredLocations() []wig.Location {
+	locs := make([]wig.Location, 0, len(u.filtered))
+	for _, item := range u.filtered {
+		if item.Location.FilePath != "" {
+			locs = append(locs, item.Location)
+		}
+	}
+	return locs
+}
+
 func (u *UiPicker[T]) SetItems(items []PickerItem[T]) {
 	for i := range items {
 		name := strings.TrimRightFunc(items[i].Name, unicode.IsSpace)

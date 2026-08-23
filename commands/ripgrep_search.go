@@ -182,6 +182,16 @@ func rgDoSearch(ctx wig.Context, pat string) {
 	p.OnChange(func() {
 		p.SetItems(searchFn(p.GetInput()))
 	})
+
+	p.OnKey("ctrl+r", func(c wig.Context) {
+		locs := p.GetFilteredLocations()
+		ctx.Editor.PopUi()
+		if len(locs) == 0 {
+			ctx.Editor.EchoMessage("no search results to export")
+			return
+		}
+		OpenLocationsInQuickfix(c, locs)
+	})
 }
 
 func CmdSearchProject(ctx wig.Context) {

@@ -97,15 +97,17 @@ func (k *KeyHandler) HandleKey(editor *Editor, ev *tcell.EventKey, mode Mode) {
 	case KeyMap:
 		keySet = v
 	default:
+		keySet = k.keymap[mode]
 		if mode != MODE_INSERT {
-			kv := isNumeric(key)
-			if kv {
+			if len(k.times) > 0 && isNumeric(key) {
+				k.times = append(k.times, key)
+				return
+			}
+			if _, ok := keySet[key]; !ok && isNumeric(key) {
 				k.times = append(k.times, key)
 				return
 			}
 		}
-
-		keySet = k.keymap[mode]
 	}
 
 	if key == " " {

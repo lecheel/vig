@@ -154,6 +154,36 @@ func CmdQuickfixOpen(ctx wig.Context) {
 	openQuickfixView(ctx, entries)
 }
 
+// OpenLocationsInQuickfix converts search locations into Quickfix entries,
+// saves them, sets up the visit source for :cn/:cp, and opens via popup or split panel.
+func OpenLocationsInQuickfix(ctx wig.Context, locations []wig.Location) {
+	if len(locations) == 0 {
+		ctx.Editor.EchoMessage("No locations to display")
+		return
+	}
+
+	entries := make([]QuickfixEntry, len(locations))
+	for i, loc := range locations {
+		line := loc.Line
+		if line > 0 {
+			line = line - 1 // convert 1-indexed to 0-indexed
+		}
+		entries[i] = QuickfixEntry{
+			FilePath: loc.FilePath,
+			Line:     line,
+			Char:     loc.Char,
+			Message:  strings.TrimSpace(loc.Text),
+		}
+	}
+
+	if err := saveQuickfixResults(entries); err != nil {
+		ctx.Editor.LogMessage("failed to save quickfix: " + err.Error())
+	}
+
+	quickfixState.entries = entries
+	openQuickfixView(ctx, entries)
+}
+
 func openQuickfixView(ctx wig.Context, entries []QuickfixEntry) {
 	if strings.ToLower(ctx.Editor.Config.QuickfixView) == "popup" {
 		openQuickfixPopup(ctx, entries)
