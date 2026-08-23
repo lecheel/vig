@@ -575,20 +575,53 @@ func CmdFormatBufferAndSave(ctx wig.Context) {
 	}
 }
 
-// CmdSaveFileWithFeedback calls wig.CmdSaveFile and displays a "Saved" message.
-// This function assumes that wig.CmdSaveFile (defined in the wig package)
-// handles the core logic of writing the buffer to disk and updating its dirty state.
+// CmdSaveFileWithFeedback saves the current buffer to disk and displays status bar & notification feedback.
+// Handles both :w and :w <filename> for unnamed [No Name] buffers.
 func CmdSaveFileWithFeedback(ctx wig.Context) {
-	// Call the original save command provided by the wig package.
-	// This function (wig.CmdSaveFile) is assumed to exist and take wig.Context.
+	if ctx.Buf == nil {
+		return
+	}
+
+	// If a filename argument was provided (e.g. :w newfile.txt)
+	if ctx.Char != "" {
+		filePath := ctx.Char
+		if !filepath.IsAbs(filePath) {
+			rootDir := ctx.Editor.Projects.GetRoot()
+			if rootDir != "" {
+				filePath = filepath.Join(rootDir, filePath)
+			} else {
+				if cwd, err := os.Getwd(); err == nil {
+					filePath = filepath.Join(cwd, filePath)
+				}
+			}
+		}
+		ctx.Buf.FilePath = filePath
+	}
+
+	if ctx.Buf.FilePath == "" || strings.HasPrefix(ctx.Buf.FilePath, "[") {
+		ctx.Editor.EchoMessage("No file name")
+		return
+	}
+
+	if err := ctx.Buf.Save(); err != nil {
+		ctx.Editor.EchoMessage("Save error: " + err.Error())
+		return
+	}
+
+	ctx.Buf.Dirty = false
 	wig.CmdSaveFile(ctx)
 
-	// Provide enhanced feedback to the user via the editor's echo message.
-	if ctx.Buf != nil && ctx.Buf.FilePath != "" && !strings.HasPrefix(ctx.Buf.FilePath, "[") {
-		ctx.Editor.EchoMessage(fmt.Sprintf("Saved \"%s\"", ctx.Buf.GetName()))
+	lineCount := ctx.Buf.CountLines()
+	var byteCount int64
+	if fi, err := os.Stat(ctx.Buf.FilePath); err == nil {
+		byteCount = fi.Size()
 	} else {
-		ctx.Editor.EchoMessage("Saved")
+		byteCount = int64(len(ctx.Buf.String()))
 	}
+
+	msg := fmt.Sprintf("\"%s\" %dL, %dB written", ctx.Buf.GetName(), lineCount, byteCount)
+	ctx.Editor.EchoMessage(msg)
+	ui.Notify(msg, ui.NotifySuccess)
 }
 
 func CmdMakeBuild(ctx wig.Context) {

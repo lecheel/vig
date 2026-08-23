@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"strings"
+
 	"github.com/firstrow/wig"
 	"github.com/firstrow/wig/ui"
 )
@@ -46,9 +48,13 @@ func init() {
 	// Command-line basics
 	wig.AllCommands["q"] = wig.CmdDefinition{Desc: "Quit", Fn: CmdExit}
 	wig.AllCommands["q!"] = wig.CmdDefinition{Desc: "Quit without saving", Fn: CmdForceExit}
-	wig.AllCommands["w"] = wig.CmdDefinition{Desc: "Save", Fn: CmdSaveFileWithFeedback} // Enhanced feedback for :w
+	wig.AllCommands["w"] = wig.CmdDefinition{Desc: "Save", Fn: CmdSaveFileWithFeedback}
 	wig.AllCommands["wq"] = wig.CmdDefinition{Desc: "Save and quit", Fn: func(ctx wig.Context) {
-		CmdSaveFileWithFeedback(ctx) // Enhanced feedback for :wq
+		if ctx.Buf != nil && (ctx.Buf.FilePath == "" || strings.HasPrefix(ctx.Buf.FilePath, "[")) && ctx.Char == "" {
+			ctx.Editor.EchoMessage("No file name")
+			return
+		}
+		CmdSaveFileWithFeedback(ctx)
 		CmdExit(ctx)
 	}}
 	wig.AllCommands["bd"] = wig.CmdDefinition{Desc: "Delete buffer", Fn: wig.CmdKillBuffer}
