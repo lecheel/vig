@@ -689,6 +689,29 @@ func CmdToggleBool(ctx wig.Context) {
 	ctx.Editor.Redraw()
 }
 
+// CmdOpenConfig opens ~/.config/wig/config.toml for editing, creating it if it doesn't exist.
+func CmdOpenConfig(ctx wig.Context) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		ctx.Editor.EchoMessage("Cannot find home directory: " + err.Error())
+		return
+	}
+	configDir := filepath.Join(home, ".config", "wig")
+	os.MkdirAll(configDir, 0755)
+	configPath := filepath.Join(configDir, "config.toml")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		os.WriteFile(configPath, []byte{}, 0644)
+	}
+
+	buf, err := ctx.Editor.OpenFile(configPath)
+	if err != nil {
+		ctx.Editor.EchoMessage("Cannot open config file: " + err.Error())
+		return
+	}
+	ctx.Buf = buf
+	ctx.Editor.ActiveWindow().VisitBuffer(ctx)
+}
+
 // NotifyOnSave controls whether a visual toast popup notification is shown on successful save (default: false).
 // Configured via notify_on_save in ~/.config/wig/config.toml under [editor].
 var NotifyOnSave = false

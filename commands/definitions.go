@@ -38,6 +38,8 @@ func init() {
 	wig.AllCommands["toggle"] = wig.CmdDefinition{Desc: "Toggle boolean under cursor", Fn: CmdToggleBool}
 	wig.AllCommands["CmdCheckHealth"] = wig.CmdDefinition{Desc: "Check health of dependencies", Fn: CmdCheckHealth}
 	wig.AllCommands["checkhealth"] = wig.CmdDefinition{Desc: "Check health of dependencies", Fn: CmdCheckHealth}
+	wig.AllCommands["CmdOpenConfig"] = wig.CmdDefinition{Desc: "Open config file", Fn: CmdOpenConfig}
+	wig.AllCommands["config"] = wig.CmdDefinition{Desc: "Open config file", Fn: CmdOpenConfig}
 	wig.AllCommands["CmdInfo"] = wig.CmdDefinition{Desc: "Show notification info", Fn: CmdInfo}
 	wig.AllCommands["info"] = wig.CmdDefinition{Desc: "Show notification info", Fn: CmdInfo}
 
