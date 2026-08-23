@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/firstrow/wig"
 	"github.com/firstrow/wig/ui"
@@ -1257,9 +1258,7 @@ func GitShowCommitBuffer(ctx wig.Context, useAI ...bool) {
 
 	aiMsg := ""
 	if withAI {
-		ctx.Editor.EchoMessage("Generating AI commit message with git-ai...")
-		ctx.Editor.Redraw()
-		aiMsg = generateGitAiCommitMessage(ctx)
+		aiMsg = generateGitAiCommitMessageWithSpinner(ctx)
 		if aiMsg != "" {
 			ctx.Editor.EchoMessage("AI commit message generated")
 		} else {
@@ -1295,9 +1294,7 @@ func GitShowCommitBuffer(ctx wig.Context, useAI ...bool) {
 			"q":      exitModeOrClose,
 			"ctrl+c": gitCommitFinish,
 			"a": func(c wig.Context) {
-				c.Editor.EchoMessage("Regenerating AI commit message...")
-				c.Editor.Redraw()
-				msg := generateGitAiCommitMessage(c)
+				msg := generateGitAiCommitMessageWithSpinner(c)
 				if msg != "" {
 					dBuf.ResetLines()
 					for _, l := range strings.Split(msg, "\n") {
@@ -1330,6 +1327,47 @@ func GitShowCommitBuffer(ctx wig.Context, useAI ...bool) {
 	ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: 0, Char: 0})
 }
 
+var gitSpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// generateGitAiCommitMessageWithSpinner runs generateGitAiCommitMessage in a
+// goroutine and animates a spinner with elapsed seconds in the echo area
+// until it finishes.
+func generateGitAiCommitMessageWithSpinner(ctx wig.Context) string {
+	var msg string
+	done := make(chan struct{})
+
+	go func() {
+		msg = generateGitAiCommitMessage(ctx)
+		close(done)
+	}()
+
+	runWithSpinner(ctx.Editor, "Generating AI commit message...", done)
+
+	return msg
+}
+
+// runWithSpinner blocks the calling goroutine, animating a spinner with elapsed
+// seconds in the echo area, until the given done channel is closed. Call the
+// long-running work in its own goroutine and close done when it finishes.
+func runWithSpinner(editor *wig.Editor, label string, done <-chan struct{}) {
+	start := time.Now()
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	frame := 0
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			elapsed := time.Since(start).Seconds()
+			editor.EchoMessage(fmt.Sprintf("%s %s (%.1fs)", gitSpinnerFrames[frame%len(gitSpinnerFrames)], label, elapsed))
+			editor.Redraw()
+			frame++
+		}
+	}
+}
+
 func gitCommitFinish(ctx wig.Context) {
 	cBuf := ctx.Buf
 	if cBuf == nil || cBuf.FilePath != "[git: edit commit message]" {
@@ -1347,16 +1385,27 @@ func gitCommitFinish(ctx wig.Context) {
 	}
 
 	rootDir := ctx.Editor.Projects.GetRoot()
-	cmd := exec.Command("git", "commit", "-F", "/tmp/commit_msg.txt", "--cleanup=strip")
-	if rootDir != "" {
-		cmd.Dir = rootDir
-	}
-	out, err := cmd.CombinedOutput()
-	outStr := strings.TrimSpace(string(out))
 
-	if err != nil {
+	var outStr string
+	var cmdErr error
+	done := make(chan struct{})
+
+	go func() {
+		cmd := exec.Command("git", "commit", "-F", "/tmp/commit_msg.txt", "--cleanup=strip")
+		if rootDir != "" {
+			cmd.Dir = rootDir
+		}
+		out, err := cmd.CombinedOutput()
+		outStr = strings.TrimSpace(string(out))
+		cmdErr = err
+		close(done)
+	}()
+
+	runWithSpinner(ctx.Editor, "Committing...", done)
+
+	if cmdErr != nil {
 		if outStr == "" {
-			outStr = err.Error()
+			outStr = cmdErr.Error()
 		}
 		outStr = strings.ReplaceAll(outStr, "\n", " ")
 		ctx.Editor.EchoMessage("Commit failed: " + outStr)
