@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/firstrow/wig"
@@ -11,6 +12,37 @@ import (
 	"github.com/firstrow/wig/ui"
 	"github.com/pelletier/go-toml/v2"
 )
+
+var keyTokenizer = regexp.MustCompile(`(<[^>]+>|ctrl\+[a-zA-Z0-9]+|alt\+[a-zA-Z0-9]+|shift\+[a-zA-Z0-9]+|meta\+[a-zA-Z0-9]+|.)`)
+
+func tokenizeKey(k string) []string {
+	return keyTokenizer.FindAllString(k, -1)
+}
+
+func assignSequence(currentMap wig.KeyMap, tokens []string, action any) {
+	if len(tokens) == 0 {
+		return
+	}
+	token := tokens[0]
+
+	if len(tokens) == 1 {
+		currentMap[token] = action
+		return
+	}
+
+	var nextMap wig.KeyMap
+	if existing, ok := currentMap[token]; ok {
+		if m, ok := existing.(wig.KeyMap); ok {
+			nextMap = m
+		} else {
+			nextMap = wig.KeyMap{}
+		}
+	} else {
+		nextMap = wig.KeyMap{}
+	}
+	currentMap[token] = nextMap
+	assignSequence(nextMap, tokens[1:], action)
+}
 
 type UserConfig struct {
 	Editor EditorSettings `toml:"editor"`
@@ -158,40 +190,48 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		return nil
 	}
 
-	expandKey := func(k string) string {
-		k = strings.ReplaceAll(k, "<leader>", editorCfg.Leader)
-		k = strings.ReplaceAll(k, "<Leader>", editorCfg.Leader)
-		if k == "<space>" || k == "<Space>" || k == " " {
+	expandToken := func(token string) string {
+		t := strings.ToLower(token)
+		if t == "<leader>" {
+			return editorCfg.Leader
+		}
+		if t == "<space>" || token == " " {
 			return "Space"
 		}
-		return k
+		if strings.HasPrefix(t, "<c-") && strings.HasSuffix(t, ">") {
+			return "ctrl+" + strings.ToLower(token[3:len(token)-1])
+		}
+		if strings.HasPrefix(t, "<a-") && strings.HasSuffix(t, ">") {
+			return "alt+" + strings.ToLower(token[3:len(token)-1])
+		}
+		if strings.HasPrefix(t, "<m-") && strings.HasSuffix(t, ">") {
+			return "meta+" + strings.ToLower(token[3:len(token)-1])
+		}
+		if strings.HasPrefix(t, "<s-") && strings.HasSuffix(t, ">") {
+			return "shift+" + strings.ToLower(token[3:len(token)-1])
+		}
+		return token
 	}
 
-	for key, cmdName := range cfg.Keys.Normal {
-		if fn := resolve(cmdName); fn != nil {
-			userMap[wig.MODE_NORMAL][expandKey(key)] = fn
+	applyKeys := func(mode wig.Mode, keys map[string]string) {
+		for key, cmdName := range keys {
+			fn := resolve(cmdName)
+			if fn == nil {
+				continue
+			}
+			tokens := tokenizeKey(key)
+			for i, t := range tokens {
+				tokens[i] = expandToken(t)
+			}
+			assignSequence(userMap[mode], tokens, fn)
 		}
 	}
-	for key, cmdName := range cfg.Keys.Insert {
-		if fn := resolve(cmdName); fn != nil {
-			userMap[wig.MODE_INSERT][expandKey(key)] = fn
-		}
-	}
-	for key, cmdName := range cfg.Keys.Visual {
-		if fn := resolve(cmdName); fn != nil {
-			userMap[wig.MODE_VISUAL][expandKey(key)] = fn
-		}
-	}
-	for key, cmdName := range cfg.Keys.VisualLine {
-		if fn := resolve(cmdName); fn != nil {
-			userMap[wig.MODE_VISUAL_LINE][expandKey(key)] = fn
-		}
-	}
-	for key, cmdName := range cfg.Keys.VisualBlock {
-		if fn := resolve(cmdName); fn != nil {
-			userMap[wig.MODE_VISUAL_BLOCK][expandKey(key)] = fn
-		}
-	}
+
+	applyKeys(wig.MODE_NORMAL, cfg.Keys.Normal)
+	applyKeys(wig.MODE_INSERT, cfg.Keys.Insert)
+	applyKeys(wig.MODE_VISUAL, cfg.Keys.Visual)
+	applyKeys(wig.MODE_VISUAL_LINE, cfg.Keys.VisualLine)
+	applyKeys(wig.MODE_VISUAL_BLOCK, cfg.Keys.VisualBlock)
 
 	return editorCfg, userMap
 }
