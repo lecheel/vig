@@ -74,6 +74,7 @@ func SearchFrom(ctx Context, startPos Cursor, pattern string) bool {
 			cur.Line = lineNum
 			cur.Char = matches[0][0] + from
 			cur.PreserveCharPosition = cur.Char
+			SelectionExtend(ctx.Buf, cur)
 			return true
 		}
 
@@ -99,6 +100,7 @@ func SearchFrom(ctx Context, startPos Cursor, pattern string) bool {
 			cur.Line = lineNum
 			cur.Char = matches[0][0]
 			cur.PreserveCharPosition = cur.Char
+			SelectionExtend(ctx.Buf, cur)
 			return true
 		}
 		line = line.Next()
@@ -148,6 +150,7 @@ func SearchNext(ctx Context, pattern string) {
 		if ctx.Editor != nil && ctx.Editor.ActiveWindow() != nil {
 			ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, cur)
 		}
+		SelectionExtend(ctx.Buf, cur)
 		break
 	}
 }
@@ -190,6 +193,7 @@ func SearchPrev(ctx Context, pattern string) {
 		if ctx.Editor != nil && ctx.Editor.ActiveWindow() != nil {
 			ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, cur)
 		}
+		SelectionExtend(ctx.Buf, cur)
 		break
 	}
 }

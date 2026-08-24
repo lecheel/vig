@@ -48,6 +48,7 @@ func (u *uiSearchPrompt) cancel(ctx wig.Context) {
 	cur := wig.ContextCursorGet(ctx)
 	*cur = u.origCur
 	wig.LastSearchPattern = u.origPattern
+	wig.SelectionExtend(ctx.Buf, cur)
 	ctx.Editor.PopUiComponent(u)
 	wig.CmdEnsureCursorVisible(ctx)
 	ctx.Editor.Redraw()
@@ -102,6 +103,7 @@ func (u *uiSearchPrompt) updateLiveSearch(ctx wig.Context) {
 		cur := wig.ContextCursorGet(ctx)
 		*cur = u.origCur
 		wig.CmdEnsureCursorVisible(ctx)
+		wig.SelectionExtend(ctx.Buf, cur)
 	}
 	u.e.Redraw()
 }

@@ -222,6 +222,24 @@ func SelectionStop(buf *Buffer, cur *Cursor) {
 	buf.Selection.End = *cur
 }
 
+func SelectionExtend(buf *Buffer, cur *Cursor) {
+	if buf == nil || buf.Selection == nil {
+		return
+	}
+	buf.Selection.End = *cur
+	if buf.Mode() == MODE_VISUAL_LINE {
+		if buf.Selection.Start.Line > buf.Selection.End.Line {
+			lineStart := CursorLineByNum(buf, buf.Selection.Start.Line)
+			buf.Selection.Start.Char = len(lineStart.Value) - 1
+			buf.Selection.End.Char = 0
+		} else {
+			lineEnd := CursorLineByNum(buf, buf.Selection.End.Line)
+			buf.Selection.Start.Char = 0
+			buf.Selection.End.Char = len(lineEnd.Value) - 1
+		}
+	}
+}
+
 func WithSelection(fn func(Context)) func(Context) {
 	return func(ctx Context) {
 		fn(ctx)
@@ -233,19 +251,7 @@ func WithSelection(fn func(Context)) func(Context) {
 			return
 		}
 		cur := ContextCursorGet(ctx)
-		buf.Selection.End = *cur
-
-		if buf.Mode() == MODE_VISUAL_LINE {
-			if buf.Selection.Start.Line > buf.Selection.End.Line {
-				lineStart := CursorLineByNum(buf, buf.Selection.Start.Line)
-				buf.Selection.Start.Char = len(lineStart.Value) - 1
-				buf.Selection.End.Char = 0
-			} else {
-				lineEnd := CursorLineByNum(buf, buf.Selection.End.Line)
-				buf.Selection.Start.Char = 0
-				buf.Selection.End.Char = len(lineEnd.Value) - 1
-			}
-		}
+		SelectionExtend(buf, cur)
 	}
 }
 
