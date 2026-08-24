@@ -549,8 +549,28 @@ func (u *uiCommandLine) runCommand(cmd string) {
 	// Search and replace: :s/pat/rep/flags, :%s/pat/rep/flags, or :'<,'>s/pat/rep/flags
 	isGlobal := rangeStr == "%"
 	if strings.HasPrefix(restCmd, "s/") {
-		replaceCmd := restCmd[2:] // "pat/rep/flags"
-		parts := strings.SplitN(replaceCmd, "/", 3)
+		replaceCmd := restCmd[2:]
+		var parts []string
+		current := strings.Builder{}
+		for i := 0; i < len(replaceCmd); i++ {
+			if len(parts) >= 2 {
+				current.WriteString(replaceCmd[i:])
+				break
+			}
+			if replaceCmd[i] == '\\' && i+1 < len(replaceCmd) {
+				current.WriteByte(replaceCmd[i])
+				current.WriteByte(replaceCmd[i+1])
+				i++
+				continue
+			}
+			if replaceCmd[i] == '/' {
+				parts = append(parts, current.String())
+				current.Reset()
+				continue
+			}
+			current.WriteByte(replaceCmd[i])
+		}
+		parts = append(parts, current.String())
 		if len(parts) < 2 {
 			u.e.EchoMessage("Invalid search command")
 			return
