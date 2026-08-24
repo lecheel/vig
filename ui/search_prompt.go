@@ -30,7 +30,7 @@ func CmdSearchPromptInit(ctx wig.Context) {
 	}
 
 	cmdLine.keymap = wig.NewKeyHandler(wig.ModeKeyMap{
-		wig.MODE_NORMAL: wig.KeyMap{
+		wig.MODE_INSERT: wig.KeyMap{
 			"Esc": func(c wig.Context) {
 				cmdLine.cancel(c)
 			},
@@ -136,5 +136,5 @@ func (u *uiSearchPrompt) Render(view wig.View) {
 }
 
 func (u *uiSearchPrompt) Mode() wig.Mode {
-	return wig.MODE_NORMAL
+	return wig.MODE_INSERT
 }
