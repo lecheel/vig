@@ -102,7 +102,7 @@ func (u *MarksPopupWidget) Render(view wig.View) {
 	if x < 0 {
 		x = 0
 	}
-	y := vh - boxH - 2
+	y := vh - boxH - 1
 
 	// Use default colors to match the file picker exactly
 	style := wig.Color("default")

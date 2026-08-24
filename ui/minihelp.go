@@ -65,7 +65,7 @@ func (u *MiniHelpWidget) Render(view wig.View) {
 	if x < 0 {
 		x = 0
 	}
-	y := vh - boxH - 2 // Move 1 line up
+	y := vh - boxH - 1
 
 	// Use default colors to match the marks popup exactly
 	style := wig.Color("default")

@@ -159,7 +159,7 @@ func (u *RegistersPopupWidget) Render(view wig.View) {
 	if x < 0 {
 		x = 0
 	}
-	y := vh - boxH - 2
+	y := vh - boxH - 1
 	if y < 0 {
 		y = 0
 	}

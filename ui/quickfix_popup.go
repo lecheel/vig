@@ -157,14 +157,12 @@ func (u *QuickfixPopupWidget) Render(view wig.View) {
 		x = 0
 	}
 	// Grow bottom-up from statusbar
-	y := vh - boxH - 2
+	y := vh - boxH - 1
 	if y < 0 {
 		y = 0
 	}
-
 	style := wig.Color("default")
 	drawBox(view, x, y, boxW, boxH, style)
-
 	title := fmt.Sprintf(" Quickfix (%d) [1-8 / j / k / Enter / Esc] ", len(u.items))
 	view.SetContent(x+2, y, title, wig.Color("ui.popup.title"))
 
