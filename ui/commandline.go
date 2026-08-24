@@ -35,24 +35,50 @@ func (u *uiCommandLine) updateSubstitutionHighlight() {
 	}
 	if strings.HasPrefix(rest, "s/") {
 		rest = rest[2:]
-		pattern := ""
-		for i := 0; i < len(rest); i++ {
-			if rest[i] == '\\' && i+1 < len(rest) {
-				pattern += string(rest[i])
-				pattern += string(rest[i+1])
-				i++
-				continue
-			}
-			if rest[i] == '/' {
-				break
-			}
-			pattern += string(rest[i])
-		}
+		pattern := unescapeSearchPattern(splitSubstPattern(rest))
 		if wig.LastSearchPattern != pattern {
 			wig.LastSearchPattern = pattern
 			u.e.Redraw()
 		}
 	}
+}
+
+// splitSubstPattern extracts the pattern portion (between the first and
+// second unescaped "/") from the text following "s/" in a :s command,
+// preserving backslash-escape pairs intact (e.g. "\/" stays "\/").
+func splitSubstPattern(rest string) string {
+	pattern := ""
+	for i := 0; i < len(rest); i++ {
+		if rest[i] == '\\' && i+1 < len(rest) {
+			pattern += string(rest[i]) + string(rest[i+1])
+			i++
+			continue
+		}
+		if rest[i] == '/' {
+			break
+		}
+		pattern += string(rest[i])
+	}
+	return pattern
+}
+
+// unescapeSearchPattern converts a raw regex pattern (with escape
+// sequences like \/, \\, \d intact) into a plain display/highlight
+// string, by dropping the backslash from each escape pair. This is used
+// wherever LastSearchPattern feeds a literal substring matcher (live
+// preview highlight, post-substitution n/N search) rather than
+// regexp.Compile, which needs the escapes preserved.
+func unescapeSearchPattern(pattern string) string {
+	var sb strings.Builder
+	for i := 0; i < len(pattern); i++ {
+		if pattern[i] == '\\' && i+1 < len(pattern) {
+			sb.WriteByte(pattern[i+1])
+			i++
+			continue
+		}
+		sb.WriteByte(pattern[i])
+	}
+	return sb.String()
 }
 
 func (u *uiCommandLine) Plane() wig.RenderPlane {
@@ -647,7 +673,10 @@ func (u *uiCommandLine) runCommand(cmd string) {
 			u.e.EchoMessage("Invalid regex: " + err.Error())
 			return
 		}
-		wig.LastSearchPattern = pattern
+		// Compile with the raw/escaped pattern (needed for correct regex
+		// semantics), but store the unescaped display form for highlight
+		// matching, which is a plain substring search, not a regex engine.
+		wig.LastSearchPattern = unescapeSearchPattern(pattern)
 
 		if !confirm {
 			if buf.TxStart() {
