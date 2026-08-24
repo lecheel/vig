@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"github.com/firstrow/wig"
+	"github.com/gdamore/tcell/v2"
 	"os"
 	"regexp"
 	"sort"
@@ -9,9 +11,6 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"github.com/firstrow/wig"
-	"github.com/gdamore/tcell/v2"
 )
 
 var cmdHistory []string
@@ -59,27 +58,60 @@ func CmdLineInit(ctx wig.Context) {
 				u.execute(cmd)
 			},
 			"Tab": func(ctx wig.Context) {
-				u.autocomplete()
+				if len(u.candidates) == 0 {
+					u.autocomplete()
+				} else {
+					u.navigateCandidate(1, 0)
+				}
 			},
 			"Up": func(ctx wig.Context) {
+				if len(u.candidates) > 0 {
+					u.navigateCandidate(0, 1)
+					return
+				}
 				if u.historyIdx > 0 {
 					u.historyIdx--
 					u.chBuf = []rune(cmdHistory[u.historyIdx])
+					u.cursorPos = len(u.chBuf)
 					u.candidates = []string{}
 					u.candIdx = -1
 				}
 			},
 			"Down": func(ctx wig.Context) {
+				if len(u.candidates) > 0 {
+					u.navigateCandidate(0, -1)
+					return
+				}
 				if u.historyIdx < len(cmdHistory)-1 {
 					u.historyIdx++
 					u.chBuf = []rune(cmdHistory[u.historyIdx])
+					u.cursorPos = len(u.chBuf)
 					u.candidates = []string{}
 					u.candIdx = -1
 				} else {
 					u.historyIdx = len(cmdHistory)
 					u.chBuf = []rune{}
+					u.cursorPos = 0
 					u.candidates = []string{}
 					u.candIdx = -1
+				}
+			},
+			"Left": func(ctx wig.Context) {
+				if len(u.candidates) > 0 {
+					u.navigateCandidate(-1, 0)
+					return
+				}
+				if u.cursorPos > 0 {
+					u.cursorPos--
+				}
+			},
+			"Right": func(ctx wig.Context) {
+				if len(u.candidates) > 0 {
+					u.navigateCandidate(1, 0)
+					return
+				}
+				if u.cursorPos < len(u.chBuf) {
+					u.cursorPos++
 				}
 			},
 		},
@@ -254,6 +286,84 @@ func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 	}
 }
 
+func (u *uiCommandLine) navigateCandidate(dx, dy int) {
+	if len(u.candidates) == 0 {
+		return
+	}
+
+	// Calculate grid dimensions matching Render logic
+	maxLen := 0
+	for _, c := range u.candidates {
+		if len([]rune(c)) > maxLen {
+			maxLen = len([]rune(c))
+		}
+	}
+	colWidth := maxLen + 2
+	if colWidth > 30 {
+		colWidth = 30
+	}
+	vw, _ := u.e.View.Size()
+	cols := vw / colWidth
+	if cols == 0 {
+		cols = 1
+	}
+	if cols > 5 {
+		cols = 5
+	}
+
+	rows := (len(u.candidates) + cols - 1) / cols
+
+	// If no current selection, start from top-left or bottom-right depending on direction
+	if u.candIdx == -1 {
+		if dy > 0 || dx > 0 {
+			u.candIdx = 0
+		} else {
+			u.candIdx = len(u.candidates) - 1
+		}
+	} else {
+		curRow := u.candIdx / cols
+		curCol := u.candIdx % cols
+
+		newCol := curCol + dx
+		newRow := curRow + dy
+
+		if newCol >= cols {
+			newCol = 0
+			newRow++
+		}
+		if newCol < 0 {
+			newCol = cols - 1
+			newRow--
+		}
+
+		if newRow >= rows {
+			newRow = 0
+		}
+		if newRow < 0 {
+			newRow = rows - 1
+		}
+
+		newIdx := newRow*cols + newCol
+		if newIdx >= len(u.candidates) {
+			if dx != 0 {
+				newIdx = 0
+			} else {
+				newIdx = len(u.candidates) - 1
+			}
+		}
+		u.candIdx = newIdx
+	}
+
+	input := string(u.chBuf)
+	parts := strings.SplitN(input, " ", 2)
+	if len(parts) == 2 && (parts[0] == "e" || parts[0] == "edit") {
+		u.chBuf = []rune(fmt.Sprintf("%s %s", parts[0], u.candidates[u.candIdx]))
+	} else {
+		u.chBuf = []rune(u.candidates[u.candIdx])
+	}
+	u.cursorPos = len(u.chBuf)
+}
+
 func (u *uiCommandLine) autocomplete() {
 	input := string(u.chBuf)
 	parts := strings.SplitN(input, " ", 2)
@@ -264,12 +374,7 @@ func (u *uiCommandLine) autocomplete() {
 		prefix := parts[1]
 
 		if len(u.candidates) > 0 {
-			u.candIdx++
-			if u.candIdx >= len(u.candidates) {
-				u.candIdx = 0
-			}
-			u.chBuf = []rune(fmt.Sprintf("%s %s", cmdPart, u.candidates[u.candIdx]))
-			u.cursorPos = len(u.chBuf)
+			u.navigateCandidate(1, 0)
 			return
 		}
 
@@ -332,11 +437,7 @@ func (u *uiCommandLine) autocomplete() {
 	// Command name completion
 	prefix := input
 	if len(u.candidates) > 0 {
-		u.candIdx++
-		if u.candIdx >= len(u.candidates) {
-			u.candIdx = 0
-		}
-		u.chBuf = []rune(u.candidates[u.candIdx])
+		u.navigateCandidate(1, 0)
 		return
 	}
 
@@ -671,12 +772,51 @@ func (u *uiCommandLine) Render(view wig.View) {
 
 	// Show candidates visually on the line above the prompt (like Vim)
 	if len(u.candidates) > 1 {
-		candStr := strings.Join(u.candidates, "  ")
-		if len(candStr) > vw {
-			candStr = candStr[:vw]
+		maxLen := 0
+		for _, c := range u.candidates {
+			if len([]rune(c)) > maxLen {
+				maxLen = len([]rune(c))
+			}
 		}
-		if vh-2 >= 0 {
-			view.SetContent(0, vh-2, candStr, bgStyle)
+		colWidth := maxLen + 2
+		if colWidth > 30 {
+			colWidth = 30
+		}
+
+		cols := vw / colWidth
+		if cols == 0 {
+			cols = 1
+		}
+		if cols > 5 {
+			cols = 5
+		}
+
+		rows := (len(u.candidates) + cols - 1) / cols
+		for r := 0; r < rows; r++ {
+			y := vh - 2 - r
+			if y < 0 {
+				break
+			}
+			view.SetContent(0, y, strings.Repeat(" ", vw), bgStyle)
+		}
+
+		for i, c := range u.candidates {
+			r := i / cols
+			col := i % cols
+			y := vh - 2 - r
+			if y < 0 {
+				break
+			}
+			x := col * colWidth
+			itemStyle := bgStyle
+			if i == u.candIdx {
+				itemStyle = bgStyle.Reverse(true)
+			}
+			cStr := truncate(c, colWidth)
+			view.SetContent(x, y, cStr, itemStyle)
+			if pad := colWidth - len([]rune(cStr)); pad > 0 {
+				view.SetContent(x+len([]rune(cStr)), y, strings.Repeat(" ", pad), itemStyle)
+			}
 		}
 	}
 }
