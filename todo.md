@@ -150,7 +150,7 @@
 
 ### Low Priority (Advanced / Plugins)
 - [ ] **Terminal Emulator**: Built-in terminal (`:term`)
-- [ ] **Tags**: Ctags integration (`:tag`, `Ctrl-]`, `Ctrl-t`)
+- [v] **Tags**: Ctags integration (`:tag`, `Ctrl-]`, `Ctrl-t`)
 - [ ] **Diff Mode**: `vimdiff` support
 - [ ] **Statusline Customization**: `set statusline=...` or config equivalent
 - [ ] **Inline LSP Actions**: Rename (`<leader>rn`), Code Actions (`<leader>ca`)

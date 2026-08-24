@@ -354,6 +354,8 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 			"%":      wig.CmdMatchPair,
 			"u":      wig.CmdUndo,
 			"ctrl+r": wig.CmdRedo,
+			"ctrl+]": commands.CmdTagJump,
+			"ctrl+t": wig.CmdJumpBack,
 			":":      ui.CmdLineInit,
 			"/":      ui.CmdSearchPromptInit,
 			";":      commands.CmdBufferPicker,

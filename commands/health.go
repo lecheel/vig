@@ -223,6 +223,7 @@ func collectHealthSections() []healthSection {
 			checkTool("git-ai", "AI commit generator (git-ai --tool)", false, "--help"),
 			checkTool("rg", "Ripgrep (project search & file finder)", true, "--version"),
 			checkTool("make", "Make build tool (make run, make test)", false, "--version"),
+			checkTool("ctags", "Ctags (tags generation, tag jumping)", false, "--version"),
 		},
 	}
 	sections = append(sections, coreSection)

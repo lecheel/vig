@@ -86,6 +86,8 @@ func init() {
 	wig.AllCommands["CmdExecute"] = wig.CmdDefinition{Desc: "Execute buffer", Fn: CmdExecute}
 	wig.AllCommands["CmdCurrentBufferDirFilePicker"] = wig.CmdDefinition{Desc: "Find file in current dir", Fn: CmdCurrentBufferDirFilePicker}
 	wig.AllCommands["CmdGotoDefinition"] = wig.CmdDefinition{Desc: "Go to definition", Fn: CmdGotoDefinition}
+	wig.AllCommands["CmdTagJump"] = wig.CmdDefinition{Desc: "Jump to tag under cursor", Fn: CmdTagJump}
+	wig.AllCommands["tag"] = wig.CmdDefinition{Desc: "Jump to tag", Fn: CmdTag}
 	wig.AllCommands["CmdLspStatus"] = wig.CmdDefinition{Desc: "Show LSP connection status", Fn: CmdLspStatus}
 	wig.AllCommands["lspstatus"] = wig.CmdDefinition{Desc: "Show LSP connection status", Fn: CmdLspStatus}
 	wig.AllCommands["CmdGotoDefinitionOtherWindow"] = wig.CmdDefinition{Desc: "Go to definition in other window", Fn: CmdGotoDefinitionOtherWindow}
