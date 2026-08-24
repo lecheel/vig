@@ -16,14 +16,43 @@ import (
 var cmdHistory []string
 
 type uiCommandLine struct {
-	e          *wig.Editor
-	keymap     *wig.KeyHandler
-	chBuf      []rune
-	cursorPos  int
-	historyIdx int
-	candidates []string
-	candIdx    int
-	ctrlRMode  bool
+	e                 *wig.Editor
+	keymap            *wig.KeyHandler
+	chBuf             []rune
+	cursorPos         int
+	historyIdx        int
+	candidates        []string
+	candIdx           int
+	ctrlRMode         bool
+	origSearchPattern string
+}
+
+func (u *uiCommandLine) updateSubstitutionHighlight() {
+	input := string(u.chBuf)
+	rest := input
+	if strings.HasPrefix(rest, "%") {
+		rest = rest[1:]
+	}
+	if strings.HasPrefix(rest, "s/") {
+		rest = rest[2:]
+		pattern := ""
+		for i := 0; i < len(rest); i++ {
+			if rest[i] == '\\' && i+1 < len(rest) {
+				pattern += string(rest[i])
+				pattern += string(rest[i+1])
+				i++
+				continue
+			}
+			if rest[i] == '/' {
+				break
+			}
+			pattern += string(rest[i])
+		}
+		if wig.LastSearchPattern != pattern {
+			wig.LastSearchPattern = pattern
+			u.e.Redraw()
+		}
+	}
 }
 
 func (u *uiCommandLine) Plane() wig.RenderPlane {
@@ -32,12 +61,13 @@ func (u *uiCommandLine) Plane() wig.RenderPlane {
 
 func CmdLineInit(ctx wig.Context) {
 	u := &uiCommandLine{
-		e:          ctx.Editor,
-		chBuf:      make([]rune, 0, 32),
-		cursorPos:  0,
-		historyIdx: len(cmdHistory), // Start at the end of history
-		candidates: []string{},
-		candIdx:    -1,
+		e:                 ctx.Editor,
+		chBuf:             make([]rune, 0, 32),
+		cursorPos:         0,
+		historyIdx:        len(cmdHistory),
+		candidates:        []string{},
+		candIdx:           -1,
+		origSearchPattern: wig.LastSearchPattern,
 	}
 
 	// Pre-fill range for visual modes, exactly like Vim
@@ -48,7 +78,9 @@ func CmdLineInit(ctx wig.Context) {
 	u.keymap = wig.NewKeyHandler(wig.ModeKeyMap{
 		wig.MODE_INSERT: wig.KeyMap{
 			"Esc": func(ctx wig.Context) {
+				wig.LastSearchPattern = u.origSearchPattern
 				ctx.Editor.PopUi()
+				ctx.Editor.Redraw()
 			},
 			"Enter": func(ctx wig.Context) {
 				cmd := string(u.chBuf)
@@ -216,10 +248,12 @@ func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 			u.cursorPos = 0
 			u.candidates = []string{}
 			u.candIdx = -1
+			u.updateSubstitutionHighlight()
 		case tcell.KeyCtrlK:
 			u.chBuf = u.chBuf[:u.cursorPos]
 			u.candidates = []string{}
 			u.candIdx = -1
+			u.updateSubstitutionHighlight()
 		case tcell.KeyCtrlW:
 			if u.cursorPos == 0 {
 				return
@@ -235,6 +269,7 @@ func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 			u.cursorPos = start
 			u.candidates = []string{}
 			u.candIdx = -1
+			u.updateSubstitutionHighlight()
 		}
 		return
 	}
@@ -250,6 +285,7 @@ func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 			u.cursorPos--
 			u.candidates = []string{}
 			u.candIdx = -1
+			u.updateSubstitutionHighlight()
 		}
 		return
 	case tcell.KeyDelete:
@@ -257,6 +293,7 @@ func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 			u.chBuf = append(u.chBuf[:u.cursorPos], u.chBuf[u.cursorPos+1:]...)
 			u.candidates = []string{}
 			u.candIdx = -1
+			u.updateSubstitutionHighlight()
 		}
 		return
 	case tcell.KeyLeft:
@@ -276,12 +313,13 @@ func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 		u.cursorPos = len(u.chBuf)
 		return
 	case tcell.KeyRune:
-		u.chBuf = append(u.chBuf, 0) // dummy to expand slice
+		u.chBuf = append(u.chBuf, 0)
 		copy(u.chBuf[u.cursorPos+1:], u.chBuf[u.cursorPos:])
 		u.chBuf[u.cursorPos] = ev.Rune()
 		u.cursorPos++
 		u.candidates = []string{}
 		u.candIdx = -1
+		u.updateSubstitutionHighlight()
 		return
 	}
 }
@@ -605,9 +643,11 @@ func (u *uiCommandLine) runCommand(cmd string) {
 
 		re, err := regexp.Compile(pattern)
 		if err != nil {
+			wig.LastSearchPattern = u.origSearchPattern
 			u.e.EchoMessage("Invalid regex: " + err.Error())
 			return
 		}
+		wig.LastSearchPattern = pattern
 
 		if !confirm {
 			if buf.TxStart() {
