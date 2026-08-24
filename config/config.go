@@ -383,6 +383,7 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 				"f": wig.CmdDeleteTo,
 				"t": wig.CmdDeleteBefore,
 				"$": wig.CmdDeleteEndOfLine,
+				"G": wig.CmdDeleteEndOfFile,
 			},
 			"y": wig.KeyMap{
 				"y": wig.CmdYank,

@@ -363,6 +363,19 @@ func CmdDeleteEndOfLine(ctx Context) {
 	CmdNormalMode(ctx)
 }
 
+func CmdDeleteEndOfFile(ctx Context) {
+	if ctx.Buf.TxStart() {
+		defer ctx.Buf.TxEnd()
+	}
+	CmdVisualLineMode(ctx)
+	ctx.Buf.Selection.End.Line = ctx.Buf.Lines.Len - 1
+	ctx.Buf.Selection.End.Char = len(CursorLineByNum(ctx.Buf, ctx.Buf.Lines.Len-1).Value) - 1
+	yankSave(ctx)
+	SelectionDelete(ctx)
+	CmdNormalMode(ctx)
+	ctx.Editor.LastRepeatableFn = CmdDeleteEndOfFile
+}
+
 func CmdDeleteTo(_ Context) func(Context) {
 	return func(ctx Context) {
 		if ctx.Buf.TxStart() {
