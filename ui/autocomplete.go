@@ -10,6 +10,7 @@ import (
 type AutocompleteWidget struct {
 	ctx            wig.Context
 	triggerPos     wig.Cursor
+	triggerCol     int
 	keymap         *wig.KeyHandler
 	pos            wig.Position
 	items          wig.CompletionItems
@@ -35,9 +36,15 @@ func AutocompleteInit(
 		return nil
 	}
 
+	curScreenX := 0
+	if line := wig.CursorLine(ctx.Buf, &wig.Cursor{Line: pos.Line, Char: pos.Char}); line != nil {
+		curScreenX = wig.VisualCol(line.Value, pos.Char) + WindowTextPadding(ctx.Editor, ctx.Buf)
+	}
+
 	widget := &AutocompleteWidget{
 		ctx:        ctx,
 		pos:        pos,
+		triggerCol: curScreenX,
 		items:      items,
 		activeItem: 0,
 		refreshFn:  refreshFn,
@@ -242,7 +249,7 @@ func (w *AutocompleteWidget) selectItem(ctx wig.Context) {
 
 func (w *AutocompleteWidget) Render(view wig.View) {
 	cur := wig.ContextCursorGet(w.ctx)
-	x := w.pos.Char + 2
+	x := w.triggerCol + 1
 	y := w.pos.Line - cur.ScrollOffset + 1
 	maxItems := min(10, len(w.items.Items))
 	vw, winHeight := view.Size()
@@ -251,7 +258,7 @@ func (w *AutocompleteWidget) Render(view wig.View) {
 	}
 	listWidth := 50
 	listY := y
-	drawBoxNoBorder(view, w.pos.Char, y, listWidth, maxItems, wig.Color("ui.menu"))
+	drawBoxNoBorder(view, w.triggerCol, y, listWidth, maxItems, wig.Color("ui.menu"))
 	// pagination
 	pageSize := maxItems
 	pageNumber := math.Ceil(float64(w.activeItem+1)/float64(pageSize)) - 1
@@ -273,7 +280,7 @@ func (w *AutocompleteWidget) Render(view wig.View) {
 		}
 		y++
 	}
-	w.renderDoc(view, w.pos.Char, listY, maxItems, listWidth, vw)
+	w.renderDoc(view, w.triggerCol, listY, maxItems, listWidth, vw)
 }
 
 // renderDoc draws a documentation popup next to the candidate list,
