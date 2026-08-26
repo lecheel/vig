@@ -104,7 +104,7 @@ func getActiveRegister(ctx Context) rune {
 	return '"'
 }
 
-func saveYank(ctx Context, text string, isLine bool, isBlock bool) {
+func saveRegister(ctx Context, text string, isLine bool, isBlock bool, isYank bool) {
 	if text == "" {
 		return
 	}
@@ -113,13 +113,29 @@ func saveYank(ctx Context, text string, isLine bool, isBlock bool) {
 		return // Black hole register: discard
 	}
 
-	// 1. Always update dedicated yank register '0'
-	SetRegister('0', text, isLine, isBlock)
+	if isYank {
+		// Always update dedicated yank register '0'
+		SetRegister('0', text, isLine, isBlock)
+	} else {
+		// If small deletion (< 1 line, no newline), store in '-'. Otherwise shift '1'-'9'.
+		if !isLine && !strings.Contains(text, "\n") {
+			SetRegister('-', text, isLine, isBlock)
+		} else {
+			for i := 9; i > 1; i-- {
+				prevKey := rune('0' + i - 1)
+				currKey := rune('0' + i)
+				if r, ok := NamedRegisters[prevKey]; ok {
+					NamedRegisters[currKey] = r
+				}
+			}
+			SetRegister('1', text, isLine, isBlock)
+		}
+	}
 
-	// 2. Always update default unnamed register '"'
+	// Always update default unnamed register '"'
 	SetRegister('"', text, isLine, isBlock)
 
-	// 3. Update target register if specified
+	// Update target register if specified
 	switch {
 	case reg == '+' || reg == '*':
 		_ = clipboard.WriteAll(text)
@@ -132,43 +148,12 @@ func saveYank(ctx Context, text string, isLine bool, isBlock bool) {
 	}
 }
 
+func saveYank(ctx Context, text string, isLine bool, isBlock bool) {
+	saveRegister(ctx, text, isLine, isBlock, true)
+}
+
 func saveDelete(ctx Context, text string, isLine bool, isBlock bool) {
-	if text == "" {
-		return
-	}
-	reg := getActiveRegister(ctx)
-	if reg == '_' {
-		return // Black hole register: discard
-	}
-
-	// 1. If small deletion (< 1 line, no newline), store in '-'. Otherwise shift '1'-'9'.
-	if !isLine && !strings.Contains(text, "\n") {
-		SetRegister('-', text, isLine, isBlock)
-	} else {
-		for i := 9; i > 1; i-- {
-			prevKey := rune('0' + i - 1)
-			currKey := rune('0' + i)
-			if r, ok := NamedRegisters[prevKey]; ok {
-				NamedRegisters[currKey] = r
-			}
-		}
-		SetRegister('1', text, isLine, isBlock)
-	}
-
-	// 2. Always update default unnamed register '"'
-	SetRegister('"', text, isLine, isBlock)
-
-	// 3. Update target register if specified
-	switch {
-	case reg == '+' || reg == '*':
-		_ = clipboard.WriteAll(text)
-	case reg >= 'a' && reg <= 'z':
-		SetRegister(reg, text, isLine, isBlock)
-	case reg >= 'A' && reg <= 'Z':
-		lower := reg + ('a' - 'A')
-		existing := NamedRegisters[lower].Val
-		SetRegister(lower, existing+text, isLine, isBlock)
-	}
+	saveRegister(ctx, text, isLine, isBlock, false)
 }
 
 func getPutText(ctx Context) (text string, isLine bool, isBlock bool) {
