@@ -11,12 +11,17 @@
   - Myers diff-based Undo / Redo
   - Yank and Put with rectangle block support
   - Auto-indentation and comment toggling (`CmdToggleComment`)
+  - **Delete to end of file (`dG`, `CmdDeleteEndOfFile`)**
+  - **Boolean toggle command (`toggle`, toggles true/false)**
+  - **Extended comment motions**: `gcc`, `gcj`, `gck`, `gc$`, `gcG`, `gcgg`, `gcip`, `gcap` with paragraph and text‑object support
+  - **Save with feedback** (lines/bytes written, visual toast) and **save-as** (`:w <filename>`)
 
 - **Movement**
   - Directional navigation: `h`, `j`, `k`, `l`, `w`, `b`, `0`, `$`
   - Target jumps: `%` (matching pair), `f`/`F`/`t`/`T` (find before/to character)
   - Scrolling: Page Up/Down, Line Up/Down
   - EasyMotion: `s` 2-character viewport jump with home-row target overlays (Normal and Visual)
+  - **End‑of‑file jump (`G`)**
 
 - **Marks**
   - `m[a-z]` to set local buffer marks
@@ -26,15 +31,19 @@
 
 - **Search**
   - Incremental search (`/`) with live match highlighting and cursor preview
-  - Result navigation with `n` (next) and `N` (previous)
-  - Project-wide search via ripgrep (`<Leader>f`, `:s`)
+  - Result navigation with `n` (next) and `N` (previous) – **selection is extended during searches**
+  - Project-wide search via ripgrep (`<Leader>f`, `:s`, `:rg`)
   - Word under cursor search (`CmdSearchWordUnderCursor`, `CmdRgUnderCursor`)
+  - **Real‑time highlighting for substitution commands** (`:s/…`) while typing
+  - **Support for escaped delimiters** (`\/`) in search & replace patterns
 
 - **File Management**
   - Open and save files (with auto-creation when path does not exist)
   - Buffer picker (`CmdBufferPicker`)
   - Most Recently Used buffer picker (`CmdMRUBufferPicker`)
   - File picker and command palette
+  - **`config` command to open `~/.config/wig/config.toml` (creates if missing)**
+  - **`--gf` (git files) and `--gs` (git status) CLI flags to open pickers on startup**
 
 - **Window Management**
   - Vertical split (`:vs`, `CmdWindowVSplit`)
@@ -55,6 +64,8 @@
   - Git gutter signs (+, -, ~) and hunk navigation (`]h`/`[h`), preview, and revert
   - Inline Git Blame (`blame`) and commit inspection buffer (`CmdGitBlameCommit`)
   - Clean buffer lifecycle: `q`/`Esc` kills temporary git, diff, and commit buffers
+  - **AI commit message generation** (`git-ai` integration, with spinner and cancellation via Esc/q)
+  - **Git files picker** (`gfiles` command, toggles between status and last commit views)
 
 - **LSP (Language Server Protocol)**
   - Autocompletion popup with auto-trigger
@@ -62,9 +73,12 @@
   - Hover documentation popup (`K`, `CmdLspHover`)
   - Signature help (`CmdLspShowSignature`)
   - Document diagnostics and Quickfix list (`:copen`)
+  - **LSP status command (`:LspStatus`, `:diagnostics` / `:diags` to populate quickfix)**
+  - **Decoupled quickfix population from diagnostic viewing**
 
 - **Syntax Highlighting**
-  - Tree-sitter integration for Go, Rust, Odin, C, and Python
+  - Tree-sitter integration for **Go**, **Rust**, **Odin**, **C**, **Python**, **Bash**, **JSON**, **TOML**
+  - **Shebang detection** for Python (and bash‑like shells)
   - Custom query support via `~/.config/wig/queries/<lang>/highlights.scm`
 
 - **UI Elements**
@@ -75,6 +89,10 @@
   - Command line, search prompt, hover popup, and autocomplete popup
   - Confirm prompts (`ui.ConfirmInit`) and marks popup (`ui.mark`)
   - Unified popup border and title styling (`ui.popup.title`)
+  - **Quickfix popup widget** (alternative to split, with j/k navigation and direct jumps)
+  - **Autocomplete navigation with arrow keys** (multi‑column grid, 2D candidate cycling)
+  - **Command‑line cursor editing** (Home, End, Left, Right, Emacs‑style `Ctrl‑a/e/u/k/w`)
+  - **`Ctrl‑r Ctrl‑w`** inserts the word under cursor into the command line
 
 - **System & Integration**
   - System clipboard: copy (`<Leader>y`), paste at cursor (`<Leader>pv`), replace buffer (`<Leader>pp`)
@@ -83,6 +101,10 @@
   - Position cache (persists cursor position and open counts across sessions)
   - CLI flags: `--help`, `--edit`, `--health` (`checkhealth`)
   - Thread-safe event manager and buffer concurrency protection
+  - **Comprehensive register system** with popup (`:reg` / `:registers`):
+    - Named registers (`a-z`), unnamed (`"`), yank history (`0-9`)
+    - System clipboard (`+`, `*`), current file (`%`), search pattern (`/`)
+    - Last inserted text (`.`), last command (`:`), and `Ctrl‑r` insertion in insert/command modes
 
 - **Macros & Repeat**
   - Macro recording and playback (`q[a-z]`, `@[a-z]` with count support, e.g. `3@a`)
@@ -93,9 +115,11 @@
 
 - **Configuration**
   - `~/.config/wig/config.toml`:
-    - `[editor]`: theme, line numbers, format-on-save, git view modes, indent guides, LSP toggle, which-key format
+    - `[editor]`: theme, line numbers, format-on-save, git view modes, indent guides, LSP toggle, which-key format, **`notify_on_save`**, **`same_statusline_color`**
     - `[keys]`: custom mode keymaps with command resolution from `wig.AllCommands`
     - Ability to disable / unbind default keybindings via `CmdDummyNA`
+    - **Configurable leader key** (`Leader` setting, supports `<leader>` placeholder)
+    - **Multi‑key sequence support** (e.g., `<leader>f`, `<c-w>h`) with token‑based expansion
   - `~/.config/wig/languages.toml`:
     - LSP definitions, command arguments, and language-specific indentation settings
   - Runtime theme switcher (`<Leader>t`) and virtual indent guides toggle (`<Leader>i`)
@@ -106,12 +130,16 @@
 
 - **Result Navigation**
   - `:cn` and `:cp` to navigate search/diagnostic results (dot-repeatable via `Repeatable` flag)
+  - **Visit handlers for `rgcollect` and `quickfix` buffers**
 
 - **Command Line & Ex Mode**
   - Line jump (`:123`), file open (`:e <file>`), toast notification (`:info [msg]`)
   - Command argument parsing
   - Search & replace (`:s/...`, `:%s/...`, `:'<,'>s/...` with `c` and `g` flags)
   - Full line editing shortcuts: `Ctrl-a`, `Ctrl-e`, `Ctrl-w`, `Ctrl-r Ctrl-w`
+  - **Visual‑mode prefilled range** (`'<,'>`) when `:` is pressed from visual mode
+  - **`Ctrl‑r` (register insertion) in command line**
+
 
 - **Completion**
   - LSP completions
@@ -135,22 +163,16 @@
 - [ ] **Sessions**: Save & restore workspace sessions (`:mksession`, layout, open buffers, cursor locations)
 - [ ] **Folding**: `zc`, `zo`, `za` with syntax/indent based folding
 - [ ] **Tabs**: Vim-style tabs (`:tabnew`, `gt`, `gT`)
-- [ ] **Jumplist**: `Ctrl-o` (jump back), `Ctrl-i` (jump forward) across all jumps
+- [ ] **Jumplist**: `Ctrl-o` (jump back), `Ctrl-i` (jump forward) across all jumps *(basic search‑based jump list exists)*
 - [ ] **Mouse Support**: Click to set cursor, drag to select visual mode, scroll wheel
 - [v] **System Clipboard Integration**: Copy/paste via `<Leader>y`, `<Leader>pv`, `<Leader>pp` and bracketed paste
-- [v] **Named & System Registers**
-  - Register popup (`"` / `:reg` / `:registers`)
-  - Preview
-  - `%` current file
-  - `+`/`*` system clipboard
-  - `0` last yank
-  - `1`–`9` history
+- [v] **Named & System Registers** (complete with popup, yank history, system clipboard, etc.)
 - [ ] **Word Motions**: `e` (end of word), `ge` (end of word backward), `W`, `B`, `E` (WORD motions)
 - [ ] **Multi-cursor**: `Ctrl-n`/`Ctrl-v` multi-edit
 
 ### Low Priority (Advanced / Plugins)
 - [ ] **Terminal Emulator**: Built-in terminal (`:term`)
-- [v] **Tags**: Ctags integration (`:tag`, `Ctrl-]`, `Ctrl-t`)
+- [v] **Tags**: Ctags integration (`:tag`, `Ctrl-]`, `Ctrl-t`) with caching and picker for ambiguous matches
 - [ ] **Diff Mode**: `vimdiff` support
 - [ ] **Statusline Customization**: `set statusline=...` or config equivalent
 - [ ] **Inline LSP Actions**: Rename (`<leader>rn`), Code Actions (`<leader>ca`)
