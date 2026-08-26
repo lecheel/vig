@@ -90,6 +90,12 @@ func init() {
 	wig.AllCommands["tag"] = wig.CmdDefinition{Desc: "Jump to tag", Fn: CmdTag}
 	wig.AllCommands["CmdLspStatus"] = wig.CmdDefinition{Desc: "Show LSP connection status", Fn: CmdLspStatus}
 	wig.AllCommands["lspstatus"] = wig.CmdDefinition{Desc: "Show LSP connection status", Fn: CmdLspStatus}
+	wig.AllCommands["CmdCtagdSaved"] = wig.CmdDefinition{Desc: "Notify ctagd of saved file", Fn: CmdCtagdSaved}
+	wig.AllCommands["CmdCtagdGotoDefinition"] = wig.CmdDefinition{Desc: "Go to definition (ctagd)", Fn: CmdCtagdGotoDefinition}
+	wig.AllCommands["CmdCtagdGoto"] = wig.CmdDefinition{Desc: "Jump to symbol (ctagd)", Fn: CmdCtagdGoto}
+	wig.AllCommands["CmdCtagdWorkspaceSymbols"] = wig.CmdDefinition{Desc: "Search workspace symbols (ctagd)", Fn: CmdCtagdWorkspaceSymbols}
+	wig.AllCommands["CmdCtagdStatus"] = wig.CmdDefinition{Desc: "Show ctagd daemon status", Fn: CmdCtagdStatus}
+	wig.AllCommands["ctagdstatus"] = wig.CmdDefinition{Desc: "Show ctagd daemon status", Fn: CmdCtagdStatus}
 	wig.AllCommands["CmdGotoDefinitionOtherWindow"] = wig.CmdDefinition{Desc: "Go to definition in other window", Fn: CmdGotoDefinitionOtherWindow}
 	wig.AllCommands["CmdViewDefinitionOtherWindow"] = wig.CmdDefinition{Desc: "View definition in other window", Fn: CmdViewDefinitionOtherWindow}
 	wig.AllCommands["CmdLspShowSignature"] = wig.CmdDefinition{Desc: "Show LSP signature", Fn: CmdLspShowSignature}

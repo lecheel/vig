@@ -224,6 +224,7 @@ func collectHealthSections() []healthSection {
 			checkTool("rg", "Ripgrep (project search & file finder)", true, "--version"),
 			checkTool("make", "Make build tool (make run, make test)", false, "--version"),
 			checkTool("ctags", "Ctags (tags generation, tag jumping)", false, "--version"),
+			checkTool("ctagd", "Ctags daemon (ctagd) — instant symbol lookup via Unix socket", false, "--version"),
 		},
 	}
 	sections = append(sections, coreSection)

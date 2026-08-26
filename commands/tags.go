@@ -167,6 +167,11 @@ func CmdTagJump(ctx wig.Context) {
 		ctx.Editor.EchoMessage("tag: no word under cursor")
 		return
 	}
+	// Try the ctagd daemon first (instant SQLite-backed lookup), then fall
+	// back to the local tags file if the daemon is unavailable.
+	if ctagdGotoAndJump(ctx, word) {
+		return
+	}
 	jumpToTagName(ctx, word)
 }
 
@@ -180,6 +185,9 @@ func CmdTag(ctx wig.Context) {
 		}
 		tagsCache.tags = nil
 		ctx.Editor.EchoMessage("tags updated")
+		return
+	}
+	if ctagdGotoAndJump(ctx, word) {
 		return
 	}
 	jumpToTagName(ctx, word)

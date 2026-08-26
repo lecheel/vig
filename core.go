@@ -13,6 +13,12 @@ const minVisibleLines = 5
 // LastInsertedText tracks the last inserted text for the '.' register
 var LastInsertedText string
 
+// OnSaveHook is invoked after a buffer is successfully saved to disk.
+// External packages (e.g. commands) that cannot import wig directly set this
+// to receive save notifications — used by the ctagd daemon client to push
+// `saved` events without blocking the editor.
+var OnSaveHook func(Context)
+
 func TextInsert(buf *Buffer, line *Element[Line], pos int, text string) {
 	if buf == nil || line == nil || text == "" {
 		return
@@ -745,6 +751,9 @@ func CmdSaveFile(ctx Context) {
 	// Mark saved state *after* any format-on-save transaction has been pushed.
 	ctx.Buf.UndoRedo.SavedAtPosition = ctx.Buf.UndoRedo.Position
 	ctx.Editor.Lsp.DidSave(ctx.Buf)
+	if OnSaveHook != nil {
+		OnSaveHook(ctx)
+	}
 }
 
 func CmdKillBuffer(ctx Context) {
