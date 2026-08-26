@@ -1,6 +1,8 @@
 package wig
 
 import (
+	"strings"
+
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
@@ -99,6 +101,8 @@ func (u *UndoRedo) Undo() {
 		return
 	}
 
+	u.applyMarksAdjust(edits)
+
 	res := gotextdiff.ApplyEdits(u.Buf.String(), edits)
 	u.Buf.ResetLines()
 	u.Buf.Append(res)
@@ -115,6 +119,40 @@ func (u *UndoRedo) Undo() {
 	}
 }
 
+// applyMarksAdjust updates the marks in all windows showing this buffer
+// based on the edits being applied. Because gotextdiff edits are absolute
+// and non-overlapping, processing them in reverse (bottom-to-top) avoids
+// line-number interference between multiple edits in the same transaction.
+func (u *UndoRedo) applyMarksAdjust(edits []gotextdiff.TextEdit) {
+	if EditorInst == nil {
+		return
+	}
+	for i := len(edits) - 1; i >= 0; i-- {
+		e := edits[i]
+		// gotextdiff/span Positions are 1-based (token.Position convention);
+		// wig's marks and MarkAdjustInternal use 0-based line numbers.
+		startLine := e.Span.Start().Line() - 1
+		endLine := e.Span.End().Line() - 1
+		newText := e.NewText
+
+		// Delete phase
+		linesDeleted := endLine - startLine
+		if linesDeleted > 0 {
+			for _, w := range EditorInst.WindowsForBuffer(u.Buf) {
+				MarkAdjustInternal(w, startLine, endLine, -linesDeleted, 0)
+			}
+		}
+
+		// Insert phase
+		newLines := strings.Count(newText, "\n")
+		if newLines > 0 {
+			for _, w := range EditorInst.WindowsForBuffer(u.Buf) {
+				MarkAdjustInternal(w, startLine+1, startLine, newLines, 0)
+			}
+		}
+	}
+}
+
 func (u *UndoRedo) Redo() {
 	if !u.checkPosition() {
 		return
@@ -124,6 +162,9 @@ func (u *UndoRedo) Redo() {
 	if len(edits) == 0 {
 		return
 	}
+
+	u.applyMarksAdjust(edits)
+
 	res := gotextdiff.ApplyEdits(u.Buf.String(), edits)
 	u.Buf.ResetLines()
 	u.Buf.Append(res)

@@ -77,6 +77,18 @@ func TextInsert(buf *Buffer, line *Element[Line], pos int, text string) {
 		}
 	}
 
+	if event.NewEnd.Line > sline {
+		// Lines were inserted starting at sline (e.g. a multi-line paste
+		// or pressing Enter). Nothing "inside" the insertion point moves;
+		// everything strictly after it shifts down by the number of new
+		// lines. This mirrors vim's convention of using an empty
+		// [line1, line1-1] range for pure insertions.
+		amount := event.NewEnd.Line - sline
+		for _, w := range EditorInst.WindowsForBuffer(buf) {
+			MarkAdjustInternal(w, sline+1, sline, amount, 0)
+		}
+	}
+
 	if EditorInst != nil && EditorInst.Events != nil {
 		EditorInst.Events.Broadcast(event)
 	}
@@ -105,6 +117,16 @@ func TextDelete(buf *Buffer, selection *Selection) {
 			sel.End.Line++
 			sel.End.Char = 0
 			lineEnd = tmpLine
+		}
+	}
+
+	if linesDeleted := sel.End.Line - sel.Start.Line; linesDeleted > 0 {
+		// The deletion spans [sel.Start.Line, sel.End.Line]; amount is
+		// negative since lines are being removed, so soft marks in the
+		// range collapse onto sel.Start.Line and hard marks are
+		// invalidated (see MarkAdjustInternal).
+		for _, w := range EditorInst.WindowsForBuffer(buf) {
+			MarkAdjustInternal(w, sel.Start.Line, sel.End.Line, -linesDeleted, 0)
 		}
 	}
 

@@ -254,6 +254,21 @@ func (e *Editor) EnsureBufferIsVisible(b *Buffer) {
 	e.Windows = append(e.Windows, win)
 }
 
+// WindowsForBuffer returns every window whose
+// currently displayed buffer is buf. This is used to fan out mark-range
+// adjustments (MarkAdjustInternal / MarkColAdjust) to every window that
+// holds marks for the buffer being edited, since marks live per-window
+// rather than per-buffer.
+func (e *Editor) WindowsForBuffer(buf *Buffer) []*Window {
+	var out []*Window
+	for _, w := range e.Windows {
+		if w.buf == buf {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
 func (e *Editor) HandleInput(ev *tcell.EventKey) {
 	var k *KeyHandler
 	mode := e.ActiveBuffer().Mode()
