@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -23,53 +22,15 @@ func rgSearchLocations(ctx wig.Context, word string) []wig.Location {
 		return nil
 	}
 
-	type rgMatch struct {
-		Type string `json:"type"`
-		Data struct {
-			Path struct {
-				Text string `json:"text"`
-			} `json:"path"`
-			Lines struct {
-				Text string `json:"text"`
-			} `json:"lines"`
-			LineNumber int `json:"line_number"`
-			Submatches []struct {
-				Start int `json:"start"`
-				End   int `json:"end"`
-			} `json:"submatches"`
-		} `json:"data"`
+	locations := parseRgJSON(stdout)
+	if len(locations) == 0 {
+		return nil
 	}
 
-	var locations []wig.Location
-
-	for row := range strings.SplitSeq(string(stdout), "\n") {
-		row = strings.TrimSpace(row)
-		if len(row) == 0 {
-			continue
-		}
-
-		var match rgMatch
-		if err := json.Unmarshal([]byte(row), &match); err != nil {
-			continue
-		}
-		if match.Type != "match" {
-			continue
-		}
-
-		char := 0
-		if len(match.Data.Submatches) > 0 {
-			char = match.Data.Submatches[0].Start
-		}
-
-		fullPath := filepath.Join(rootDir, match.Data.Path.Text)
-		locations = append(locations, wig.Location{
-			Text:     match.Data.Lines.Text,
-			FilePath: fullPath,
-			Line:     match.Data.LineNumber,
-			Char:     char,
-		})
+	// Convert relative paths to absolute
+	for i := range locations {
+		locations[i].FilePath = filepath.Join(rootDir, locations[i].FilePath)
 	}
-
 	return locations
 }
 

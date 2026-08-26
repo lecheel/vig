@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -65,35 +64,11 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 }
 
 func rgDoSearch(ctx wig.Context, pat string) {
-	type RgJson struct {
-		Type string `json:"type"`
-		Data struct {
-			Path struct {
-				Text string `json:"text"`
-			} `json:"path"`
-			Lines struct {
-				Text string `json:"text"`
-			} `json:"lines"`
-			LineNumber     int `json:"line_number"`
-			AbsoluteOffset int `json:"absolute_offset"`
-			Submatches     []struct {
-				Match struct {
-					Text string `json:"text"`
-				} `json:"match"`
-				Start int `json:"start"`
-				End   int `json:"end"`
-			} `json:"submatches"`
-		} `json:"data"`
-	}
-
-	const tmatch = "match"
-
 	rootDir := ctx.Editor.Projects.GetRoot()
 
-	// search with rip grep only first word in pattern.
+	// search with ripgrep using only the first word as the actual rg pattern.
 	// everything else will be filtered with fuzzy matcher in ui/picker.
-	// this way we can achieve project-wide search like: "func cmd word"
-	searchFn := func(pat string) []ui.PickerItem[RgJson] {
+	searchFn := func(pat string) []ui.PickerItem[wig.Location] {
 		pat = strings.TrimSpace(pat)
 		if pat == "" {
 			return nil
@@ -109,63 +84,45 @@ func rgDoSearch(ctx wig.Context, pat string) {
 			return nil
 		}
 
-		items := []ui.PickerItem[RgJson]{}
-
-		for row := range strings.SplitSeq(string(stdout), "\n") {
-			row = strings.TrimSpace(row)
-			if len(row) == 0 {
-				continue
-			}
-
-			match := RgJson{}
-			json.Unmarshal([]byte(row), &match)
-			if match.Type != tmatch {
-				continue
-			}
-			trim := strings.TrimSpace
-
-			char := 0
-			if len(match.Data.Submatches) > 0 {
-				char = match.Data.Submatches[0].Start
-			}
-
-			relPath := trim(match.Data.Path.Text)
-			fullPath := filepath.Join(rootDir, relPath)
-			fname := fmt.Sprintf("%s:%d %s", relPath, match.Data.LineNumber, trim(match.Data.Lines.Text))
-			items = append(items, ui.PickerItem[RgJson]{
-				Name:  fname,
-				Value: match,
-				Location: wig.Location{
-					Text:     match.Data.Lines.Text,
-					FilePath: fullPath,
-					Line:     match.Data.LineNumber,
-					Char:     char,
-				},
-			})
+		locations := parseRgJSON(stdout)
+		if len(locations) == 0 {
+			return nil
 		}
 
+		items := make([]ui.PickerItem[wig.Location], 0, len(locations))
+		for _, loc := range locations {
+			relPath, _ := filepath.Rel(rootDir, loc.FilePath)
+			if relPath == "" {
+				relPath = loc.FilePath
+			}
+			fname := fmt.Sprintf("%s:%d %s", relPath, loc.Line, strings.TrimSpace(loc.Text))
+			// Store the location with absolute path for opening
+			absLoc := loc
+			absLoc.FilePath = filepath.Join(rootDir, loc.FilePath)
+			items = append(items, ui.PickerItem[wig.Location]{
+				Name:     fname,
+				Value:    absLoc,
+				Location: absLoc,
+			})
+		}
 		return items
 	}
 
-	action := func(p *ui.UiPicker[RgJson], i *ui.PickerItem[RgJson]) {
+	action := func(p *ui.UiPicker[wig.Location], i *ui.PickerItem[wig.Location]) {
 		defer ctx.Editor.PopUi()
 		if i == nil {
 			return
 		}
-		buf, err := ctx.Editor.OpenFile(filepath.Join(rootDir, i.Value.Data.Path.Text))
+		buf, err := ctx.Editor.OpenFile(i.Value.FilePath)
 		if err != nil {
 			return
-		}
-		char := 0
-		if len(i.Value.Data.Submatches) > 0 {
-			char = i.Value.Data.Submatches[0].Start
 		}
 		ctx.Buf = buf
 		ctx.Editor.ActiveWindow().VisitBuffer(
 			ctx,
 			wig.Cursor{
-				Line: max(i.Value.Data.LineNumber-1, 0),
-				Char: char,
+				Line: max(i.Value.Line-1, 0),
+				Char: i.Value.Char,
 			},
 		)
 		wig.CmdCursorCenter(ctx)

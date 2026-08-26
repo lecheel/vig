@@ -96,14 +96,6 @@ func updateTagsFile(rootDir string) error {
 	return nil
 }
 
-func findTagRoot(ctx wig.Context) string {
-	rootDir, err := ctx.Editor.Projects.FindRoot(ctx.Buf)
-	if err != nil || rootDir == "" {
-		rootDir = ctx.Editor.Projects.GetRoot()
-	}
-	return rootDir
-}
-
 func jumpToTag(ctx wig.Context, e TagEntry, rootDir string) {
 	filePath := e.File
 	if !filepath.IsAbs(filePath) {
