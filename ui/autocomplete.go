@@ -1,10 +1,10 @@
 package ui
 
 import (
-	"math"
-	"unicode"
-
 	"github.com/firstrow/wig"
+	"math"
+	"strings"
+	"unicode"
 )
 
 type AutocompleteWidget struct {
@@ -16,6 +16,9 @@ type AutocompleteWidget struct {
 	eventsListener <-chan wig.Event
 	activeItem     int
 	refreshFn      func() wig.CompletionItems
+	// Documentation popup state
+	docText   string
+	docScroll int
 }
 
 func (u *AutocompleteWidget) Plane() wig.RenderPlane {
@@ -46,46 +49,36 @@ func AutocompleteInit(
 				widget.Close()
 			},
 			"Up": func(ctx wig.Context) {
-				if widget.activeItem > 0 {
-					widget.activeItem--
-				}
+				widget.setActive(widget.activeItem - 1)
 			},
 			"Down": func(ctx wig.Context) {
-				if widget.activeItem < len(widget.items.Items)-1 {
-					widget.activeItem++
-				}
+				widget.setActive(widget.activeItem + 1)
 			},
 			"Home": func(ctx wig.Context) {
-				widget.activeItem = 0
+				widget.setActive(0)
 			},
 			"End": func(ctx wig.Context) {
-				if len(widget.items.Items) > 0 {
-					widget.activeItem = len(widget.items.Items) - 1
-				}
+				widget.setActive(len(widget.items.Items) - 1)
 			},
 			"PgUp": func(ctx wig.Context) {
-				widget.activeItem -= 5
-				if widget.activeItem < 0 {
-					widget.activeItem = 0
-				}
+				widget.setActive(widget.activeItem - 5)
 			},
 			"PgDn": func(ctx wig.Context) {
-				widget.activeItem += 5
-				if widget.activeItem >= len(widget.items.Items) {
-					widget.activeItem = len(widget.items.Items) - 1
-				}
-				if widget.activeItem < 0 {
-					widget.activeItem = 0
-				}
+				widget.setActive(widget.activeItem + 5)
 			},
 			"Tab": func(ctx wig.Context) {
-				if widget.activeItem < len(widget.items.Items)-1 {
-					widget.activeItem++
-				}
+				widget.setActive(widget.activeItem + 1)
 			},
 			"Backtab": func(ctx wig.Context) {
-				if widget.activeItem > 0 {
-					widget.activeItem--
+				widget.setActive(widget.activeItem - 1)
+			},
+			"ctrl+d": func(ctx wig.Context) {
+				widget.docScroll += 5
+			},
+			"ctrl+u": func(ctx wig.Context) {
+				widget.docScroll -= 5
+				if widget.docScroll < 0 {
+					widget.docScroll = 0
 				}
 			},
 			"Enter": widget.selectItem,
@@ -99,6 +92,8 @@ func AutocompleteInit(
 			switch event.Msg.(type) {
 			case wig.EventTextChange:
 				widget.activeItem = 0
+				widget.docText = ""
+				widget.docScroll = 0
 				if widget.refreshFn != nil {
 					widget.items = widget.refreshFn()
 				} else {
@@ -106,17 +101,77 @@ func AutocompleteInit(
 				}
 				if len(widget.items.Items) == 0 {
 					widget.Close()
+				} else {
+					widget.triggerDocResolve()
 				}
 				ctx.Editor.Redraw()
 			}
 		}
 	}()
-
 	ctx.Editor.PushUi(widget)
-
+	widget.triggerDocResolve()
 	return widget
 }
 
+// setActive clamps and sets the active item, resetting doc scroll and
+// kicking off documentation resolution for the newly active item. No-ops
+// if the index doesn't actually change (avoids redundant resolve calls
+// from repeated key presses at the list boundary).
+func (w *AutocompleteWidget) setActive(idx int) {
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(w.items.Items) {
+		idx = len(w.items.Items) - 1
+	}
+	if idx < 0 {
+		idx = 0
+	}
+	if w.activeItem == idx {
+		return
+	}
+	w.activeItem = idx
+	w.docScroll = 0
+	w.triggerDocResolve()
+}
+
+// triggerDocResolve shows any documentation already present on the active
+// item (Documentation or Detail from the initial completion response),
+// then asynchronously calls completionItem/resolve to fetch the fuller
+// docs most servers (e.g. gopls) only fill in lazily. Wordlist/buffer
+// completions have no resolve Data, so the round trip is skipped for them.
+func (w *AutocompleteWidget) triggerDocResolve() {
+	if w.activeItem < 0 || w.activeItem >= len(w.items.Items) {
+		w.docText = ""
+		return
+	}
+	item := w.items.Items[w.activeItem]
+	if item.Documentation.Value != "" {
+		w.docText = item.Documentation.Value
+	} else if item.Detail != "" {
+		w.docText = item.Detail
+	} else {
+		w.docText = ""
+	}
+	if item.Data == nil {
+		return
+	}
+	activeIdx := w.activeItem
+	buf := w.ctx.Buf
+	go func() {
+		doc, err := w.ctx.Editor.Lsp.CompletionItemResolve(buf, item)
+		if err != nil || doc == "" {
+			return
+		}
+		if w.activeItem != activeIdx {
+			return
+		}
+		if doc != w.docText {
+			w.docText = doc
+			w.ctx.Editor.Redraw()
+		}
+	}()
+}
 func (w *AutocompleteWidget) Close() {
 	w.ctx.Editor.PopUi()
 	w.ctx.Editor.Events.Unsubscribe(w.eventsListener)
@@ -189,16 +244,14 @@ func (w *AutocompleteWidget) Render(view wig.View) {
 	cur := wig.ContextCursorGet(w.ctx)
 	x := w.pos.Char + 2
 	y := w.pos.Line - cur.ScrollOffset + 1
-
 	maxItems := min(10, len(w.items.Items))
-
-	_, winHeight := view.Size()
+	vw, winHeight := view.Size()
 	if y+maxItems >= winHeight {
 		y -= maxItems + 2
 	}
-
-	drawBoxNoBorder(view, w.pos.Char, y, 50, maxItems, wig.Color("ui.menu"))
-
+	listWidth := 50
+	listY := y
+	drawBoxNoBorder(view, w.pos.Char, y, listWidth, maxItems, wig.Color("ui.menu"))
 	// pagination
 	pageSize := maxItems
 	pageNumber := math.Ceil(float64(w.activeItem+1)/float64(pageSize)) - 1
@@ -208,13 +261,11 @@ func (w *AutocompleteWidget) Render(view wig.View) {
 		endIndex = len(w.items.Items)
 	}
 	dataset := w.items.Items[startIndex:endIndex]
-
 	for i, row := range dataset {
 		st := wig.Color("ui.menu")
 		if i+startIndex == w.activeItem {
 			st = wig.Color("ui.menu.selected")
 		}
-
 		label := row.Label
 		view.SetContent(x, y, label, st)
 		if i >= maxItems {
@@ -222,4 +273,89 @@ func (w *AutocompleteWidget) Render(view wig.View) {
 		}
 		y++
 	}
+	w.renderDoc(view, w.pos.Char, listY, maxItems, listWidth, vw)
+}
+
+// renderDoc draws a documentation popup next to the candidate list,
+// preferring the right side and falling back to the left when there
+// isn't room. Height matches the candidate list; content scrolls via
+// docScroll (ctrl+d / ctrl+u).
+func (w *AutocompleteWidget) renderDoc(view wig.View, listX, listY, listHeight, listWidth, vw int) {
+	if w.docText == "" {
+		return
+	}
+	docWidth := 60
+	if docWidth > vw-listWidth-2 {
+		docWidth = vw - listWidth - 2
+	}
+	if docWidth < 20 {
+		return
+	}
+	docHeight := listHeight
+	docX := listX + listWidth + 1
+	if docX+docWidth > vw {
+		docX = listX - docWidth - 1
+	}
+	if docX < 0 {
+		return
+	}
+	wrapped := wrapText(w.docText, docWidth-2)
+	if len(wrapped) < docHeight {
+		docHeight = len(wrapped)
+	}
+	if docHeight < 1 {
+		return
+	}
+	maxScroll := len(wrapped) - docHeight
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if w.docScroll > maxScroll {
+		w.docScroll = maxScroll
+	}
+	drawBoxNoBorder(view, docX, listY, docWidth, docHeight, wig.Color("ui.menu"))
+	for i := 0; i < docHeight; i++ {
+		idx := i + w.docScroll
+		if idx >= len(wrapped) {
+			break
+		}
+		view.SetContent(docX+1, listY+i, wrapped[idx], wig.Color("ui.menu"))
+	}
+}
+
+// wrapText splits text into lines no longer than width, breaking at word
+// boundaries where possible. Each input line wraps independently so
+// paragraph structure from the source documentation is preserved.
+func wrapText(text string, width int) []string {
+	if width < 1 {
+		return []string{text}
+	}
+	var result []string
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimRight(line, " \t\r")
+		if line == "" {
+			result = append(result, "")
+			continue
+		}
+		runes := []rune(line)
+		for len(runes) > width {
+			breakAt := width
+			for i := width - 1; i > 0; i-- {
+				if runes[i] == ' ' {
+					breakAt = i
+					break
+				}
+			}
+			result = append(result, string(runes[:breakAt]))
+			if breakAt < len(runes) && runes[breakAt] == ' ' {
+				runes = runes[breakAt+1:]
+			} else {
+				runes = runes[breakAt:]
+			}
+		}
+		if len(runes) > 0 {
+			result = append(result, string(runes))
+		}
+	}
+	return result
 }
