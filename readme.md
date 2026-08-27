@@ -29,7 +29,7 @@ Vig implements a wide range of Vim‑style editing capabilities, many inherited 
 - **File & Buffer Management** – Open/save files (auto‑creation), buffer picker, MRU buffer picker, file picker, command palette, `config` command to open `~/.config/vig/config.toml`, and CLI flags (`--gf`, `--gs`) to open pickers on startup.
 - **Window Management** – Vertical/horizontal splits (`:vs`, `:sp`), window cycling (`<C-w>w`), closing (`:close`, `:only`), and layout toggling.
 - **Git Integration** – Status panel (`gs`) with staging (`s`), diff inspection (`d`), refresh (`r`); interactive commit editor; remote push (`p`); stash management (`z`) with pop/drop/cancel; diff highlighter; gutter signs (`+`, `-`, `~`) and hunk navigation (`]h`/`[h`), preview, and revert; inline Git blame; **AI commit message generation** (`git-ai`); and a `gfiles` picker to toggle between status and last commit views.
-- **LSP (Language Server Protocol)** – Autocompletion (auto‑trigger), go to definition (`gd`, `gd` in other window), hover docs (`K`), signature help, diagnostics/quickfix (`:copen`), LSP status (`:LspStatus`), and decoupled quickfix population.
+- **LSP (Language Server Protocol)** – Autocompletion (auto‑trigger), go to definition (`gd`, `gd` in other window), hover docs, signature help, diagnostics/quickfix (`:copen`), LSP status (`:LspStatus`), and decoupled quickfix population.
 - **Syntax Highlighting** – Tree‑sitter support for **Go, Rust, Odin, C, Python, Bash, JSON, TOML** (with shebang detection) and custom query support via `~/.config/vig/queries/`.
 - **UI & Interaction** – Statusline with mode, file status, cursor coords; notification toasts; Which‑Key popup; EasyMotion overlay; command line with prompt and history; hover/autocomplete popups; quickfix popup widget; marks popup; and **autocomplete navigation with arrow keys**.
 - **Command Line & Ex Mode** – Full command‑line editing (Home/End, `Ctrl‑a/e/u/k/w`), `Ctrl‑r Ctrl‑w` to insert word under cursor, visual‑mode prefilled ranges (`'<,'>`), register insertion (`Ctrl‑r`), and line jump (`:123`).
@@ -75,8 +75,6 @@ Most common Vim keybindings are implemented. Here are some highlights:
 | `Space + f`        | Find files in Git project           |
 | `Space + b`        | Show buffers                        |
 | `Space + s + s`    | Fuzzy text search                   |
-| `Ctrl-W + V`       | Vertical split                      |
-| `Ctrl-W + S`       | Horizontal split                    |
 | `Space + `` ` ``   | Toggle between two files            |
 | `Space + /`        | Search text in project (ripgrep)    |
 | `gcc`              | Toggle comment on current line      |
@@ -84,7 +82,6 @@ Most common Vim keybindings are implemented. Here are some highlights:
 | `]h` / `[h`        | Next / previous git hunk            |
 | `<Leader>t`        | Change theme                        |
 | `<Leader>i`        | Toggle indent guides                |
-| `K`                | Show LSP hover info                 |
 | `gd`               | Go to definition                    |
 
 For a complete list, see `config/config.go` or use the built‑in **Which‑Key** helper (press `<Leader>` to trigger).
