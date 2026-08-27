@@ -13,16 +13,32 @@ import (
 
 func Register(e *wig.Editor) wig.AutocompleteFn {
 	return func(ctx wig.Context) bool {
-		// Check for snippets first
 		if ctx.Editor.Snippets.Complete(ctx) {
 			return true
 		}
-
 		cur := wig.ContextCursorGet(ctx)
+		line := wig.CursorLine(ctx.Buf, cur)
+		if line != nil {
+			lineRunes := line.Value
+			charIdx := cur.Char
+			start := charIdx
+			for start > 0 {
+				r := lineRunes[start-1]
+				if r == '/' || unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '.' || r == '-' {
+					start--
+				} else {
+					break
+				}
+			}
+			prefix := string(lineRunes[start:charIdx])
+			if strings.HasPrefix(prefix, "./") || strings.HasPrefix(prefix, "../") {
+				PathComplete(ctx)
+				return true
+			}
+		}
 		refreshFn := func() wig.CompletionItems {
 			return ctx.Editor.Lsp.Completion(ctx.Buf)
 		}
-
 		ui.AutocompleteInit(
 			ctx,
 			wig.Position{
@@ -32,7 +48,6 @@ func Register(e *wig.Editor) wig.AutocompleteFn {
 			refreshFn(),
 			refreshFn,
 		)
-
 		return true
 	}
 }
@@ -332,33 +347,26 @@ func WordlistComplete(ctx wig.Context) {
 	refreshFn := func() wig.CompletionItems {
 		return getWordlistCompletions(ctx)
 	}
-
 	items := refreshFn()
 	if len(items.Items) == 0 {
 		ctx.Editor.EchoMessage("No wordlist completions found")
 		return
 	}
-
-	// If there is only one candidate, auto-complete it immediately without showing the popup.
 	if len(items.Items) == 1 {
 		item := items.Items[0]
 		cur := wig.ContextCursorGet(ctx)
 		line := wig.CursorLine(ctx.Buf, cur)
-
 		if ctx.Buf.TxStart() {
 			defer ctx.Buf.TxEnd()
 		}
-
 		wig.TextDelete(ctx.Buf, &wig.Selection{
 			Start: wig.Cursor{Line: cur.Line, Char: item.TextEdit.Replace.Start.Character},
 			End:   wig.Cursor{Line: cur.Line, Char: item.TextEdit.Replace.End.Character},
 		})
-
 		wig.TextInsert(ctx.Buf, line, item.TextEdit.Replace.Start.Character, item.TextEdit.NewText)
 		cur.Char = item.TextEdit.Replace.Start.Character + utf8.RuneCountInString(item.TextEdit.NewText)
 		return
 	}
-
 	cur := wig.ContextCursorGet(ctx)
 	ui.AutocompleteInit(
 		ctx,
@@ -369,4 +377,99 @@ func WordlistComplete(ctx wig.Context) {
 		items,
 		refreshFn,
 	)
+}
+
+func PathComplete(ctx wig.Context) {
+	cur := wig.ContextCursorGet(ctx)
+	line := wig.CursorLine(ctx.Buf, cur)
+	if line == nil {
+		return
+	}
+	lineRunes := line.Value
+	charIdx := cur.Char
+
+	start := charIdx
+	for start > 0 {
+		r := lineRunes[start-1]
+		if r == '/' || unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '.' || r == '-' {
+			start--
+		} else {
+			break
+		}
+	}
+	prefix := string(lineRunes[start:charIdx])
+
+	if !strings.HasPrefix(prefix, "./") && !strings.HasPrefix(prefix, "../") {
+		LocalComplete(ctx)
+		return
+	}
+
+	refreshFn := func() wig.CompletionItems {
+		return getPathCompletions(ctx, prefix, start, charIdx)
+	}
+
+	items := refreshFn()
+	if len(items.Items) == 0 {
+		ctx.Editor.EchoMessage("No path completions found")
+		return
+	}
+
+	if len(items.Items) == 1 {
+		item := items.Items[0]
+		line := wig.CursorLine(ctx.Buf, cur)
+		if ctx.Buf.TxStart() {
+			defer ctx.Buf.TxEnd()
+		}
+		wig.TextDelete(ctx.Buf, &wig.Selection{
+			Start: wig.Cursor{Line: cur.Line, Char: item.TextEdit.Replace.Start.Character},
+			End:   wig.Cursor{Line: cur.Line, Char: item.TextEdit.Replace.End.Character},
+		})
+		wig.TextInsert(ctx.Buf, line, item.TextEdit.Replace.Start.Character, item.TextEdit.NewText)
+		cur.Char = item.TextEdit.Replace.Start.Character + utf8.RuneCountInString(item.TextEdit.NewText)
+		return
+	}
+
+	ui.AutocompleteInit(
+		ctx,
+		wig.Position{
+			Line: cur.Line,
+			Char: cur.Char,
+		},
+		items,
+		refreshFn,
+	)
+}
+
+func getPathCompletions(ctx wig.Context, prefix string, start, end int) wig.CompletionItems {
+	cur := wig.ContextCursorGet(ctx)
+	items := wig.CompletionItems{}
+
+	baseDir := "."
+	filter := ""
+	lastSlash := strings.LastIndex(prefix, "/")
+	if lastSlash != -1 {
+		baseDir = prefix[:lastSlash+1]
+		filter = prefix[lastSlash+1:]
+	}
+
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return items
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, ".") && !strings.HasPrefix(filter, ".") {
+			continue
+		}
+		if strings.HasPrefix(name, filter) {
+			fullName := baseDir + name
+			if entry.IsDir() {
+				fullName += "/"
+			}
+			te := makeCompletionTextEdit(fullName, cur.Line, start, end)
+			items.AddItem(fullName, fullName, te)
+		}
+	}
+	return items
 }

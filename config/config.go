@@ -580,7 +580,7 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 			"ctrl+k": wig.CmdCursorLineUp,
 			"ctrl+n": wig.CmdAutocompleteTrigger,
 			"ctrl+r": wig.CmdInsertRegister,
-			"alt+/":  autocomplete.LocalComplete,
+			"alt+/":  autocomplete.PathComplete,
 			"Left":   wig.CmdCursorLeft,
 			"Right":  wig.CmdCursorRight,
 			"Up":     wig.CmdCursorLineUp,

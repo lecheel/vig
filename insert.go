@@ -1,9 +1,9 @@
 package wig
 
 import (
-	"strings"
-
 	"github.com/gdamore/tcell/v2"
+	"strings"
+	"unicode"
 )
 
 func HandleInsertKey(ctx Context, ev *tcell.EventKey) {
@@ -41,6 +41,25 @@ func HandleInsertKey(ctx Context, ev *tcell.EventKey) {
 				TabstopNext(ctx)
 				return
 			}
+
+			// Trigger path completion if word starts with ./ or ../
+			lineStr := line.Value.String()
+			wordStart := cur.Char
+			for wordStart > 0 {
+				r := line.Value[wordStart-1]
+				if r == '/' || unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '.' || r == '-' {
+					wordStart--
+				} else {
+					break
+				}
+			}
+			currentWord := lineStr[wordStart:cur.Char]
+			if strings.HasPrefix(currentWord, "./") || strings.HasPrefix(currentWord, "../") {
+				if ctx.Editor.AutocompleteTrigger(ctx) {
+					return
+				}
+			}
+
 			if strings.TrimSpace(line.Value.String()) == "" {
 				goto insertChar
 			}
