@@ -46,6 +46,11 @@ type UiComponent interface {
 	Plane() RenderPlane
 }
 
+type Mark struct {
+	Buf    *Buffer
+	Cursor Cursor
+}
+
 type Context struct {
 	Editor *Editor
 	Buf    *Buffer
@@ -57,8 +62,8 @@ type Context struct {
 type AutocompleteFn func(Context) bool
 
 // MarksPopupFactory allows the `ui` package to register a popup for marks
-// without causing a circular import.
-var MarksPopupFactory func(ctx Context, marks map[rune]Cursor)
+// without causing a circular import. Marks are global across all buffers.
+var MarksPopupFactory func(ctx Context, marks map[rune]Mark)
 
 // RegistersPopupFactory allows the `ui` package to register a popup for registers
 // without causing a circular import.
@@ -94,6 +99,7 @@ type Editor struct {
 	Config              EditorConfig
 	LastRepeatableFn    func(Context)
 	ActiveRegister      rune
+	Marks               map[rune]Mark
 }
 
 func NewEditor(
@@ -116,6 +122,7 @@ func NewEditor(
 		ScreenSyncCh: make(chan int),
 		Events:       NewEventsManager(),
 		Snippets:     NewSnippetsManager(),
+		Marks:        make(map[rune]Mark),
 	}
 
 	EditorInst.Lsp = NewLspManager(EditorInst)

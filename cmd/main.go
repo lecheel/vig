@@ -95,7 +95,7 @@ func main() {
 		return ui.WhichKeyInit(e, k, mode, items)
 	})
 
-	wig.MarksPopupFactory = func(ctx wig.Context, marks map[rune]wig.Cursor) {
+	wig.MarksPopupFactory = func(ctx wig.Context, marks map[rune]wig.Mark) {
 		ui.MarksPopupInit(ctx, marks)
 	}
 

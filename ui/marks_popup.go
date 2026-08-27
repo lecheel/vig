@@ -16,7 +16,10 @@ type MarksPopupWidget struct {
 
 type markItem struct {
 	Mark rune
+	Buf  *wig.Buffer
+	Cur  wig.Cursor
 	Line int
+	File string
 	Text string
 }
 
@@ -24,14 +27,16 @@ func (u *MarksPopupWidget) Plane() wig.RenderPlane  { return wig.PlaneEditor }
 func (u *MarksPopupWidget) Mode() wig.Mode          { return wig.MODE_NORMAL }
 func (u *MarksPopupWidget) Keymap() *wig.KeyHandler { return u.keymap }
 
-func MarksPopupInit(ctx wig.Context, marks map[rune]wig.Cursor) {
+func MarksPopupInit(ctx wig.Context, marks map[rune]wig.Mark) {
 	widget := &MarksPopupWidget{
 		e: ctx.Editor,
 	}
 
 	var keys []rune
-	for k := range marks {
-		keys = append(keys, k)
+	for k, mark := range marks {
+		if mark.Buf != nil {
+			keys = append(keys, k)
+		}
 	}
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 
@@ -47,8 +52,8 @@ func MarksPopupInit(ctx wig.Context, marks map[rune]wig.Cursor) {
 	}
 
 	for _, k := range keys {
-		cur := marks[k]
-		line := wig.CursorLineByNum(ctx.Buf, cur.Line)
+		m := marks[k]
+		line := wig.CursorLineByNum(m.Buf, m.Cursor.Line)
 		text := ""
 		if line != nil {
 			text = strings.TrimRight(line.Value.String(), "\n")
@@ -59,18 +64,24 @@ func MarksPopupInit(ctx wig.Context, marks map[rune]wig.Cursor) {
 		}
 
 		mark := k
-		lineNum := cur.Line + 1
+		lineNum := m.Cursor.Line + 1
+		fileName := m.Buf.GetName()
 		widget.items = append(widget.items, markItem{
 			Mark: mark,
+			Buf:  m.Buf,
+			Cur:  m.Cursor,
 			Line: lineNum,
+			File: fileName,
 			Text: text,
 		})
 
-		km[string(mark)] = func(ctx wig.Context) {
-			ctx.Editor.PopUi()
-			newCtx := ctx.Editor.NewContext()
-			newCtx.Count = uint32(lineNum)
-			wig.CmdGotoLine0(newCtx)
+		targetMark := m
+		km[string(mark)] = func(c wig.Context) {
+			c.Editor.PopUi()
+			if targetMark.Buf != nil {
+				c.Buf = targetMark.Buf
+				c.Editor.ActiveWindow().VisitBuffer(c, targetMark.Cursor)
+			}
 		}
 	}
 
@@ -87,7 +98,7 @@ func (u *MarksPopupWidget) Render(view wig.View) {
 		lines = append(lines, " No marks set. Press ` for pingpong, Esc to close. ")
 	} else {
 		for _, item := range u.items {
-			s := fmt.Sprintf(" '%c' - Line %d: %s ", item.Mark, item.Line, item.Text)
+			s := fmt.Sprintf(" '%c' - %s:%d: %s ", item.Mark, item.File, item.Line, item.Text)
 			lines = append(lines, s)
 		}
 	}
@@ -132,7 +143,7 @@ func (u *MarksPopupWidget) Render(view wig.View) {
 			view.SetContent(cx, row, markChar, markStyle)
 			cx += 1
 
-			rest := fmt.Sprintf("' - Line %d: %s ", item.Line, item.Text)
+			rest := fmt.Sprintf("' - %s:%d: %s ", item.File, item.Line, item.Text)
 			view.SetContent(cx, row, rest, textStyle)
 		}
 	}

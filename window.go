@@ -3,9 +3,13 @@ package wig
 type Window struct {
 	buf     *Buffer // active buffer
 	cursors map[*Buffer]*Cursor
-
-	Jumps *Jumps
-	Marks map[rune]Cursor
+	Jumps   *Jumps
+	// Panel is the logical column index this window belongs to (0 = left,
+	// 1 = right, ...). Windows sharing a Panel are stacked vertically
+	// within that column; distinct Panels are arranged left-to-right.
+	// Set by CmdWindowVSplit (new column) / CmdWindowHSplit (same column)
+	// in movements_cmds.go and consumed by render.Renderer.Render.
+	Panel int
 }
 
 // Jump to buffer and location. Records jump history.
@@ -71,7 +75,6 @@ func CreateWindow(parent *Window) *Window {
 			List: List[Jump]{},
 		},
 		cursors: cursors,
-		Marks:   make(map[rune]Cursor),
 	}
 }
 

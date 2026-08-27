@@ -138,17 +138,12 @@ func (u *UndoRedo) applyMarksAdjust(edits []gotextdiff.TextEdit) {
 		// Delete phase
 		linesDeleted := endLine - startLine
 		if linesDeleted > 0 {
-			for _, w := range EditorInst.WindowsForBuffer(u.Buf) {
-				MarkAdjustInternal(w, startLine, endLine, -linesDeleted, 0)
-			}
+			MarkAdjustInternal(u.Buf, startLine, endLine, -linesDeleted, 0)
 		}
-
 		// Insert phase
 		newLines := strings.Count(newText, "\n")
 		if newLines > 0 {
-			for _, w := range EditorInst.WindowsForBuffer(u.Buf) {
-				MarkAdjustInternal(w, startLine+1, startLine, newLines, 0)
-			}
+			MarkAdjustInternal(u.Buf, startLine+1, startLine, newLines, 0)
 		}
 	}
 }

@@ -19,6 +19,9 @@ func init() {
 	wig.AllCommands["CmdCommandPalettePicker"] = wig.CmdDefinition{Desc: "Command palette", Fn: CmdCommandPalettePicker}
 	wig.AllCommands["CmdFindProjectFilePicker"] = wig.CmdDefinition{Desc: "Find file", Fn: CmdFindProjectFilePicker}
 	wig.AllCommands["CmdBufferPicker"] = wig.CmdDefinition{Desc: "Buffer picker", Fn: CmdBufferPicker}
+	wig.AllCommands["CmdMarksPicker"] = wig.CmdDefinition{Desc: "Marks picker (global, cross-buffer)", Fn: wig.CmdGotoMark}
+	wig.AllCommands["CmdGotoMark"] = wig.CmdDefinition{Desc: "Marks picker (global, cross-buffer)", Fn: wig.CmdGotoMark}
+	wig.AllCommands["marks"] = wig.CmdDefinition{Desc: "Marks picker (global, cross-buffer)", Fn: wig.CmdGotoMark}
 	wig.AllCommands["CmdBufferNext"] = wig.CmdDefinition{Desc: "Next buffer", Fn: wig.CmdBufferNext}
 	wig.AllCommands["CmdBufferPrev"] = wig.CmdDefinition{Desc: "Previous buffer", Fn: wig.CmdBufferPrev}
 	wig.AllCommands["CmdBufferLast"] = wig.CmdDefinition{Desc: "Last buffer", Fn: wig.CmdBufferLast}
@@ -75,9 +78,9 @@ func init() {
 	wig.AllCommands["CmdGitBlameCommit"] = wig.CmdDefinition{Desc: "Git blame commit detail", Fn: CmdGitBlameCommit}
 
 	// Window management commands
-	wig.AllCommands["CmdWindowHSplit"] = wig.CmdDefinition{Desc: "Horizontal split", Fn: wig.CmdWindowHSplit}
-	wig.AllCommands["vs"] = wig.CmdDefinition{Desc: "Vertical split", Fn: wig.CmdWindowVSplit}
-	wig.AllCommands["sp"] = wig.CmdDefinition{Desc: "Horizontal split", Fn: wig.CmdWindowHSplit}
+	wig.AllCommands["CmdWindowHSplit"] = wig.CmdDefinition{Desc: "Horizontal split", Fn: CmdWindowHSplitLimited}
+	wig.AllCommands["vs"] = wig.CmdDefinition{Desc: "Vertical split", Fn: CmdWindowVSplitLimited}
+	wig.AllCommands["sp"] = wig.CmdDefinition{Desc: "Horizontal split", Fn: CmdWindowHSplitLimited}
 	wig.AllCommands["on"] = wig.CmdDefinition{Desc: "Close other windows", Fn: wig.CmdWindowCloseOther}
 	wig.AllCommands["only"] = wig.CmdDefinition{Desc: "Close other windows", Fn: wig.CmdWindowCloseOther}
 	wig.AllCommands["close"] = wig.CmdDefinition{Desc: "Close window", Fn: wig.CmdWindowClose}
@@ -119,7 +122,7 @@ func init() {
 	wig.AllCommands["CmdCommentEndOfFile"] = wig.CmdDefinition{Desc: "Comment to end of file", Fn: wig.CmdCommentEndOfFile, Repeatable: true}
 	wig.AllCommands["CmdCommentStartOfFile"] = wig.CmdDefinition{Desc: "Comment to start of file", Fn: wig.CmdCommentStartOfFile, Repeatable: true}
 	wig.AllCommands["CmdCommentWord"] = wig.CmdDefinition{Desc: "Comment word", Fn: wig.CmdCommentWord, Repeatable: true}
-	wig.AllCommands["CmdWindowVSplit"] = wig.CmdDefinition{Desc: "Vertical split", Fn: wig.CmdWindowVSplit}
+	wig.AllCommands["CmdWindowVSplit"] = wig.CmdDefinition{Desc: "Vertical split", Fn: CmdWindowVSplitLimited}
 	wig.AllCommands["CmdWindowClose"] = wig.CmdDefinition{Desc: "Close window", Fn: wig.CmdWindowClose}
 	wig.AllCommands["CmdWindowCloseOther"] = wig.CmdDefinition{Desc: "Close other windows", Fn: wig.CmdWindowCloseOther}
 	wig.AllCommands["CmdWindowCloseAndKillBuffer"] = wig.CmdDefinition{Desc: "Close window and kill buffer", Fn: wig.CmdWindowCloseAndKillBuffer}

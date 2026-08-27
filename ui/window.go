@@ -90,10 +90,10 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 					// Check for mark on this line
 					markChar := " "
 					markStyle := wig.Color("ui.linenr")
-					if win.Marks != nil {
-						for m, c := range win.Marks {
-							if c.Line == lineNum {
-								markChar = string(m)
+					if e.Marks != nil {
+						for r, m := range e.Marks {
+							if m.Buf == buf && m.Cursor.Line == lineNum {
+								markChar = string(r)
 								markStyle = wig.Color("ui.mark")
 								break
 							}

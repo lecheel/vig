@@ -57,7 +57,7 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 	picker.SetTitle("Find File")
 
 	picker.OnKey("ctrl+o", func(ctx wig.Context) {
-		wig.CmdWindowVSplit(ctx)
+		CmdWindowVSplitLimited(ctx)
 		wig.CmdWindowNext(ctx)
 		picker.CallAction()
 	})

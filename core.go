@@ -84,16 +84,25 @@ func TextInsert(buf *Buffer, line *Element[Line], pos int, text string) {
 		// lines. This mirrors vim's convention of using an empty
 		// [line1, line1-1] range for pure insertions.
 		amount := event.NewEnd.Line - sline
-		for _, w := range EditorInst.WindowsForBuffer(buf) {
-			MarkAdjustInternal(w, sline+1, sline, amount, 0)
+		MarkAdjustInternal(buf, sline+1, sline, amount, 0)
+		if EditorInst != nil && EditorInst.Marks != nil {
+			for r, m := range EditorInst.Marks {
+				if m.Buf == buf && m.Cursor.Line == sline && m.Cursor.Char >= pos {
+					m.Cursor.Line = event.NewEnd.Line
+					m.Cursor.Char = event.NewEnd.Char + (m.Cursor.Char - pos)
+					EditorInst.Marks[r] = m
+				}
+			}
 		}
+	} else if insertedLen := utf8.RuneCountInString(lines[0]); insertedLen > 0 {
+		// Single-line insertion: marks at/after the insertion column on
+		// this line shift right by the inserted text length.
+		MarkColAdjust(buf, sline, pos, insertedLen, 0)
 	}
-
 	if EditorInst != nil && EditorInst.Events != nil {
 		EditorInst.Events.Broadcast(event)
 	}
 }
-
 func TextDelete(buf *Buffer, selection *Selection) {
 	buf.Dirty = true
 	defer func() {
@@ -125,11 +134,17 @@ func TextDelete(buf *Buffer, selection *Selection) {
 		// negative since lines are being removed, so soft marks in the
 		// range collapse onto sel.Start.Line and hard marks are
 		// invalidated (see MarkAdjustInternal).
-		for _, w := range EditorInst.WindowsForBuffer(buf) {
-			MarkAdjustInternal(w, sel.Start.Line, sel.End.Line, -linesDeleted, 0)
+		MarkAdjustInternal(buf, sel.Start.Line, sel.End.Line, -linesDeleted, 0)
+	} else {
+		// Pure same-line deletion never touches line numbers, so it fell
+		// through the line-range tracking above entirely — marks on this
+		// line still need to collapse/shift for the deleted columns.
+		delStart := max(0, sel.Start.Char)
+		delEnd := min(utf8.RuneCountInString(lineEnd.Value.String()), sel.End.Char)
+		if delEnd > delStart {
+			MarkColDelete(buf, sel.Start.Line, delStart, delEnd)
 		}
 	}
-
 	if lineStart != lineEnd {
 		for lineStart.Next() != lineEnd {
 			if lineStart.Next() == nil {
@@ -797,6 +812,15 @@ func CmdKillBuffer(ctx Context) {
 		posCache.Save()
 	}
 
+	// Remove any marks associated with the killed buffer
+	if ctx.Editor.Marks != nil {
+		for r, m := range ctx.Editor.Marks {
+			if m.Buf == buf {
+				delete(ctx.Editor.Marks, r)
+			}
+		}
+	}
+
 	ctx.Editor.Lsp.DidClose(buf)
 
 	// Jump back in history
@@ -1274,26 +1298,29 @@ func CmdPaste(ctx Context) {
 	panic(1)
 }
 
-// CmdSetMark waits for a character input and sets a mark at the current cursor position.
+// CmdSetMark waits for a character input and sets a mark at the current cursor position globally.
 func CmdSetMark(ctx Context) func(Context) {
 	return func(ctx Context) {
 		if len(ctx.Char) == 0 {
 			return
 		}
 		r := rune(ctx.Char[0])
-		if ctx.Win.Marks == nil {
-			ctx.Win.Marks = make(map[rune]Cursor)
+		if ctx.Editor.Marks == nil {
+			ctx.Editor.Marks = make(map[rune]Mark)
 		}
 		cur := ContextCursorGet(ctx)
-		ctx.Win.Marks[r] = *cur
+		ctx.Editor.Marks[r] = Mark{
+			Buf:    ctx.Buf,
+			Cursor: *cur,
+		}
 		ctx.Editor.EchoMessage("Mark '" + string(r) + "' set")
 	}
 }
 
-// CmdGotoMark opens the marks popup legend.
+// CmdGotoMark opens the global marks popup.
 func CmdGotoMark(ctx Context) {
 	if MarksPopupFactory != nil {
-		MarksPopupFactory(ctx, ctx.Win.Marks)
+		MarksPopupFactory(ctx, ctx.Editor.Marks)
 	}
 }
 

@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -214,21 +213,6 @@ func (em *EasyMotion) jumpTo(m easyMotionMatch) {
 	wig.CmdEnsureCursorVisible(em.e.NewContext())
 }
 
-func (em *EasyMotion) getGutterWidth(buf *wig.Buffer, win *wig.Window) int {
-	gutterW := 0
-	if em.e.Config.ShowLineNumbers {
-		digits := len(strconv.Itoa(buf.Lines.Len))
-		if digits < 3 {
-			digits = 3
-		}
-		gutterW += digits + 1
-	}
-	if buf.GitSigns != nil || (win != nil && len(win.Marks) > 0) {
-		gutterW += 1
-	}
-	return gutterW
-}
-
 func (em *EasyMotion) Render(view wig.View) {
 	if em.state != emStateTarget || len(em.matches) == 0 {
 		return
@@ -242,7 +226,7 @@ func (em *EasyMotion) Render(view wig.View) {
 
 	cur := wig.WindowCursorGet(win, buf)
 	vw, vh := view.Size()
-	gutterW := em.getGutterWidth(buf, win)
+	gutterW := WindowTextPadding(em.e, buf)
 
 	labelStyle := tcell.StyleDefault.
 		Background(tcell.ColorYellow).
