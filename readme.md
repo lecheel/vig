@@ -4,16 +4,7 @@
 It builds upon Wig’s solid foundation with a **focus on stability, core Vim operations, and a clean daily‑driver experience**.
 
 <p align="center">
-  <img src="preview.png" alt="Vig preview" />
-  <img src="png/vig_complete.png" alt="complete" />
-  <img src="png/vig_function.png" alt="functions" />
-  <img src="png/vig_gitfiles.png" alt="gitgf" />
-  <img src="png/vig_gs.png" alt="gs" />
-  <img src="png/vig_marks.png" alt="marks" />
-  <img src="png/vig_minihelp_FnKey.png" alt="fnKey" />
-  <img src="png/vig_quickfix.png" alt="quickfix" />
-  <img src="png/vig_rectange.png" alt="rectange" />
-  <img src="png/vig_rg.png" alt="ripgrep" />
+  <img src="output.gif" alt="Vig preview" />
 </p>
 
 ---
