@@ -4,7 +4,7 @@
 It builds upon Wig’s solid foundation with a **focus on stability, core Vim operations, and a clean daily‑driver experience**.
 
 <p align="center">
-  <img src="output.gif" alt="Vig preview" />
+  <img src="png/output.gif" alt="Vig preview" />
 </p>
 
 ---
