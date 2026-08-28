@@ -826,20 +826,34 @@ func CmdKillBuffer(ctx Context) {
 	// Jump back in history
 	CmdJumpBack(ctx)
 
-	// If we are still on the buffer we are trying to delete (e.g. only internal buffers left)
-	if ctx.Editor.ActiveWindow().Buffer() == buf {
-		if len(ctx.Editor.Buffers) > 1 {
-			for _, b := range ctx.Editor.Buffers {
-				if b != buf {
-					ctx.Buf = b
-					ctx.Editor.ActiveWindow().VisitBuffer(ctx)
-					break
-				}
+	// Replace the killed buffer in all windows across all workspaces
+	var replacement *Buffer
+	if len(ctx.Editor.Buffers) > 1 {
+		for _, b := range ctx.Editor.Buffers {
+			if b != buf {
+				replacement = b
+				break
 			}
-		} else {
-			// No other buffers left, create a new empty one
-			CmdNewBuffer(ctx)
 		}
+	} else {
+		// No other buffers left, create a new empty one
+		CmdNewBuffer(ctx)
+		replacement = ctx.Editor.Buffers[0]
+	}
+
+	for i := range ctx.Editor.Workspaces {
+		ws := &ctx.Editor.Workspaces[i]
+		for _, win := range ws.Windows {
+			if win.Buffer() == buf {
+				nctx := ctx.Editor.NewContext()
+				nctx.Buf = replacement
+				nctx.Win = win
+				win.VisitBuffer(nctx)
+			}
+		}
+	}
+	if ctx.Editor.ActiveWindow().Buffer() == buf {
+		ctx.Buf = replacement
 	}
 
 	ctx.Editor.Buffers = slices.DeleteFunc(ctx.Editor.Buffers, func(b *Buffer) bool {

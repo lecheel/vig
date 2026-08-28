@@ -1,12 +1,12 @@
 package wig
 
 import (
+	"github.com/gdamore/tcell/v2"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
-
-	"github.com/gdamore/tcell/v2"
 )
 
 type EditorConfig struct {
@@ -82,6 +82,13 @@ type Workspace struct {
 	Num          int
 	Windows      []*Window
 	ActiveWindow *Window
+	Layout       Layout
+	// Files is the ordered history of every real file opened while this
+	// workspace was active. A window only ever shows one buffer at a time,
+	// so without this a workspace that had file1 -> file2 -> file3 opened
+	// in the same window would only ever remember file3. See
+	// Editor.recordWorkspaceFile.
+	Files []string
 }
 
 type Editor struct {
@@ -118,6 +125,7 @@ func NewEditor(
 		Num:          1,
 		Windows:      windows,
 		ActiveWindow: windows[0],
+		Layout:       LayoutVertical,
 	}
 
 	EditorInst = &Editor{
@@ -157,6 +165,7 @@ func (e *Editor) OpenFile(path string) (*Buffer, error) {
 		path = absPath
 	}
 	if fbuf := e.BufferFindByFilePath(path, false); fbuf != nil {
+		e.recordWorkspaceFile(path)
 		return fbuf, nil
 	}
 
@@ -197,10 +206,29 @@ func (e *Editor) OpenFile(path string) (*Buffer, error) {
 
 	// Broadcast event so GitGutterManager calculates signs for newly opened file
 	e.Events.Broadcast(EventBufferReloaded{Buf: buf})
-
+	e.recordWorkspaceFile(buf.FilePath)
 	return buf, nil
 }
 
+// recordWorkspaceFile appends fp to the active workspace's opened-file
+// history, used by WorkspaceCache.CaptureWorkspace to restore every file
+// that was ever shown in the workspace, not just whatever buffer currently
+// occupies a window. Existing entries move to the end so order reflects
+// most-recent use. Special buffers ("[No Name]", "[Messages]", etc.) are
+// skipped.
+func (e *Editor) recordWorkspaceFile(fp string) {
+	if fp == "" || strings.HasPrefix(fp, "[") {
+		return
+	}
+	ws := e.GetActiveWorkspace()
+	for i, f := range ws.Files {
+		if f == fp {
+			ws.Files = slices.Delete(ws.Files, i, i+1)
+			break
+		}
+	}
+	ws.Files = append(ws.Files, fp)
+}
 func (e *Editor) NewContext() Context {
 	return Context{
 		Editor: e,

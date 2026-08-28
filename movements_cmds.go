@@ -413,7 +413,7 @@ func CmdBackwardChar(ctx Context) func(Context) {
 	}
 }
 func CmdWindowVSplit(ctx Context) {
-	ctx.Editor.Layout = LayoutVertical
+	ctx.Editor.GetActiveWorkspace().Layout = LayoutVertical
 	cur := ContextCursorGet(ctx)
 	nwin := CreateWindow(ctx.Editor.ActiveWindow())
 	nwin.VisitBuffer(ctx, *cur)
@@ -421,7 +421,7 @@ func CmdWindowVSplit(ctx Context) {
 }
 
 func CmdWindowHSplit(ctx Context) {
-	ctx.Editor.Layout = LayoutHorizontal
+	ctx.Editor.GetActiveWorkspace().Layout = LayoutHorizontal
 	cur := ContextCursorGet(ctx)
 	nwin := CreateWindow(ctx.Editor.ActiveWindow())
 	nwin.VisitBuffer(ctx, *cur)
@@ -447,10 +447,11 @@ func CmdWindowNext(ctx Context) {
 }
 
 func CmdWindowToggleLayout(ctx Context) {
-	if ctx.Editor.Layout == LayoutHorizontal {
-		ctx.Editor.Layout = LayoutVertical
+	ws := ctx.Editor.GetActiveWorkspace()
+	if ws.Layout == LayoutHorizontal {
+		ws.Layout = LayoutVertical
 	} else {
-		ctx.Editor.Layout = LayoutHorizontal
+		ws.Layout = LayoutHorizontal
 	}
 }
 

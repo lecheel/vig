@@ -960,18 +960,7 @@ func CmdWorkspaceListPicker(ctx wig.Context) {
 	}
 
 	picker := ui.PickerInit(ctx.Editor, action, buildItems())
-	picker.SetTitle("Workspaces [Enter: Switch  Del: Clear cache]")
-
-	picker.OnKey("Delete", func(ctx wig.Context) {
-		item := picker.GetActiveItem()
-		if item == nil {
-			return
-		}
-		delete(cache.Workspaces, item.Value)
-		cache.Save()
-		picker.SetItems(buildItems())
-		ctx.Editor.Redraw()
-	})
+	picker.SetTitle("Workspaces [Enter: Switch]")
 }
 
 func CmdLspShowSignature(ctx wig.Context) {
