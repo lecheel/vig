@@ -54,16 +54,16 @@ func (r *Renderer) Render() {
 
 	var winW, winH int
 	if r.e.Layout == wig.LayoutVertical {
-		winW = w / len(r.e.Windows)
+		winW = w / len(r.e.Windows())
 		winH = h
 	} else {
 		winW = w
-		winH = h / len(r.e.Windows)
+		winH = h / len(r.e.Windows())
 	}
 
 	var winView *mview
 	var activeWinView *mview
-	for i, win := range r.e.Windows {
+	for i, win := range r.e.Windows() {
 		var x, y int
 		if r.e.Layout == wig.LayoutVertical {
 			x = winW * i

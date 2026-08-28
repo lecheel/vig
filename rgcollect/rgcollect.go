@@ -17,7 +17,7 @@ func Init(ctx wig.Context, title string, items []wig.Location) {
 		ctx.Editor.EchoMessage("no items found")
 		return
 	}
-	if len(ctx.Editor.Windows) == 1 {
+	if len(ctx.Editor.Windows()) == 1 {
 		wig.CmdWindowVSplit(ctx)
 	}
 	wig.CmdWindowNext(ctx)
@@ -320,7 +320,7 @@ func visitRgCollectLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wi
 	}
 
 	var sourceWin *wig.Window
-	for _, win := range ctx.Editor.Windows {
+	for _, win := range ctx.Editor.Windows() {
 		if win.Buffer() == sourceBuf {
 			sourceWin = win
 			break
@@ -424,7 +424,7 @@ func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.
 
 	// Find the window containing the source buffer
 	var sourceWin *wig.Window
-	for _, win := range ctx.Editor.Windows {
+	for _, win := range ctx.Editor.Windows() {
 		if win.Buffer() == sourceBuf {
 			sourceWin = win
 			break

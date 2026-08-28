@@ -144,12 +144,36 @@ func init() {
 	wig.AllCommands["diagnostics"] = wig.CmdDefinition{Desc: "Diagnostics to quickfix", Fn: CmdLspDiagnosticsToQuickfix}
 	wig.AllCommands["diags"] = wig.CmdDefinition{Desc: "Diagnostics to quickfix", Fn: CmdLspDiagnosticsToQuickfix}
 	wig.AllCommands["cclose"] = wig.CmdDefinition{Desc: "Close quickfix window", Fn: func(ctx wig.Context) {
-		if len(ctx.Editor.Windows) > 1 {
+		if len(ctx.Editor.Windows()) > 1 {
 			wig.CmdWindowClose(ctx)
 		} else {
 			wig.CmdBufferCycle(ctx)
 		}
 	}}
+	wig.AllCommands["CmdWorkspaceSwitch_1"] = wig.CmdDefinition{Desc: "Switch to workspace 1", Fn: wig.CmdWorkspaceSwitch_1}
+	wig.AllCommands["CmdWorkspaceSwitch_2"] = wig.CmdDefinition{Desc: "Switch to workspace 2", Fn: wig.CmdWorkspaceSwitch_2}
+	wig.AllCommands["CmdWorkspaceSwitch_3"] = wig.CmdDefinition{Desc: "Switch to workspace 3", Fn: wig.CmdWorkspaceSwitch_3}
+	wig.AllCommands["CmdWorkspaceSwitch_4"] = wig.CmdDefinition{Desc: "Switch to workspace 4", Fn: wig.CmdWorkspaceSwitch_4}
+	wig.AllCommands["CmdWorkspaceSwitch_5"] = wig.CmdDefinition{Desc: "Switch to workspace 5", Fn: wig.CmdWorkspaceSwitch_5}
+	wig.AllCommands["CmdWorkspaceSwitch_6"] = wig.CmdDefinition{Desc: "Switch to workspace 6", Fn: wig.CmdWorkspaceSwitch_6}
+	wig.AllCommands["CmdWorkspaceSwitch_7"] = wig.CmdDefinition{Desc: "Switch to workspace 7", Fn: wig.CmdWorkspaceSwitch_7}
+	wig.AllCommands["CmdWorkspaceSwitch_8"] = wig.CmdDefinition{Desc: "Switch to workspace 8", Fn: wig.CmdWorkspaceSwitch_8}
+	wig.AllCommands["CmdWorkspaceSwitch_9"] = wig.CmdDefinition{Desc: "Switch to workspace 9", Fn: wig.CmdWorkspaceSwitch_9}
+	wig.AllCommands["CmdWorkspaceSwitch_0"] = wig.CmdDefinition{Desc: "Switch to workspace 0", Fn: wig.CmdWorkspaceSwitch_0}
+
+	wig.AllCommands["CmdWindowMoveToWorkspace_1"] = wig.CmdDefinition{Desc: "Move window to workspace 1", Fn: wig.CmdWindowMoveToWorkspace_1}
+	wig.AllCommands["CmdWindowMoveToWorkspace_2"] = wig.CmdDefinition{Desc: "Move window to workspace 2", Fn: wig.CmdWindowMoveToWorkspace_2}
+	wig.AllCommands["CmdWindowMoveToWorkspace_3"] = wig.CmdDefinition{Desc: "Move window to workspace 3", Fn: wig.CmdWindowMoveToWorkspace_3}
+	wig.AllCommands["CmdWindowMoveToWorkspace_4"] = wig.CmdDefinition{Desc: "Move window to workspace 4", Fn: wig.CmdWindowMoveToWorkspace_4}
+	wig.AllCommands["CmdWindowMoveToWorkspace_5"] = wig.CmdDefinition{Desc: "Move window to workspace 5", Fn: wig.CmdWindowMoveToWorkspace_5}
+	wig.AllCommands["CmdWindowMoveToWorkspace_6"] = wig.CmdDefinition{Desc: "Move window to workspace 6", Fn: wig.CmdWindowMoveToWorkspace_6}
+	wig.AllCommands["CmdWindowMoveToWorkspace_7"] = wig.CmdDefinition{Desc: "Move window to workspace 7", Fn: wig.CmdWindowMoveToWorkspace_7}
+	wig.AllCommands["CmdWindowMoveToWorkspace_8"] = wig.CmdDefinition{Desc: "Move window to workspace 8", Fn: wig.CmdWindowMoveToWorkspace_8}
+	wig.AllCommands["CmdWindowMoveToWorkspace_9"] = wig.CmdDefinition{Desc: "Move window to workspace 9", Fn: wig.CmdWindowMoveToWorkspace_9}
+	wig.AllCommands["CmdWindowMoveToWorkspace_0"] = wig.CmdDefinition{Desc: "Move window to workspace 0", Fn: wig.CmdWindowMoveToWorkspace_0}
+
+	wig.AllCommands["wslist"] = wig.CmdDefinition{Desc: "List and switch workspaces", Fn: CmdWorkspaceListPicker}
+
 	wig.AllCommands["CmdDummyNA"] = wig.CmdDefinition{Desc: "Disable key", Fn: wig.CmdDummyNA}
 	wig.AllCommands["nop"] = wig.CmdDefinition{Desc: "NOP", Fn: wig.CmdDummyNA}
 }

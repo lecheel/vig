@@ -13,7 +13,7 @@ const MaxPanels = 2
 // separate side-table is needed here anymore.
 func countWindowsInPanel(ctx wig.Context, panel int) int {
 	count := 0
-	for _, w := range ctx.Editor.Windows {
+	for _, w := range ctx.Editor.Windows() {
 		if w.Panel == panel {
 			count++
 		}
@@ -29,7 +29,7 @@ func CmdWindowVSplitLimited(ctx wig.Context) {
 		return
 	}
 
-	if len(ctx.Editor.Windows) >= MaxWindowsPerPanel*MaxPanels {
+	if len(ctx.Editor.Windows()) >= MaxWindowsPerPanel*MaxPanels {
 		ctx.Editor.EchoMessage("Window limit reached (max 8)")
 		return
 	}
@@ -45,7 +45,7 @@ func CmdWindowHSplitLimited(ctx wig.Context) {
 		return
 	}
 
-	if len(ctx.Editor.Windows) >= MaxWindowsPerPanel*MaxPanels {
+	if len(ctx.Editor.Windows()) >= MaxWindowsPerPanel*MaxPanels {
 		ctx.Editor.EchoMessage("Window limit reached (max 8)")
 		return
 	}

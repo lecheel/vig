@@ -78,12 +78,16 @@ const (
 	LayoutVertical   Layout = 1
 )
 
+type Workspace struct {
+	Num          int
+	Windows      []*Window
+	ActiveWindow *Window
+}
+
 type Editor struct {
 	View                View
 	Keys                *KeyHandler
 	Buffers             []*Buffer
-	Windows             []*Window
-	activeWindow        *Window
 	UiComponents        []UiComponent
 	ExitCh              chan int
 	RedrawCh            chan int
@@ -97,6 +101,8 @@ type Editor struct {
 	AutocompleteTrigger AutocompleteFn
 	Snippets            *SnippetsManager
 	Config              EditorConfig
+	Workspaces          []Workspace
+	ActiveWorkspace     int
 	LastRepeatableFn    func(Context)
 	ActiveRegister      rune
 	Marks               map[rune]Mark
@@ -107,28 +113,42 @@ func NewEditor(
 	keys *KeyHandler,
 ) *Editor {
 	windows := []*Window{CreateWindow(nil)}
+	workspaces := make([]Workspace, 10)
+	workspaces[1] = Workspace{
+		Num:          1,
+		Windows:      windows,
+		ActiveWindow: windows[0],
+	}
 
 	EditorInst = &Editor{
-		View:         view,
-		Keys:         keys,
-		Buffers:      make([]*Buffer, 0, 32),
-		Yanks:        List[yank]{},
-		Windows:      windows,
-		activeWindow: windows[0],
-		Layout:       LayoutVertical,
-		Projects:     NewProjectManager(),
-		ExitCh:       make(chan int),
-		RedrawCh:     make(chan int, 10),
-		ScreenSyncCh: make(chan int),
-		Events:       NewEventsManager(),
-		Snippets:     NewSnippetsManager(),
-		Marks:        make(map[rune]Mark),
+		View:            view,
+		Keys:            keys,
+		Buffers:         make([]*Buffer, 0, 32),
+		Yanks:           List[yank]{},
+		Layout:          LayoutVertical,
+		Projects:        NewProjectManager(),
+		ExitCh:          make(chan int),
+		RedrawCh:        make(chan int, 10),
+		ScreenSyncCh:    make(chan int),
+		Events:          NewEventsManager(),
+		Snippets:        NewSnippetsManager(),
+		Workspaces:      workspaces,
+		ActiveWorkspace: 1,
+		Marks:           make(map[rune]Mark),
 	}
 
 	EditorInst.Lsp = NewLspManager(EditorInst)
 	TreeSitterHighlighterGo(EditorInst)
 
 	return EditorInst
+}
+
+func (e *Editor) Windows() []*Window {
+	return e.Workspaces[e.ActiveWorkspace].Windows
+}
+
+func (e *Editor) SetWindows(w []*Window) {
+	e.Workspaces[e.ActiveWorkspace].Windows = w
 }
 
 func (e *Editor) OpenFile(path string) (*Buffer, error) {
@@ -159,7 +179,7 @@ func (e *Editor) OpenFile(path string) (*Buffer, error) {
 	if len(e.Buffers) == 1 && e.Buffers[0].FilePath == "[No Name]" && !e.Buffers[0].Dirty {
 		e.Buffers[0] = buf
 		// Update any windows that were showing the old [No Name] buffer
-		for _, win := range e.Windows {
+		for _, win := range e.Windows() {
 			if win.buf != nil && win.buf.FilePath == "[No Name]" {
 				win.ShowBuffer(buf)
 			}
@@ -209,17 +229,31 @@ func (e *Editor) BufferFindByFilePath(fp string, create bool) *Buffer {
 	return b
 }
 
-// Returns active window buffer
+// Returns active window buffer.
+// May return nil when the active workspace has no active window/buffer,
+// e.g. transiently after ":q" closed the last window.
 func (e *Editor) ActiveBuffer() *Buffer {
-	return e.ActiveWindow().Buffer()
+	win := e.ActiveWindow()
+	if win == nil {
+		return nil
+	}
+	return win.Buffer()
+}
+
+func (e *Editor) GetActiveWorkspace() *Workspace {
+	return &e.Workspaces[e.ActiveWorkspace]
+}
+
+func (e *Editor) GetWorkspace(num int) *Workspace {
+	return &e.Workspaces[num]
 }
 
 func (e *Editor) ActiveWindow() *Window {
-	return e.activeWindow
+	return e.Workspaces[e.ActiveWorkspace].ActiveWindow
 }
 
 func (e *Editor) SetActiveWindow(w *Window) {
-	e.activeWindow = w
+	e.Workspaces[e.ActiveWorkspace].ActiveWindow = w
 }
 
 func (e *Editor) PushUi(c UiComponent) {
@@ -247,18 +281,18 @@ func (e *Editor) PopUiComponent(c UiComponent) {
 }
 
 func (e *Editor) EnsureBufferIsVisible(b *Buffer) {
-	for _, win := range e.Windows {
+	for _, win := range e.Windows() {
 		if win.Buffer() == b {
 			return
 		}
 	}
-	if len(e.Windows) > 1 {
-		e.Windows[len(e.Windows)-1].ShowBuffer(b)
+	if len(e.Windows()) > 1 {
+		e.Windows()[len(e.Windows())-1].ShowBuffer(b)
 		return
 	}
 	win := CreateWindow(nil)
 	win.buf = b
-	e.Windows = append(e.Windows, win)
+	e.SetWindows(append(e.Windows(), win))
 }
 
 // WindowsForBuffer returns every window whose
@@ -268,7 +302,7 @@ func (e *Editor) EnsureBufferIsVisible(b *Buffer) {
 // rather than per-buffer.
 func (e *Editor) WindowsForBuffer(buf *Buffer) []*Window {
 	var out []*Window
-	for _, w := range e.Windows {
+	for _, w := range e.Windows() {
 		if w.buf == buf {
 			out = append(out, w)
 		}
@@ -278,11 +312,22 @@ func (e *Editor) WindowsForBuffer(buf *Buffer) []*Window {
 
 func (e *Editor) HandleInput(ev *tcell.EventKey) {
 	var k *KeyHandler
-	mode := e.ActiveBuffer().Mode()
+
+	win := e.ActiveWindow()
+	if win == nil {
+		// Workspace teardown in progress (e.g. right after ":q"): drop event.
+		return
+	}
+	buf := win.Buffer()
+	if buf == nil {
+		// No active buffer yet: drop event instead of nil-deref in buf.Mode().
+		return
+	}
+	mode := buf.Mode()
 	e.Message = ""
 
-	if e.ActiveWindow().Buffer().KeyHandler != nil {
-		k = e.ActiveWindow().Buffer().KeyHandler
+	if buf.KeyHandler != nil {
+		k = buf.KeyHandler
 	} else {
 		k = e.Keys
 	}

@@ -874,7 +874,7 @@ func CmdViewDefinitionOtherWindow(ctx wig.Context) {
 	curWin := ctx.Editor.ActiveWindow()
 	cur := wig.ContextCursorGet(ctx)
 
-	if len(ctx.Editor.Windows) == 1 {
+	if len(ctx.Editor.Windows()) == 1 {
 		wig.CmdWindowVSplit(ctx)
 	}
 
@@ -884,6 +884,94 @@ func CmdViewDefinitionOtherWindow(ctx wig.Context) {
 	ctx.Editor.ActiveWindow().VisitBuffer(ctx, *cur)
 	CmdGotoDefinition(ctx)
 	ctx.Editor.SetActiveWindow(curWin)
+}
+
+// CmdWorkspaceListPicker opens a fuzzy picker listing every workspace
+// alongside the files it contains. Selecting a workspace captures the
+// current workspace state into the persistence cache, switches to the
+// target workspace, and restores its files from cache if it is empty.
+//
+// The picker also supports pressing Delete to clear a workspace's
+// cached entry.
+func CmdWorkspaceListPicker(ctx wig.Context) {
+	cache := wig.LoadWorkspaceCache()
+	cache.CaptureAll(ctx.Editor)
+
+	buildItems := func() []ui.PickerItem[int] {
+		items := make([]ui.PickerItem[int], 0, len(ctx.Editor.Workspaces))
+		for i := 0; i < len(ctx.Editor.Workspaces); i++ {
+			var label string
+			if i == ctx.Editor.ActiveWorkspace {
+				label = fmt.Sprintf("ws%d *", i)
+			} else {
+				label = fmt.Sprintf("ws%d", i)
+			}
+
+			entry := cache.Workspaces[i]
+			var filesStr string
+			if len(entry.Files) == 0 {
+				filesStr = "(empty)"
+			} else {
+				names := make([]string, 0, len(entry.Files))
+				for _, f := range entry.Files {
+					names = append(names, filepath.Base(f))
+				}
+				filesStr = strings.Join(names, " ")
+			}
+
+			items = append(items, ui.PickerItem[int]{
+				Name:   fmt.Sprintf("%s: %s", label, filesStr),
+				Value:  i,
+				Active: i == ctx.Editor.ActiveWorkspace,
+			})
+		}
+		return items
+	}
+
+	action := func(p *ui.UiPicker[int], i *ui.PickerItem[int]) {
+		defer ctx.Editor.PopUi()
+		if i == nil {
+			return
+		}
+
+		target := i.Value
+		if target == ctx.Editor.ActiveWorkspace {
+			return
+		}
+
+		// Capture current workspace before switching
+		cache.CaptureWorkspace(ctx.Editor.ActiveWorkspace, ctx.Editor.GetActiveWorkspace())
+		cache.Save()
+
+		// Ensure target workspace has at least one window
+		ws := ctx.Editor.GetWorkspace(target)
+		if len(ws.Windows) == 0 {
+			win := wig.CreateWindow(nil)
+			ws.Windows = []*wig.Window{win}
+			ws.Num = target
+			ws.ActiveWindow = win
+		}
+
+		ctx.Editor.ActiveWorkspace = target
+
+		// Restore files from cache if workspace is empty
+		cache.RestoreWorkspace(ctx.Editor, target)
+		ctx.Editor.Redraw()
+	}
+
+	picker := ui.PickerInit(ctx.Editor, action, buildItems())
+	picker.SetTitle("Workspaces [Enter: Switch  Del: Clear cache]")
+
+	picker.OnKey("Delete", func(ctx wig.Context) {
+		item := picker.GetActiveItem()
+		if item == nil {
+			return
+		}
+		delete(cache.Workspaces, item.Value)
+		cache.Save()
+		picker.SetItems(buildItems())
+		ctx.Editor.Redraw()
+	})
 }
 
 func CmdLspShowSignature(ctx wig.Context) {

@@ -908,7 +908,7 @@ func CmdGitView(ctx wig.Context) {
 	gitBuf := ctx.Editor.BufferFindByFilePath("[git]", false)
 	if gitBuf != nil && ctx.Editor.ActiveBuffer() == gitBuf {
 		// Toggle off: close split or kill buffer
-		if len(ctx.Editor.Windows) > 1 {
+		if len(ctx.Editor.Windows()) > 1 {
 			wig.CmdWindowCloseAndKillBuffer(ctx)
 		} else {
 			wig.CmdKillBuffer(ctx)
@@ -927,7 +927,7 @@ func CmdGitView(ctx wig.Context) {
 
 	useSplit := ctx.Editor.Config.GitStatusView != "full"
 
-	if useSplit && len(ctx.Editor.Windows) == 1 {
+	if useSplit && len(ctx.Editor.Windows()) == 1 {
 		wig.CmdWindowVSplit(ctx)
 		wig.CmdWindowNext(ctx)
 	}
@@ -1273,7 +1273,7 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 					return
 				}
 				pendingStash = nil
-				if len(ctx.Editor.Windows) > 1 {
+				if len(ctx.Editor.Windows()) > 1 {
 					wig.CmdWindowCloseAndKillBuffer(ctx)
 				} else {
 					wig.CmdKillBuffer(ctx)
@@ -1288,7 +1288,7 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 					ctx.Editor.EchoMessage("Cancelled")
 					return
 				}
-				if len(ctx.Editor.Windows) > 1 {
+				if len(ctx.Editor.Windows()) > 1 {
 					wig.CmdWindowCloseAndKillBuffer(ctx)
 				} else {
 					wig.CmdKillBuffer(ctx)

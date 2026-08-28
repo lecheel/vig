@@ -462,6 +462,7 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 					"g": commands.CmdGitView,
 					"f": commands.CmdGitFilesPicker,
 				},
+				"w": commands.CmdWorkspaceListPicker,
 			},
 		},
 		wig.MODE_VISUAL: wig.KeyMap{

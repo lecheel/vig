@@ -298,14 +298,14 @@ func openQuickfixBuffer(ctx wig.Context, entries []QuickfixEntry) {
 				wig.CmdCursorCenter(ctx)
 			},
 			"q": func(ctx wig.Context) {
-				if len(ctx.Editor.Windows) > 1 {
+				if len(ctx.Editor.Windows()) > 1 {
 					wig.CmdWindowClose(ctx)
 				} else {
 					wig.CmdBufferCycle(ctx)
 				}
 			},
 			"Esc": func(ctx wig.Context) {
-				if len(ctx.Editor.Windows) > 1 {
+				if len(ctx.Editor.Windows()) > 1 {
 					wig.CmdWindowClose(ctx)
 				} else {
 					wig.CmdBufferCycle(ctx)
@@ -314,7 +314,7 @@ func openQuickfixBuffer(ctx wig.Context, entries []QuickfixEntry) {
 		},
 	})
 
-	if len(ctx.Editor.Windows) == 1 {
+	if len(ctx.Editor.Windows()) == 1 {
 		wig.CmdWindowVSplit(ctx)
 		wig.CmdWindowNext(ctx)
 	}
@@ -342,7 +342,7 @@ func visitQuickfixLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig
 	}
 
 	var sourceWin *wig.Window
-	for _, win := range ctx.Editor.Windows {
+	for _, win := range ctx.Editor.Windows() {
 		if win.Buffer() == sourceBuf {
 			sourceWin = win
 			break
