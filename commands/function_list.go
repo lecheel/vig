@@ -43,6 +43,7 @@ func CmdFunctionList(ctx wig.Context) {
 			if i == nil {
 				return
 			}
+			ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, wig.ContextCursorGet(ctx))
 			ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{
 				Line: i.Value.Line,
 				Char: 0,
@@ -52,4 +53,73 @@ func CmdFunctionList(ctx wig.Context) {
 		items,
 	)
 	picker.SetTitle("Functions")
+}
+
+// CmdGotoNextFunction jumps to the next function definition from the current line.
+func CmdGotoNextFunction(ctx wig.Context) {
+	gotoFunction(ctx, 1)
+	ctx.Editor.LastRepeatableFn = CmdGotoNextFunction
+}
+
+// CmdGotoPrevFunction jumps to the previous function definition from the current line.
+func CmdGotoPrevFunction(ctx wig.Context) {
+	gotoFunction(ctx, -1)
+	ctx.Editor.LastRepeatableFn = CmdGotoPrevFunction
+}
+
+func gotoFunction(ctx wig.Context, direction int) {
+	if ctx.Buf == nil || ctx.Buf.Highlighter == nil {
+		return
+	}
+
+	ts, ok := ctx.Buf.Highlighter.(*wig.TreeSitterHighlighter)
+	if !ok || ts == nil {
+		return
+	}
+
+	locations := ts.ListFunctions()
+	if len(locations) == 0 {
+		ctx.Editor.EchoMessage("No functions found")
+		return
+	}
+
+	cur := wig.ContextCursorGet(ctx)
+	var target *wig.Location
+
+	if direction > 0 {
+		// Find first function strictly after the current line
+		for i := range locations {
+			if locations[i].Line > cur.Line {
+				target = &locations[i]
+				break
+			}
+		}
+		if target == nil {
+			// Wrap around to the first function
+			target = &locations[0]
+			ctx.Editor.EchoMessage("search hit BOTTOM, continuing at TOP")
+		}
+	} else {
+		// Find last function strictly before the current line
+		for i := len(locations) - 1; i >= 0; i-- {
+			if locations[i].Line < cur.Line {
+				target = &locations[i]
+				break
+			}
+		}
+		if target == nil {
+			// Wrap around to the last function
+			target = &locations[len(locations)-1]
+			ctx.Editor.EchoMessage("search hit TOP, continuing at BOTTOM")
+		}
+	}
+
+	if target != nil {
+		ctx.Editor.ActiveWindow().Jumps.Push(ctx.Buf, cur)
+		ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{
+			Line: target.Line,
+			Char: 0,
+		})
+		wig.CmdCursorCenter(ctx)
+	}
 }

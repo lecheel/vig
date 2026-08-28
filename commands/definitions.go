@@ -10,6 +10,8 @@ import (
 func init() {
 	wig.AllCommands["CmdMiniHelp"] = wig.CmdDefinition{Desc: "Mini help", Fn: ui.CmdMiniHelp}
 	wig.AllCommands["CmdFunctionList"] = wig.CmdDefinition{Desc: "Function list", Fn: CmdFunctionList}
+	wig.AllCommands["CmdGotoNextFunction"] = wig.CmdDefinition{Desc: "Next function", Fn: CmdGotoNextFunction, Repeatable: true}
+	wig.AllCommands["CmdGotoPrevFunction"] = wig.CmdDefinition{Desc: "Previous function", Fn: CmdGotoPrevFunction, Repeatable: true}
 	wig.AllCommands["CmdFormatBuffer"] = wig.CmdDefinition{Desc: "Format buffer", Fn: CmdFormatBuffer}
 	wig.AllCommands["CmdSearchProject"] = wig.CmdDefinition{Desc: "Search project", Fn: CmdSearchProject}
 	wig.AllCommands["CmdJumpForward"] = wig.CmdDefinition{Desc: "Jump forward", Fn: wig.CmdJumpForward}

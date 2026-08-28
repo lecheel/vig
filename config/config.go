@@ -417,6 +417,8 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 				"d": commands.CmdGotoDefinition,
 				"O": commands.CmdGotoDefinitionOtherWindow,
 				"o": commands.CmdViewDefinitionOtherWindow,
+				"n": commands.CmdGotoNextFunction,
+				"N": commands.CmdGotoPrevFunction,
 				"c": gcMapping,
 			},
 			"ctrl+c": wig.KeyMap{
@@ -529,6 +531,8 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 			"g": wig.KeyMap{
 				"g": wig.WithSelection(wig.CmdGotoLine0),
 				"c": wig.CmdToggleComment,
+				"n": wig.WithSelection(commands.CmdGotoNextFunction),
+				"N": wig.WithSelection(commands.CmdGotoPrevFunction),
 			},
 			leader: wig.KeyMap{
 				"y": commands.CmdClipboardCopy,
@@ -570,6 +574,8 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 			"g": wig.KeyMap{
 				"g": wig.WithSelection(wig.CmdGotoLine0),
 				"c": wig.CmdToggleComment,
+				"n": wig.WithSelection(commands.CmdGotoNextFunction),
+				"N": wig.WithSelection(commands.CmdGotoPrevFunction),
 			},
 			leader: wig.KeyMap{
 				"y": commands.CmdClipboardCopy,
