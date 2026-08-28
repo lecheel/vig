@@ -70,7 +70,7 @@ func StatuslineRender(
 		funcName = ts.FunctionAtLine(cur.Line)
 	}
 
-	rightSide := fmt.Sprintf("%s[workspace: %d] %d:%d", wsIndicator, e.ActiveWorkspace, cur.Line+1, cur.Char)
+	rightSide := fmt.Sprintf("%s[ws:%d] %d:%d", wsIndicator, e.ActiveWorkspace, cur.Line+1, cur.Char)
 	if funcName != "" {
 		// Cap function name length so very long Go method names
 		// (e.g. TestSomeVeryLongScenario_Subcase_ABC) don't push the
