@@ -160,7 +160,7 @@ func main() {
 	} else {
 		wig.CmdNewBuffer(editor.NewContext())
 
-		if editor.Config.Ws {
+		if editor.Config.SaveWorkspaces {
 			wsCache := wig.LoadWorkspaceCache()
 			wsCache.RestoreAll(editor)
 		}
@@ -269,7 +269,7 @@ func main() {
 	}
 
 	// Save workspace state (files per workspace) for session persistence
-	if editor.Config.Ws {
+	if editor.Config.SaveWorkspaces {
 		wsCache := wig.LoadWorkspaceCache()
 		wsCache.CaptureAll(editor)
 		wsCache.Save()

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/firstrow/wig"
+	"github.com/mattn/go-runewidth"
 )
 
 func StatuslineRender(
@@ -51,13 +52,18 @@ func StatuslineRender(
 	}
 
 	cur := wig.CursorGet(e, buf)
-	rightSide := fmt.Sprintf("[workspace: %d] %d:%d", e.ActiveWorkspace, cur.Line+1, cur.Char)
+	wsIndicator := "🔒"
+	if e.Config.SaveWorkspaces {
+		wsIndicator = "💾"
+	}
+	rightSide := fmt.Sprintf("%s[workspace: %d] %d:%d", wsIndicator, e.ActiveWorkspace, cur.Line+1, cur.Char)
 
 	if e.Keys.GetCount() > 1 {
 		rightSide = fmt.Sprintf("%d   %s", e.Keys.GetCount(), rightSide)
 	}
 
-	if w-len(rightSide)-1 >= 0 && h >= 0 {
-		view.SetContent(w-len(rightSide)-1, h, rightSide, st)
+	visWidth := runewidth.StringWidth(rightSide)
+	if w-visWidth-1 >= 0 && h >= 0 {
+		view.SetContent(w-visWidth-1, h, rightSide, st)
 	}
 }

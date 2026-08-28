@@ -68,6 +68,8 @@ type EditorSettings struct {
 	NotifyOnSave        *bool   `toml:"notify_on_save"`
 	GitAiCommit         *bool   `toml:"git_ai_commit"`
 	GitAiTool           *string `toml:"git_ai_tool"`
+	SaveWorkspaces      *bool   `toml:"save_workspaces"`
+	Workspaces          *bool   `toml:"workspaces"`
 	Ws                  *bool   `toml:"ws"`
 }
 
@@ -105,7 +107,7 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		LspEnabled:          true,
 		WhichKeyFormat:      "words",
 		SameStatuslineColor: false,
-		Ws:                  false,
+		SaveWorkspaces:      false,
 	}
 	userMap := wig.ModeKeyMap{
 		wig.MODE_NORMAL:       wig.KeyMap{},
@@ -190,8 +192,12 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	if cfg.Editor.GitAiTool != nil {
 		commands.GitAiTool = *cfg.Editor.GitAiTool
 	}
-	if cfg.Editor.Ws != nil {
-		editorCfg.Ws = *cfg.Editor.Ws
+	if cfg.Editor.SaveWorkspaces != nil {
+		editorCfg.SaveWorkspaces = *cfg.Editor.SaveWorkspaces
+	} else if cfg.Editor.Workspaces != nil {
+		editorCfg.SaveWorkspaces = *cfg.Editor.Workspaces
+	} else if cfg.Editor.Ws != nil {
+		editorCfg.SaveWorkspaces = *cfg.Editor.Ws
 	}
 	resolve := func(name string) any {
 		if def, ok := wig.AllCommands[name]; ok {
@@ -467,7 +473,19 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 					"g": commands.CmdGitView,
 					"f": commands.CmdGitFilesPicker,
 				},
-				"w": commands.CmdWorkspaceListPicker,
+				"w": wig.KeyMap{
+					"w": commands.CmdWorkspaceListPicker,
+					"1": wig.CmdWorkspaceSwitch_1,
+					"2": wig.CmdWorkspaceSwitch_2,
+					"3": wig.CmdWorkspaceSwitch_3,
+					"4": wig.CmdWorkspaceSwitch_4,
+					"5": wig.CmdWorkspaceSwitch_5,
+					"6": wig.CmdWorkspaceSwitch_6,
+					"7": wig.CmdWorkspaceSwitch_7,
+					"8": wig.CmdWorkspaceSwitch_8,
+					"9": wig.CmdWorkspaceSwitch_9,
+					"0": wig.CmdWorkspaceSwitch_0,
+				},
 			},
 		},
 		wig.MODE_VISUAL: wig.KeyMap{
