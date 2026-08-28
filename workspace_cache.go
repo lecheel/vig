@@ -69,6 +69,14 @@ func (c *WorkspaceCache) CaptureWorkspace(num int, ws *Workspace) {
 	if ws == nil {
 		return
 	}
+	if len(ws.Files) == 0 {
+		if len(ws.Windows) == 1 && ws.Windows[0] != nil {
+			buf := ws.Windows[0].Buffer()
+			if buf == nil || (buf.FilePath == "[No Name]" && !buf.Dirty) {
+				return
+			}
+		}
+	}
 	entry := WorkspaceCacheEntry{}
 	exists := func(fp string) bool {
 		if fp == "" || strings.HasPrefix(fp, "[") {
@@ -79,11 +87,9 @@ func (c *WorkspaceCache) CaptureWorkspace(num int, ws *Workspace) {
 		_, err := os.Stat(fp)
 		return err == nil
 	}
+	seen := make(map[string]bool)
 	// Windows records the REAL split layout: exactly one entry per
-	// window currently on screen, in order. This — not Files — is what
-	// RestoreWorkspace uses to decide how many windows to recreate, so
-	// a workspace with 10 buffers opened serially in one window still
-	// restores as one window, not ten splits.
+	// window currently on screen, in order.
 	for _, win := range ws.Windows {
 		if win == nil {
 			continue
@@ -93,14 +99,12 @@ func (c *WorkspaceCache) CaptureWorkspace(num int, ws *Workspace) {
 			continue
 		}
 		entry.Windows = append(entry.Windows, buf.FilePath)
+		if !seen[buf.FilePath] {
+			seen[buf.FilePath] = true
+			entry.Files = append(entry.Files, buf.FilePath)
+		}
 	}
-	// Files is the full open-file history for the workspace (see
-	// Editor.recordWorkspaceFile) — every file ever opened while this
-	// workspace was active, regardless of how many windows existed.
-	// Restored as background buffers only (no window each), so opening
-	// file1 -> file2 -> file3 in the same window still leaves all three
-	// reachable via the buffer picker/MRU after a restart.
-	seen := make(map[string]bool)
+	// Files is the full open-file history for the workspace
 	for _, fp := range ws.Files {
 		if !exists(fp) || seen[fp] {
 			continue
@@ -131,6 +135,37 @@ func (c *WorkspaceCache) CaptureAll(editor *Editor) {
 		c.CaptureWorkspace(i, ws)
 	}
 	c.ActiveWorkspace = editor.ActiveWorkspace
+}
+
+// RestoreAll restores all cached workspaces into the editor and activates
+// the previously active workspace.
+func (c *WorkspaceCache) RestoreAll(editor *Editor) {
+	origActive := editor.ActiveWorkspace
+	if target := c.ActiveWorkspace; target >= 0 && target < len(editor.Workspaces) {
+		origActive = target
+	}
+
+	for num := range c.Workspaces {
+		if num < 0 || num >= len(editor.Workspaces) {
+			continue
+		}
+		editor.ActiveWorkspace = num
+		ws := editor.GetWorkspace(num)
+		if len(ws.Windows) == 0 {
+			win := CreateWindow(nil)
+			ws.Windows = []*Window{win}
+			ws.Num = num
+			ws.ActiveWindow = win
+			ws.Root = leafNode(win)
+		}
+		c.RestoreWorkspace(editor, num)
+	}
+
+	editor.ActiveWorkspace = origActive
+	ws := editor.GetActiveWorkspace()
+	if ws != nil && ws.ActiveWindow != nil {
+		editor.SetActiveWindow(ws.ActiveWindow)
+	}
 }
 
 // RestoreWorkspace rebuilds the target workspace from cache if it is
@@ -240,6 +275,13 @@ func (c *WorkspaceCache) RestoreWorkspace(editor *Editor, num int) {
 				ws.ActiveWindow = r.win
 				break
 			}
+		}
+	}
+	// Explicitly assign ws.Files for this workspace
+	ws.Files = make([]string, 0, len(entry.Files))
+	for _, fp := range entry.Files {
+		if _, err := os.Stat(fp); err == nil {
+			ws.Files = append(ws.Files, fp)
 		}
 	}
 	// Restore the rest of the open-file history as background buffers

@@ -68,6 +68,7 @@ type EditorSettings struct {
 	NotifyOnSave        *bool   `toml:"notify_on_save"`
 	GitAiCommit         *bool   `toml:"git_ai_commit"`
 	GitAiTool           *string `toml:"git_ai_tool"`
+	Ws                  *bool   `toml:"ws"`
 }
 
 type UserKeysConfig struct {
@@ -104,6 +105,7 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		LspEnabled:          true,
 		WhichKeyFormat:      "words",
 		SameStatuslineColor: false,
+		Ws:                  false,
 	}
 	userMap := wig.ModeKeyMap{
 		wig.MODE_NORMAL:       wig.KeyMap{},
@@ -187,6 +189,9 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	}
 	if cfg.Editor.GitAiTool != nil {
 		commands.GitAiTool = *cfg.Editor.GitAiTool
+	}
+	if cfg.Editor.Ws != nil {
+		editorCfg.Ws = *cfg.Editor.Ws
 	}
 	resolve := func(name string) any {
 		if def, ok := wig.AllCommands[name]; ok {

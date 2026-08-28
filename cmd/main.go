@@ -160,21 +160,9 @@ func main() {
 	} else {
 		wig.CmdNewBuffer(editor.NewContext())
 
-		// Try restoring last session's active workspace from cache
-		wsCache := wig.LoadWorkspaceCache()
-		if target := wsCache.ActiveWorkspace; target >= 0 && target < len(editor.Workspaces) {
-			if entry, ok := wsCache.Workspaces[target]; ok && len(entry.Files) > 0 {
-				ws := editor.GetWorkspace(target)
-				if len(ws.Windows) == 0 {
-					win := wig.CreateWindow(nil)
-					ws.Windows = []*wig.Window{win}
-					ws.Num = target
-					ws.ActiveWindow = win
-					ws.Root = wig.LeafNode(win)
-				}
-				editor.ActiveWorkspace = target
-				wsCache.RestoreWorkspace(editor, target)
-			}
+		if editor.Config.Ws {
+			wsCache := wig.LoadWorkspaceCache()
+			wsCache.RestoreAll(editor)
 		}
 	}
 
@@ -281,9 +269,11 @@ func main() {
 	}
 
 	// Save workspace state (files per workspace) for session persistence
-	wsCache := wig.LoadWorkspaceCache()
-	wsCache.CaptureAll(editor)
-	wsCache.Save()
+	if editor.Config.Ws {
+		wsCache := wig.LoadWorkspaceCache()
+		wsCache.CaptureAll(editor)
+		wsCache.Save()
+	}
 
 	// Stop the renderer before finalizing the screen to prevent
 	// a panic from a concurrent render triggered by the event loop.

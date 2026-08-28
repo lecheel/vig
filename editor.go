@@ -24,6 +24,7 @@ type EditorConfig struct {
 	LspEnabled          bool   `toml:"lsp_enabled"`           // If false, LSP servers are never started and all LSP features are no-ops
 	WhichKeyFormat      string `toml:"which_key_format"`      // "words", "camel", or "cmd"
 	SameStatuslineColor bool   `toml:"same_statusline_color"` // If true, keeps statusline color consistent across modes (disables distinct insert color)
+	Ws                  bool   `toml:"ws"`                    // If true, enables workspace session save & restore (default: false)
 }
 
 type View interface {
