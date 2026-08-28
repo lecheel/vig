@@ -15,6 +15,7 @@
   - **Boolean toggle command (`toggle`, toggles true/false)**
   - **Extended comment motions**: `gcc`, `gcj`, `gck`, `gc$`, `gcG`, `gcgg`, `gcip`, `gcap` with paragraph and text‑object support
   - **Save with feedback** (lines/bytes written, visual toast) and **save-as** (`:w <filename>`)
+  - **Line and selection indentation** (`>`, `<` with LSP-based indent units)
 
 - **Movement**
   - Directional navigation: `h`, `j`, `k`, `l`, `w`, `b`, `0`, `$`
@@ -22,6 +23,7 @@
   - Scrolling: Page Up/Down, Line Up/Down
   - EasyMotion: `s` 2-character viewport jump with home-row target overlays (Normal and Visual)
   - **End‑of‑file jump (`G`)**
+  - **Function navigation**: `gn`/`gN` to jump to next/previous function definition (dot-repeatable)
 
 - **Marks**
   - `m[a-z]` to set local buffer marks
@@ -45,12 +47,15 @@
   - **`config` command to open `~/.config/wig/config.toml` (creates if missing)**
   - **`--gf` (git files) and `--gs` (git status) CLI flags to open pickers on startup**
 
-- **Window Management**
-  - Vertical split (`:vs`, `CmdWindowVSplit`)
-  - Horizontal split (`:sp`, `CmdWindowHSplit`)
+- **Window Management & Workspaces**
+  - **Recursive window splits**: Nested horizontal/vertical layouts (`WinNode` tree)
+  - Vertical split (`:vs`, `CmdWindowVSplit`) and Horizontal split (`:sp`, `CmdWindowHSplit`) with max limits
   - Window cycling (`ctrl+w w`, `CmdWindowNext`)
   - Window closing (`:close`, `:only`, close & kill buffer)
   - Layout toggling between horizontal and vertical layouts
+  - **Workspace sessions**: Up to 10 workspaces (`wslist`), move windows between them
+  - **Workspace persistence**: Save/restore layouts and file history across sessions (`SaveWorkspaces` config)
+  - **Persistence status indicator** (💾/🔒) in the statusline
 
 - **Git Integration**
   - Git status panel (`gs`/`CmdGitView`): staging (`s`), diff inspection (`d`), refresh (`r`)
@@ -82,7 +87,7 @@
   - Custom query support via `~/.config/wig/queries/<lang>/highlights.scm`
 
 - **UI Elements**
-  - Statusline with mode, file status, and cursor coordinates
+  - Statusline with mode, file status, cursor coordinates, **current function name**, and **workspace persistence indicator** (💾/🔒)
   - Notification toasts (`ui.Notify` with 5s auto-dismiss, stacking, and type badges)
   - Which-Key popup (multi-column, mode title, configurable `words`/`camel`/`cmd` formats)
   - EasyMotion visual jump labels overlay
@@ -144,6 +149,7 @@
 - **Completion**
   - LSP completions
   - Local wordlist and buffer word completion fallback (`Alt-/` / `LocalComplete`)
+  - **Path completion** (`./`, `../` filesystem traversal)
   - Single-candidate automatic completion
 
 ---
