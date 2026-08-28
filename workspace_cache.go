@@ -11,6 +11,13 @@ import (
 // workspace so that the workspace layout can be restored in a later
 // editor session.
 type WorkspaceCacheEntry struct {
+	// Windows is the real on-screen split layout: one file path per
+	// Window that existed in the workspace, in window order. This is
+	// what RestoreWorkspace uses to recreate splits — never Files.
+	Windows []string `json:"windows"`
+	// Files is every file ever opened in this workspace (see
+	// Editor.recordWorkspaceFile), independent of how many windows
+	// existed. Restored as background buffers only, no windows.
 	Files      []string `json:"files"`
 	ActiveFile string   `json:"active_file"`
 	Layout     int      `json:"layout"`
@@ -63,37 +70,43 @@ func (c *WorkspaceCache) CaptureWorkspace(num int, ws *Workspace) {
 		return
 	}
 	entry := WorkspaceCacheEntry{}
-	seen := make(map[string]bool)
-	addFile := func(fp string) {
-		if fp == "" || strings.HasPrefix(fp, "[") || seen[fp] {
-			return
+	exists := func(fp string) bool {
+		if fp == "" || strings.HasPrefix(fp, "[") {
+			return false
 		}
 		// Drop files that no longer exist on disk so deleted files never
 		// poison future session restores.
-		if _, err := os.Stat(fp); err != nil {
-			return
-		}
-		seen[fp] = true
-		entry.Files = append(entry.Files, fp)
+		_, err := os.Stat(fp)
+		return err == nil
 	}
-	// ws.Files is the full history of every file opened while this
-	// workspace was active (see Editor.recordWorkspaceFile). This is what
-	// fixes the bug where opening file1, then file2, then file3 in the
-	// same window only preserved file3 across a restart: Windows only
-	// ever reflects the currently-visible buffer per window.
-	for _, fp := range ws.Files {
-		addFile(fp)
-	}
-	// Fallback: also capture whatever buffers are currently visible in
-	// windows, in case a buffer was moved into this workspace without
-	// going through Editor.OpenFile (e.g. the buffer picker).
+	// Windows records the REAL split layout: exactly one entry per
+	// window currently on screen, in order. This — not Files — is what
+	// RestoreWorkspace uses to decide how many windows to recreate, so
+	// a workspace with 10 buffers opened serially in one window still
+	// restores as one window, not ten splits.
 	for _, win := range ws.Windows {
 		if win == nil {
 			continue
 		}
-		if buf := win.Buffer(); buf != nil {
-			addFile(buf.FilePath)
+		buf := win.Buffer()
+		if buf == nil || !exists(buf.FilePath) {
+			continue
 		}
+		entry.Windows = append(entry.Windows, buf.FilePath)
+	}
+	// Files is the full open-file history for the workspace (see
+	// Editor.recordWorkspaceFile) — every file ever opened while this
+	// workspace was active, regardless of how many windows existed.
+	// Restored as background buffers only (no window each), so opening
+	// file1 -> file2 -> file3 in the same window still leaves all three
+	// reachable via the buffer picker/MRU after a restart.
+	seen := make(map[string]bool)
+	for _, fp := range ws.Files {
+		if !exists(fp) || seen[fp] {
+			continue
+		}
+		seen[fp] = true
+		entry.Files = append(entry.Files, fp)
 	}
 	if ws.ActiveWindow != nil {
 		buf := ws.ActiveWindow.Buffer()
@@ -127,13 +140,11 @@ func (c *WorkspaceCache) CaptureAll(editor *Editor) {
 // duplicates.
 func (c *WorkspaceCache) RestoreWorkspace(editor *Editor, num int) {
 	entry, ok := c.Workspaces[num]
-	if !ok || len(entry.Files) == 0 {
+	if !ok || (len(entry.Windows) == 0 && len(entry.Files) == 0) {
 		c.ensureWorkspaceBuffer(editor, num)
 		return
 	}
-
 	ws := editor.GetWorkspace(num)
-
 	// Skip if workspace already has real file buffers
 	hasFiles := false
 	for _, win := range ws.Windows {
@@ -149,17 +160,28 @@ func (c *WorkspaceCache) RestoreWorkspace(editor *Editor, num int) {
 	if hasFiles {
 		return
 	}
-
-	// Recreate one window per restored file so the previous split layout
-	// reappears. Opening a file alone only adds a hidden buffer to
-	// editor.Buffers; without a window displaying it, the file stays
-	// invisible on screen ("dismissed").
+	// Recreate one window per entry in entry.Windows — this is the real
+	// split layout the user had, independent of how many files were ever
+	// opened. entry.Files is restored separately below as plain
+	// background buffers (no window each), so a workspace with 10 files
+	// opened serially in one window does NOT explode into 10 splits.
+	windowFiles := entry.Windows
+	if len(windowFiles) == 0 {
+		// Legacy cache entries (pre-Windows field) or a workspace that
+		// was never captured with real window info: fall back to a
+		// single window on the most recently active file.
+		if entry.ActiveFile != "" {
+			windowFiles = []string{entry.ActiveFile}
+		} else if len(entry.Files) > 0 {
+			windowFiles = []string{entry.Files[len(entry.Files)-1]}
+		}
+	}
 	type restoredWin struct {
 		fp  string
 		win *Window
 	}
 	var restored []restoredWin
-	for _, fp := range entry.Files {
+	for _, fp := range windowFiles {
 		// Files can vanish from disk between capture and restore. Skip
 		// them instead of ending up with a nil-buffer window.
 		if _, err := os.Stat(fp); err != nil {
@@ -175,39 +197,53 @@ func (c *WorkspaceCache) RestoreWorkspace(editor *Editor, num int) {
 		win.VisitBuffer(ctx)
 		restored = append(restored, restoredWin{fp: fp, win: win})
 	}
-
 	if len(restored) == 0 {
-		// Every cached file was deleted from disk: still give the
+		// Every cached window-file was deleted from disk: still give the
 		// workspace's active window a valid buffer.
 		c.ensureWorkspaceBuffer(editor, num)
-		return
-	}
-
-	// If the workspace has a single window showing an unmodified [No Name],
-	// replace its buffer with the first restored file instead of orphaning it.
-	if len(ws.Windows) == 1 {
-		win := ws.Windows[0]
-		if win != nil && win.Buffer() != nil && win.Buffer().FilePath == "[No Name]" && !win.Buffer().Dirty {
-			ctx := editor.NewContext()
-			ctx.Buf = restored[0].win.Buffer()
-			win.VisitBuffer(ctx)
-			restored[0].win = win
+	} else {
+		// If the workspace has a single window showing an unmodified
+		// [No Name], replace its buffer with the first restored file
+		// instead of orphaning it.
+		if len(ws.Windows) == 1 {
+			win := ws.Windows[0]
+			if win != nil && win.Buffer() != nil && win.Buffer().FilePath == "[No Name]" && !win.Buffer().Dirty {
+				ctx := editor.NewContext()
+				ctx.Buf = restored[0].win.Buffer()
+				win.VisitBuffer(ctx)
+				restored[0].win = win
+			}
+		}
+		ws.Windows = make([]*Window, 0, len(restored))
+		for _, r := range restored {
+			ws.Windows = append(ws.Windows, r.win)
+		}
+		ws.Layout = Layout(entry.Layout)
+		// Focus the window showing the previously active file; fall back
+		// to the first surviving window.
+		ws.ActiveWindow = restored[0].win
+		for _, r := range restored {
+			if r.fp == entry.ActiveFile {
+				ws.ActiveWindow = r.win
+				break
+			}
 		}
 	}
-
-	ws.Windows = make([]*Window, 0, len(restored))
-	for _, r := range restored {
-		ws.Windows = append(ws.Windows, r.win)
+	// Restore the rest of the open-file history as background buffers
+	// only — no windows — so they're reachable via the buffer picker/MRU
+	// without forcing any layout.
+	windowSet := make(map[string]bool, len(windowFiles))
+	for _, fp := range windowFiles {
+		windowSet[fp] = true
 	}
-	ws.Layout = Layout(entry.Layout)
-	// Focus the window showing the previously active file; fall back to
-	// the first surviving window.
-	ws.ActiveWindow = restored[0].win
-	for _, r := range restored {
-		if r.fp == entry.ActiveFile {
-			ws.ActiveWindow = r.win
-			break
+	for _, fp := range entry.Files {
+		if windowSet[fp] {
+			continue
 		}
+		if _, err := os.Stat(fp); err != nil {
+			continue
+		}
+		editor.OpenFile(fp)
 	}
 }
 
