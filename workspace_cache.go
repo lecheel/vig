@@ -69,12 +69,9 @@ func (c *WorkspaceCache) CaptureWorkspace(num int, ws *Workspace) {
 	if ws == nil {
 		return
 	}
-	if len(ws.Files) == 0 {
-		if len(ws.Windows) == 1 && ws.Windows[0] != nil {
-			buf := ws.Windows[0].Buffer()
-			if buf == nil || (buf.FilePath == "[No Name]" && !buf.Dirty) {
-				return
-			}
+	if EditorInst != nil && num != EditorInst.ActiveWorkspace && len(ws.Files) == 0 {
+		if len(ws.Windows) <= 1 && (len(ws.Windows) == 0 || ws.Windows[0] == nil || ws.Windows[0].Buffer() == nil || (ws.Windows[0].Buffer().FilePath == "[No Name]" && !ws.Windows[0].Buffer().Dirty)) {
+			return
 		}
 	}
 	entry := WorkspaceCacheEntry{}

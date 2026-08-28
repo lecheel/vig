@@ -843,6 +843,9 @@ func CmdKillBuffer(ctx Context) {
 
 	for i := range ctx.Editor.Workspaces {
 		ws := &ctx.Editor.Workspaces[i]
+		ws.Files = slices.DeleteFunc(ws.Files, func(f string) bool {
+			return f == buf.FilePath
+		})
 		for _, win := range ws.Windows {
 			if win.Buffer() == buf {
 				nctx := ctx.Editor.NewContext()

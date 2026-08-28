@@ -900,12 +900,7 @@ func CmdWorkspaceListPicker(ctx wig.Context) {
 	buildItems := func() []ui.PickerItem[int] {
 		items := make([]ui.PickerItem[int], 0, len(ctx.Editor.Workspaces))
 		for i := 0; i < len(ctx.Editor.Workspaces); i++ {
-			var label string
-			if i == ctx.Editor.ActiveWorkspace {
-				label = fmt.Sprintf("ws%d *", i)
-			} else {
-				label = fmt.Sprintf("ws%d", i)
-			}
+			label := fmt.Sprintf("ws%d", i)
 
 			entry := cache.Workspaces[i]
 			var filesStr string
