@@ -950,6 +950,7 @@ func CmdWorkspaceListPicker(ctx wig.Context) {
 			ws.Windows = []*wig.Window{win}
 			ws.Num = target
 			ws.ActiveWindow = win
+			ws.Root = wig.LeafNode(win)
 		}
 
 		ctx.Editor.ActiveWorkspace = target

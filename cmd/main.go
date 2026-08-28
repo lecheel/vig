@@ -170,6 +170,7 @@ func main() {
 					ws.Windows = []*wig.Window{win}
 					ws.Num = target
 					ws.ActiveWindow = win
+					ws.Root = wig.LeafNode(win)
 				}
 				editor.ActiveWorkspace = target
 				wsCache.RestoreWorkspace(editor, target)

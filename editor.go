@@ -78,10 +78,90 @@ const (
 	LayoutVertical   Layout = 1
 )
 
+// SplitDir describes how a WinNode's children are arranged.
+type SplitDir int
+
+const (
+	SplitNone       SplitDir = iota // leaf: a single Window
+	SplitVertical                   // children side-by-side (left/right) — ":vs"
+	SplitHorizontal                 // children stacked (top/bottom) — ":sp"
+)
+
+// WinNode is one node of the editor's recursive split tree. A leaf
+// (Dir == SplitNone) wraps exactly one Window. A split node wraps two or
+// more children arranged along Dir.
+type WinNode struct {
+	Dir      SplitDir
+	Win      *Window
+	Children []*WinNode
+}
+
+func LeafNode(w *Window) *WinNode { return &WinNode{Win: w} }
+func leafNode(w *Window) *WinNode { return &WinNode{Win: w} }
+
+// FindLeaf returns the leaf node wrapping win, or nil if win isn't in the tree.
+func FindLeaf(node *WinNode, win *Window) *WinNode {
+	if node == nil {
+		return nil
+	}
+	if node.Dir == SplitNone {
+		if node.Win == win {
+			return node
+		}
+		return nil
+	}
+	for _, c := range node.Children {
+		if f := FindLeaf(c, win); f != nil {
+			return f
+		}
+	}
+	return nil
+}
+
+func findLeaf(node *WinNode, win *Window) *WinNode { return FindLeaf(node, win) }
+
+// RemoveLeaf removes win's leaf from the tree, collapsing any split node
+// left with a single child. Returns the (possibly new) subtree root and
+// whether win was found.
+func RemoveLeaf(node *WinNode, win *Window) (*WinNode, bool) {
+	if node == nil {
+		return nil, false
+	}
+	if node.Dir == SplitNone {
+		if node.Win == win {
+			return nil, true
+		}
+		return node, false
+	}
+	for i, c := range node.Children {
+		newC, found := RemoveLeaf(c, win)
+		if !found {
+			continue
+		}
+		if newC == nil {
+			node.Children = append(node.Children[:i], node.Children[i+1:]...)
+		} else {
+			node.Children[i] = newC
+		}
+		switch len(node.Children) {
+		case 0:
+			return nil, true
+		case 1:
+			return node.Children[0], true // collapse 1-child split
+		default:
+			return node, true
+		}
+	}
+	return node, false
+}
+
+func removeLeaf(node *WinNode, win *Window) (*WinNode, bool) { return RemoveLeaf(node, win) }
+
 type Workspace struct {
 	Num          int
 	Windows      []*Window
 	ActiveWindow *Window
+	Root         *WinNode
 	Layout       Layout
 	// Files is the ordered history of every real file opened while this
 	// workspace was active. A window only ever shows one buffer at a time,
@@ -125,6 +205,7 @@ func NewEditor(
 		Num:          1,
 		Windows:      windows,
 		ActiveWindow: windows[0],
+		Root:         leafNode(windows[0]),
 		Layout:       LayoutVertical,
 	}
 
@@ -308,19 +389,40 @@ func (e *Editor) PopUiComponent(c UiComponent) {
 	}
 }
 
+func (e *Editor) Root() *WinNode {
+	ws := e.GetActiveWorkspace()
+	if ws == nil {
+		return nil
+	}
+	return ws.Root
+}
+
+func (e *Editor) SetRoot(r *WinNode) {
+	ws := e.GetActiveWorkspace()
+	if ws != nil {
+		ws.Root = r
+	}
+}
+
 func (e *Editor) EnsureBufferIsVisible(b *Buffer) {
-	for _, win := range e.Windows() {
+	ws := e.GetActiveWorkspace()
+	for _, win := range ws.Windows {
 		if win.Buffer() == b {
 			return
 		}
 	}
-	if len(e.Windows()) > 1 {
-		e.Windows()[len(e.Windows())-1].ShowBuffer(b)
+	if len(ws.Windows) > 1 {
+		ws.Windows[len(ws.Windows)-1].ShowBuffer(b)
 		return
 	}
 	win := CreateWindow(nil)
 	win.buf = b
-	e.SetWindows(append(e.Windows(), win))
+	ws.Windows = append(ws.Windows, win)
+	if ws.Root == nil {
+		ws.Root = leafNode(win)
+	} else {
+		ws.Root = &WinNode{Dir: SplitVertical, Children: []*WinNode{ws.Root, leafNode(win)}}
+	}
 }
 
 // WindowsForBuffer returns every window whose

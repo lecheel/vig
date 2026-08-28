@@ -876,17 +876,24 @@ func CmdKillBuffer(ctx Context) {
 			buf.KeyHandler = nil
 		}
 
-		windows := ctx.Editor.Windows()
-		windows = slices.DeleteFunc(windows, func(win *Window) bool {
-			if len(windows) == 1 {
+		for i := range ctx.Editor.Workspaces {
+			ws := &ctx.Editor.Workspaces[i]
+			ws.Windows = slices.DeleteFunc(ws.Windows, func(win *Window) bool {
+				if len(ws.Windows) == 1 {
+					return false
+				}
+				if win.buf == b {
+					if ws.Root != nil {
+						ws.Root, _ = removeLeaf(ws.Root, win)
+					}
+					return true
+				}
 				return false
+			})
+			if ws.Root == nil && len(ws.Windows) > 0 {
+				ws.Root = leafNode(ws.Windows[0])
 			}
-			if win.buf == b {
-				return true
-			}
-			return false
-		})
-		ctx.Editor.SetWindows(windows)
+		}
 
 		return true
 	})

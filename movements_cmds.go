@@ -412,20 +412,33 @@ func CmdBackwardChar(ctx Context) func(Context) {
 		}
 	}
 }
-func CmdWindowVSplit(ctx Context) {
-	ctx.Editor.GetActiveWorkspace().Layout = LayoutVertical
-	cur := ContextCursorGet(ctx)
-	nwin := CreateWindow(ctx.Editor.ActiveWindow())
-	nwin.VisitBuffer(ctx, *cur)
-	ctx.Editor.SetWindows(append(ctx.Editor.Windows(), nwin))
-}
+func CmdWindowVSplit(ctx Context) { splitWindow(ctx, SplitVertical) }
+func CmdWindowHSplit(ctx Context) { splitWindow(ctx, SplitHorizontal) }
 
-func CmdWindowHSplit(ctx Context) {
-	ctx.Editor.GetActiveWorkspace().Layout = LayoutHorizontal
+func splitWindow(ctx Context, dir SplitDir) {
+	ws := ctx.Editor.GetActiveWorkspace()
+	activeWin := ctx.Editor.ActiveWindow()
 	cur := ContextCursorGet(ctx)
-	nwin := CreateWindow(ctx.Editor.ActiveWindow())
+	nwin := CreateWindow(activeWin)
 	nwin.VisitBuffer(ctx, *cur)
-	ctx.Editor.SetWindows(append(ctx.Editor.Windows(), nwin))
+	ws.Windows = append(ws.Windows, nwin)
+	if ws.Root == nil {
+		ws.Root = leafNode(activeWin)
+	}
+	if leaf := findLeaf(ws.Root, activeWin); leaf != nil {
+		oldWin := leaf.Win
+		leaf.Win = nil
+		leaf.Dir = dir
+		leaf.Children = []*WinNode{leafNode(oldWin), leafNode(nwin)}
+	} else {
+		ws.Root = &WinNode{Dir: dir, Children: []*WinNode{ws.Root, leafNode(nwin)}}
+	}
+	if dir == SplitVertical {
+		ws.Layout = LayoutVertical
+	} else {
+		ws.Layout = LayoutHorizontal
+	}
+	ctx.Editor.SetActiveWindow(nwin)
 }
 
 func CmdWindowNext(ctx Context) {
@@ -443,7 +456,9 @@ func CmdWindowNext(ctx Context) {
 		idx = 0
 	}
 
-	ctx.Editor.SetActiveWindow(windows[idx])
+	if len(windows) > 0 {
+		ctx.Editor.SetActiveWindow(windows[idx])
+	}
 }
 
 func CmdWindowToggleLayout(ctx Context) {
@@ -456,36 +471,30 @@ func CmdWindowToggleLayout(ctx Context) {
 }
 
 func CmdWindowClose(ctx Context) {
-	windows := ctx.Editor.Windows()
-	if len(windows) == 1 {
+	ws := ctx.Editor.GetActiveWorkspace()
+	if len(ws.Windows) <= 1 {
 		return
 	}
 
-	curWin := ctx.Editor.ActiveWindow()
+	curWin := ws.ActiveWindow
+	ws.Root, _ = removeLeaf(ws.Root, curWin)
 	CmdWindowNext(ctx)
-	windows = slices.DeleteFunc(windows, func(win *Window) bool {
-		if win == curWin {
-			return true
-		}
-		return false
+	ws.Windows = slices.DeleteFunc(ws.Windows, func(win *Window) bool {
+		return win == curWin
 	})
-	ctx.Editor.SetWindows(windows)
 }
 
 func CmdWindowCloseOther(ctx Context) {
-	windows := ctx.Editor.Windows()
-	if len(windows) == 1 {
+	ws := ctx.Editor.GetActiveWorkspace()
+	if len(ws.Windows) <= 1 {
 		return
 	}
 
-	curWin := ctx.Editor.ActiveWindow()
-	windows = slices.DeleteFunc(windows, func(win *Window) bool {
-		if curWin == win {
-			return false
-		}
-		return true
+	curWin := ws.ActiveWindow
+	ws.Windows = slices.DeleteFunc(ws.Windows, func(win *Window) bool {
+		return win != curWin
 	})
-	ctx.Editor.SetWindows(windows)
+	ws.Root = leafNode(curWin)
 }
 
 func CmdWindowCloseAndKillBuffer(ctx Context) {
@@ -663,6 +672,11 @@ func moveWindowToWorkspace(ctx Context, num int) {
 	if ws.ActiveWindow == nil {
 		ws.ActiveWindow = nwin
 	}
+	if ws.Root == nil {
+		ws.Root = leafNode(nwin)
+	} else {
+		ws.Root = &WinNode{Dir: SplitVertical, Children: []*WinNode{ws.Root, leafNode(nwin)}}
+	}
 	CmdWindowClose(ctx)
 	ctx.Editor.EchoMessage(fmt.Sprintf("Window moved to workspace %d.", num))
 }
@@ -686,6 +700,9 @@ func workspaceSwitch(ctx Context, num int) {
 		ws.Windows = []*Window{win}
 		ws.Num = num
 		ws.ActiveWindow = win
+		ws.Root = leafNode(win)
+	} else if ws.Root == nil && len(ws.Windows) > 0 {
+		ws.Root = leafNode(ws.Windows[0])
 	}
 
 	ctx.Editor.ActiveWorkspace = num

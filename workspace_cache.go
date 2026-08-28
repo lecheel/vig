@@ -219,6 +219,19 @@ func (c *WorkspaceCache) RestoreWorkspace(editor *Editor, num int) {
 			ws.Windows = append(ws.Windows, r.win)
 		}
 		ws.Layout = Layout(entry.Layout)
+		if len(ws.Windows) == 1 {
+			ws.Root = leafNode(ws.Windows[0])
+		} else if len(ws.Windows) > 1 {
+			splitDir := SplitVertical
+			if ws.Layout == LayoutHorizontal {
+				splitDir = SplitHorizontal
+			}
+			children := make([]*WinNode, len(ws.Windows))
+			for i, win := range ws.Windows {
+				children[i] = leafNode(win)
+			}
+			ws.Root = &WinNode{Dir: splitDir, Children: children}
+		}
 		// Focus the window showing the previously active file; fall back
 		// to the first surviving window.
 		ws.ActiveWindow = restored[0].win
@@ -259,4 +272,7 @@ func (c *WorkspaceCache) ensureWorkspaceBuffer(editor *Editor, num int) {
 	ctx := editor.NewContext()
 	ctx.Buf = NewBuffer()
 	ws.ActiveWindow.VisitBuffer(ctx)
+	if ws.Root == nil {
+		ws.Root = leafNode(ws.ActiveWindow)
+	}
 }

@@ -52,62 +52,20 @@ func (r *Renderer) Render() {
 
 	w, h := r.screen.Size()
 
-	var winW, winH int
-	activeLayout := r.e.GetActiveWorkspace().Layout
-	if activeLayout == wig.LayoutVertical {
-		winW = w / len(r.e.Windows())
-		winH = h
-	} else {
-		winW = w
-		winH = h / len(r.e.Windows())
+	ws := r.e.GetActiveWorkspace()
+	var root *wig.WinNode
+	if ws != nil {
+		root = ws.Root
+	}
+	if root == nil {
+		if aw := r.e.ActiveWindow(); aw != nil {
+			root = wig.LeafNode(aw)
+		}
 	}
 
-	var winView *mview
 	var activeWinView *mview
-	for i, win := range r.e.Windows() {
-		var x, y int
-		if activeLayout == wig.LayoutVertical {
-			x = winW * i
-			if i > 0 {
-				st := wig.Color("ui.virtual.indent-guide")
-				for j := 0; j <= h; j++ {
-					if x >= 0 && x < w {
-						r.SetContent(x, j, string(tcell.RuneVLine), st)
-					}
-				}
-				x += 1
-			}
-		} else {
-			y = winH * i
-			if i > 0 {
-				st := wig.Color("ui.virtual.indent-guide")
-				for j := 0; j <= w; j++ {
-					if y >= 0 && y < h {
-						r.SetContent(j, y, string(tcell.RuneHLine), st)
-					}
-				}
-				y += 1
-			}
-		}
-
-		if winW <= 0 || winH <= 0 {
-			continue
-		}
-
-		winView = NewMView(r.screen, x, y, winW, winH)
-
-		if win == r.e.ActiveWindow() {
-			activeWinView = winView
-		}
-
-		ui.WindowRender(r.e, winView, win)
-
-		// Draw indent guides overlay
-		if r.e.Config.IndentGuides {
-			r.RenderIndentGuides(win, winView)
-		}
-
-		ui.StatuslineRender(r.e, winView, win)
+	if root != nil {
+		activeWinView = r.renderNode(root, 0, 0, w, h)
 	}
 
 	// widgets: pickers, etc...
@@ -122,6 +80,81 @@ func (r *Renderer) Render() {
 	}
 
 	r.screen.Show()
+}
+
+func (r *Renderer) renderNode(node *wig.WinNode, x, y, w, h int) *mview {
+	if node == nil || w <= 0 || h <= 0 {
+		return nil
+	}
+	if node.Dir == wig.SplitNone {
+		if node.Win == nil {
+			return nil
+		}
+		view := NewMView(r.screen, x, y, w, h)
+		ui.WindowRender(r.e, view, node.Win)
+		if r.e.Config.IndentGuides {
+			r.RenderIndentGuides(node.Win, view)
+		}
+		ui.StatuslineRender(r.e, view, node.Win)
+		if node.Win == r.e.ActiveWindow() {
+			return view
+		}
+		return nil
+	}
+	n := len(node.Children)
+	if n == 0 {
+		return nil
+	}
+	var active *mview
+	st := wig.Color("ui.virtual.indent-guide")
+	if node.Dir == wig.SplitVertical {
+		numSeps := n - 1
+		availW := max(w-numSeps, 0)
+		baseW := availW / n
+		remW := availW % n
+
+		curX := x
+		for i, c := range node.Children {
+			cw := baseW
+			if i < remW {
+				cw++
+			}
+			if i > 0 {
+				sepX := curX - 1
+				for j := 0; j < h; j++ {
+					r.SetContent(sepX, y+j, string(tcell.RuneVLine), st)
+				}
+			}
+			if v := r.renderNode(c, curX, y, cw, h); v != nil {
+				active = v
+			}
+			curX += cw + 1
+		}
+	} else {
+		numSeps := n - 1
+		availH := max(h-numSeps, 0)
+		baseH := availH / n
+		remH := availH % n
+
+		curY := y
+		for i, c := range node.Children {
+			ch := baseH
+			if i < remH {
+				ch++
+			}
+			if i > 0 {
+				sepY := curY - 1
+				for j := 0; j < w; j++ {
+					r.SetContent(x+j, sepY, string(tcell.RuneHLine), st)
+				}
+			}
+			if v := r.renderNode(c, x, curY, w, ch); v != nil {
+				active = v
+			}
+			curY += ch + 1
+		}
+	}
+	return active
 }
 
 // RenderIndentGuides draws vertical guide lines over leading whitespace
