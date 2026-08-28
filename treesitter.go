@@ -303,6 +303,94 @@ func (h *TreeSitterHighlighter) ListFunctions() []Location {
 	return funcs
 }
 
+// FunctionAtLine returns the name of the innermost function containing the
+// given 0-indexed line, or "" if the line is outside any function (e.g.
+// imports, package decl, module-level constants). It uses the same
+// per-language tree-sitter queries as ListFunctions (the data behind the
+// F8 picker) but, instead of returning every function, walks each match's
+// captured name node up to its parent function declaration and picks the
+// smallest enclosing range. The statusline calls this on every render so
+// the user can see "you are inside func Foo" beside the workspace
+// indicator without opening the picker.
+//
+// Why parent and not the captured node itself: the @name capture is on
+// the identifier/field_identifier (the function's name token), not the
+// function_declaration node, so the name node's range is just the span
+// of the identifier — typically one row. The parent is the
+// function_declaration/method_declaration whose StartRow..EndRow is the
+// full function body, which is what we need to test containment.
+func (h *TreeSitterHighlighter) FunctionAtLine(lineNum int) string {
+	tslock.Lock()
+	defer tslock.Unlock()
+
+	if h == nil || h.tree == nil {
+		return ""
+	}
+
+	var queryStr string
+	var treeSitterLang unsafe.Pointer
+
+	shebang := detectShebang(h.buf)
+	base := filepath.Base(h.buf.FilePath)
+
+	switch {
+	case strings.HasSuffix(h.buf.FilePath, ".go"):
+		queryStr = "(function_declaration name: (identifier) @name) (method_declaration name: (field_identifier) @name)"
+		treeSitterLang = golang.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".rs"):
+		queryStr = "(function_item name: (identifier) @name)"
+		treeSitterLang = rust.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".py") || shebang == "python":
+		queryStr = "(function_definition name: (identifier) @name)"
+		treeSitterLang = python.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".c"), strings.HasSuffix(h.buf.FilePath, ".h"):
+		queryStr = "(function_definition declarator: (function_declarator declarator: (identifier) @name))"
+		treeSitterLang = clang.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".sh"), strings.HasSuffix(h.buf.FilePath, ".bash"), strings.HasSuffix(h.buf.FilePath, ".zsh"),
+		base == ".bashrc" || base == ".bash_profile" || base == ".zshrc" || shebang == "bash":
+		queryStr = "(function_definition name: (word) @name)"
+		treeSitterLang = bash.Language()
+	default:
+		return ""
+	}
+
+	q, err := sitter.NewQuery(sitter.NewLanguage(treeSitterLang), queryStr)
+	if err != nil {
+		return ""
+	}
+	defer q.Close()
+
+	qc := sitter.NewQueryCursor()
+	defer qc.Close()
+
+	matches := qc.Matches(q, h.tree.RootNode(), h.sourceCode)
+
+	var bestName string
+	bestRange := math.MaxInt
+	for match := matches.Next(); match != nil; match = matches.Next() {
+		for _, cap := range match.Captures {
+			nameNode := cap.Node
+			parent := nameNode.Parent()
+			pStart := int(parent.StartPosition().Row)
+			pEnd := int(parent.EndPosition().Row)
+
+			if lineNum >= pStart && lineNum <= pEnd {
+				// Innermost function wins — smallest range containing
+				// the line. Matters for languages with nested functions
+				// (Python nested defs, inner Rust blocks); for Go's
+				// top-level funcs it just picks the only containing one.
+				rangeSize := pEnd - pStart
+				if rangeSize < bestRange {
+					bestRange = rangeSize
+					bestName = string(h.sourceCode[nameNode.StartByte():nameNode.EndByte()])
+				}
+			}
+		}
+	}
+
+	return bestName
+}
+
 func (h *TreeSitterHighlighter) editEditInput(event EventTextChange) (r sitter.InputEdit) {
 	pointToByte := func(buf *Buffer, line, char int) int {
 		size := 0

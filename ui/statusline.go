@@ -56,7 +56,30 @@ func StatuslineRender(
 	if e.Config.SaveWorkspaces {
 		wsIndicator = "💾"
 	}
+
+	// Show the innermost function containing the cursor line, beside the
+	// workspace indicator on the right side of the statusline. Uses the
+	// same tree-sitter query as CmdFunctionList (F8) — via
+	// TreeSitterHighlighter.FunctionAtLine — so the name shown matches
+	// what the F8 picker would list for this buffer. Empty for non-TS
+	// buffers (no Highlighter, or a non-tree-sitter Highlighter like the
+	// git diff / quickfix / health ones) or when the cursor is outside
+	// any function (imports, package decl, top-level constants, etc.).
+	funcName := ""
+	if ts, ok := buf.Highlighter.(*wig.TreeSitterHighlighter); ok && ts != nil {
+		funcName = ts.FunctionAtLine(cur.Line)
+	}
+
 	rightSide := fmt.Sprintf("%s[workspace: %d] %d:%d", wsIndicator, e.ActiveWorkspace, cur.Line+1, cur.Char)
+	if funcName != "" {
+		// Cap function name length so very long Go method names
+		// (e.g. TestSomeVeryLongScenario_Subcase_ABC) don't push the
+		// workspace indicator off-screen on narrow terminals.
+		if len(funcName) > 30 {
+			funcName = funcName[:27] + "..."
+		}
+		rightSide = fmt.Sprintf("%s  %s", funcName, rightSide)
+	}
 
 	if e.Keys.GetCount() > 1 {
 		rightSide = fmt.Sprintf("%d   %s", e.Keys.GetCount(), rightSide)
