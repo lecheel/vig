@@ -173,6 +173,8 @@ func init() {
 	wig.AllCommands["CmdWindowMoveToWorkspace_0"] = wig.CmdDefinition{Desc: "Move window to workspace 0", Fn: wig.CmdWindowMoveToWorkspace_0}
 
 	wig.AllCommands["wslist"] = wig.CmdDefinition{Desc: "List and switch workspaces", Fn: CmdWorkspaceListPicker}
+	wig.AllCommands["wssave"] = wig.CmdDefinition{Desc: "Save workspaces", Fn: CmdWorkspaceSave}
+	wig.AllCommands["CmdWorkspaceSave"] = wig.CmdDefinition{Desc: "Save workspaces", Fn: CmdWorkspaceSave}
 
 	wig.AllCommands["CmdDummyNA"] = wig.CmdDefinition{Desc: "Disable key", Fn: wig.CmdDummyNA}
 	wig.AllCommands["nop"] = wig.CmdDefinition{Desc: "NOP", Fn: wig.CmdDummyNA}

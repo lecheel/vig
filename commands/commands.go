@@ -959,6 +959,14 @@ func CmdWorkspaceListPicker(ctx wig.Context) {
 	picker.SetTitle("Workspaces [Enter: Switch]")
 }
 
+// CmdWorkspaceSave captures and saves all workspaces to disk manually.
+func CmdWorkspaceSave(ctx wig.Context) {
+	wsCache := wig.LoadWorkspaceCache()
+	wsCache.CaptureAll(ctx.Editor)
+	wsCache.Save()
+	ctx.Editor.EchoMessage("Workspaces saved")
+}
+
 func CmdLspShowSignature(ctx wig.Context) {
 	cur := wig.ContextCursorGet(ctx)
 	sign := ctx.Editor.Lsp.Signature(ctx.Buf, *cur)
