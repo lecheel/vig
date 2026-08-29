@@ -324,12 +324,37 @@ func (r *Renderer) RenderMetrics(info map[string]time.Duration) {
 
 type mview struct {
 	viewport *views.ViewPort
+	view     views.View
 }
 
 func NewMView(view views.View, x, y, w, h int) *mview {
 	return &mview{
 		viewport: views.NewViewPort(view, x, y, w, h),
+		view:     view,
 	}
+}
+
+// Suspend releases the terminal (leaves the alternate screen, restores the
+// original terminal mode) so an external interactive program can take over
+// stdin/stdout/stderr. Pairs with Resume. Implements commands.Suspendable.
+// This delegates to the underlying tcell.Screen, which handles x/term state
+// restoration and stops its internal input loop from stealing keystrokes.
+func (m *mview) Suspend() error {
+	if s, ok := m.view.(tcell.Screen); ok {
+		return s.Suspend()
+	}
+	return fmt.Errorf("view does not support suspend")
+}
+
+// Resume re-acquires the terminal after a prior Suspend, re-entering the
+// alternate screen and restoring tcell's raw input mode. The caller should
+// follow this with a full Redraw + ScreenSync since the terminal's actual
+// contents were overwritten by whatever ran during the suspend.
+func (m *mview) Resume() error {
+	if s, ok := m.view.(tcell.Screen); ok {
+		return s.Resume()
+	}
+	return fmt.Errorf("view does not support resume")
 }
 
 func (t *mview) Size() (int, int) {

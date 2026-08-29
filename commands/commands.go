@@ -437,7 +437,25 @@ func CmdGitHunkExternalTx(ctx wig.Context) {
 		ctx.Editor.View, isSuspendable, suspended,
 	))
 
-	args := []string{ctx.Buf.FilePath}
+	// tx resolves git refs (e.g. HEAD:render/render.go) relative to the
+	// process's working directory. Without setting cmd.Dir explicitly,
+	// tx inherits whatever cwd the editor process happens to have, which
+	// may not be the git repo root - causing git lookups inside tx to
+	// miss even though the same command works fine from a shell at the
+	// repo root. Anchor it to the project root explicitly.
+	root, rootErr := ctx.Editor.Projects.FindRoot(ctx.Buf)
+
+	// tx expects paths relative to the git root (e.g. "render/render.go")
+	// to resolve refs like `HEAD:render/render.go`. Passing an absolute
+	// path causes `git show HEAD:/abs/path` to fail with "does not exist".
+	relPath := ctx.Buf.FilePath
+	if root != "" {
+		if rel, err := filepath.Rel(root, ctx.Buf.FilePath); err == nil {
+			relPath = rel
+		}
+	}
+
+	args := []string{relPath}
 	if cur := wig.ContextCursorGet(ctx); cur != nil {
 		args = append(args, fmt.Sprintf("+%d", cur.Line+1))
 	}
@@ -448,13 +466,6 @@ func CmdGitHunkExternalTx(ctx wig.Context) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	// tx resolves git refs (e.g. HEAD:config/config.go) relative to the
-	// process's working directory. Without setting cmd.Dir explicitly,
-	// tx inherits whatever cwd the editor process happens to have, which
-	// may not be the git repo root - causing git lookups inside tx to
-	// miss even though the same command works fine from a shell at the
-	// repo root. Anchor it to the project root explicitly.
-	root, rootErr := ctx.Editor.Projects.FindRoot(ctx.Buf)
 	if root != "" {
 		cmd.Dir = root
 	}
