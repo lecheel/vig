@@ -38,6 +38,21 @@ func (r *Renderer) Stop() {
 	r.stopped = true
 }
 
+// Suspend releases the terminal (leaves the alternate screen, restores the
+// original terminal mode) so an external interactive program can take over
+// stdin/stdout/stderr. Pairs with Resume. Implements commands.Suspendable.
+func (r *Renderer) Suspend() error {
+	return r.screen.Suspend()
+}
+
+// Resume re-acquires the terminal after a prior Suspend, re-entering the
+// alternate screen and restoring tcell's raw input mode. The caller should
+// follow this with a full Redraw + ScreenSync since the terminal's actual
+// contents were overwritten by whatever ran during the suspend.
+func (r *Renderer) Resume() error {
+	return r.screen.Resume()
+}
+
 // TODO: rendering must be optimized.
 func (r *Renderer) Render() {
 	// TODO: schedule render

@@ -406,6 +406,78 @@ func CmdCommandPalettePicker(ctx wig.Context) {
 	picker.SetTitle("Command Palette")
 }
 
+// Suspendable allows the editor to temporarily release the terminal
+// so an interactive CLI tool (like `tx`) can run in the foreground.
+type Suspendable interface {
+	Suspend() error
+	Resume() error
+}
+
+// CmdGitHunkExternalTx runs `tx <current_file> HEAD` in the terminal to
+// show a vim-style 2-pane diff against the HEAD revision. It suspends
+// the editor UI if the View implements Suspendable.
+func CmdGitHunkExternalTx(ctx wig.Context) {
+	if ctx.Buf == nil || ctx.Buf.FilePath == "" || strings.HasPrefix(ctx.Buf.FilePath, "[") {
+		ctx.Editor.EchoMessage("No file to diff")
+		return
+	}
+
+	suspendable, isSuspendable := ctx.Editor.View.(Suspendable)
+	suspended := false
+	if isSuspendable {
+		if err := suspendable.Suspend(); err != nil {
+			ctx.Editor.LogMessage(fmt.Sprintf("tx debug: Suspend() failed: %v", err))
+		} else {
+			suspended = true
+			defer suspendable.Resume()
+		}
+	}
+	ctx.Editor.LogMessage(fmt.Sprintf(
+		"tx debug: view=%T isSuspendable=%v suspended=%v",
+		ctx.Editor.View, isSuspendable, suspended,
+	))
+
+	args := []string{ctx.Buf.FilePath}
+	if cur := wig.ContextCursorGet(ctx); cur != nil {
+		args = append(args, fmt.Sprintf("+%d", cur.Line+1))
+	}
+	args = append(args, "HEAD")
+
+	cmd := exec.Command("tx", args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// tx resolves git refs (e.g. HEAD:config/config.go) relative to the
+	// process's working directory. Without setting cmd.Dir explicitly,
+	// tx inherits whatever cwd the editor process happens to have, which
+	// may not be the git repo root - causing git lookups inside tx to
+	// miss even though the same command works fine from a shell at the
+	// repo root. Anchor it to the project root explicitly.
+	root, rootErr := ctx.Editor.Projects.FindRoot(ctx.Buf)
+	if root != "" {
+		cmd.Dir = root
+	}
+
+	ctx.Editor.LogMessage(fmt.Sprintf(
+		"tx debug: exec=%v dir=%q filepath=%q rootErr=%v",
+		cmd.Args, cmd.Dir, ctx.Buf.FilePath, rootErr,
+	))
+
+	if err := cmd.Run(); err != nil {
+		ctx.Editor.LogMessage("tx error: " + err.Error())
+	}
+
+	// tx has drawn directly to the real terminal while the editor was
+	// suspended, so tcell's internal "last frame" cache no longer matches
+	// what's actually on screen. A plain Redraw() only pushes a diff
+	// against that stale cache, leaving stray fragments of tx's output
+	// mixed in with wig's own content (the garbled/frozen-looking screen).
+	// ScreenSync() forces tcell to repaint every cell unconditionally.
+	ctx.Editor.Redraw()
+	ctx.Editor.ScreenSync()
+}
+
 func CmdExecute(ctx wig.Context) {
 	if ctx.Buf.Driver == nil {
 		ctx.Buf.Driver = pipe.New(ctx.Editor)
