@@ -110,6 +110,24 @@ func main() {
 	editor.AutocompleteTrigger = autocomplete.Register(editor)
 	editor.Config = editorCfg
 	wig.ApplyTheme(editor.Config.Theme)
+
+	// Verify the theme was applied correctly. A broken or missing theme
+	// leaves the internal color map nil, which panics deep inside the
+	// renderer with "assignment to entry in nil map". Catch it early
+	// and show a helpful message instead of crashing once the TUI takes
+	// over the terminal.
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				tscreen.Fini()
+				fmt.Fprintf(os.Stderr, "wig: failed to apply theme %q: %v\n", editor.Config.Theme, r)
+				fmt.Fprintln(os.Stderr, "Check your theme configuration in ~/.config/wig/config.toml")
+				os.Exit(1)
+			}
+		}()
+		wig.Color("ui.background")
+	}()
+
 	gutterMgr := commands.NewGitGutterManager(editor)
 
 	posCache := wig.LoadPositionCache()
@@ -241,6 +259,14 @@ func main() {
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				renderer.Stop()
+				tscreen.Fini()
+				fmt.Fprintf(os.Stderr, "wig: rendering error: %v\n", r)
+				os.Exit(1)
+			}
+		}()
 		for {
 			<-editor.RedrawCh
 			renderer.Render()
