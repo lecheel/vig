@@ -179,8 +179,15 @@ func main() {
 		wig.CmdNewBuffer(editor.NewContext())
 
 		if editor.Config.SaveWorkspaces {
-			wsCache := wig.LoadWorkspaceCache()
-			wsCache.RestoreAll(editor)
+			home, _ := os.UserHomeDir()
+			wsPath := filepath.Join(home, ".config", "wig", "workspace.json")
+			// Only attempt to restore the workspace if the cache file
+			// actually exists. Otherwise RestoreAll panics trying to
+			// switch to a missing workspace.
+			if _, err := os.Stat(wsPath); err == nil {
+				wsCache := wig.LoadWorkspaceCache()
+				wsCache.RestoreAll(editor)
+			}
 		}
 	}
 
