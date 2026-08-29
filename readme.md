@@ -14,21 +14,19 @@ It builds upon Wig’s solid foundation with a **focus on stability, core Vim op
 Vig implements a wide range of Vim‑style editing capabilities, many inherited from Wig and further refined:
 
 - **Modes** – Normal, Insert, Visual, Visual Line, Visual Block.
-- **Core Editing** – Text insertion/deletion, Myers diff‑based undo/redo, yank/put with rectangle block support, auto‑indentation, comment toggling (`gcc` etc.), delete to end of file (`dG`), boolean toggle (`toggle`), and extended comment motions (`gcj`, `gck`, `gc$`, `gcG`, `gcgg`, `gcip`, `gcap`).
-- **Movement & Navigation** – Standard Vim motions (`h/j/k/l`, `w/b/e`, `0/$`, `%`, `f/F/t/T`), scrolling, EasyMotion (`s` with home‑row overlays), end‑of‑file jump (`G`), and mark support (`m[a-z]`, `` ` `` popup with line preview).
-- **Search & Replace** – Incremental search (`/`) with live highlighting and cursor preview, `n`/`N` navigation, project‑wide search via ripgrep (`<Leader>f`, `:s`, `:rg`), word‑under‑cursor search, and **real‑time highlighting for substitution commands** (`:s/…`) with support for escaped delimiters.
-- **File & Buffer Management** – Open/save files (auto‑creation), buffer picker, MRU buffer picker, file picker, command palette, `config` command to open `~/.config/vig/config.toml`, and CLI flags (`--gf`, `--gs`) to open pickers on startup.
-- **Window Management** – Vertical/horizontal splits (`:vs`, `:sp`), window cycling (`<C-w>w`), closing (`:close`, `:only`), and layout toggling.
-- **Git Integration** – Status panel (`gs`) with staging (`s`), diff inspection (`d`), refresh (`r`); interactive commit editor; remote push (`p`); stash management (`z`) with pop/drop/cancel; diff highlighter; gutter signs (`+`, `-`, `~`) and hunk navigation (`]h`/`[h`), preview, and revert; inline Git blame; **AI commit message generation** (`git-ai`); and a `gfiles` picker to toggle between status and last commit views.
-- **LSP (Language Server Protocol)** – Autocompletion (auto‑trigger), go to definition (`gd`, `gd` in other window), hover docs, signature help, diagnostics/quickfix (`:copen`), LSP status (`:LspStatus`), and decoupled quickfix population.
-- **Syntax Highlighting** – Tree‑sitter support for **Go, Rust, Odin, C, Python, Bash, JSON, TOML** (with shebang detection) and custom query support via `~/.config/vig/queries/`.
-- **UI & Interaction** – Statusline with mode, file status, cursor coords; notification toasts; Which‑Key popup; EasyMotion overlay; command line with prompt and history; hover/autocomplete popups; quickfix popup widget; marks popup; and **autocomplete navigation with arrow keys**.
-- **Command Line & Ex Mode** – Full command‑line editing (Home/End, `Ctrl‑a/e/u/k/w`), `Ctrl‑r Ctrl‑w` to insert word under cursor, visual‑mode prefilled ranges (`'<,'>`), register insertion (`Ctrl‑r`), and line jump (`:123`).
-- **Registers & Macros** – Named registers (`a-z`), unnamed (`"`), yank history (`0-9`), system clipboard (`+`, `*`), current file (`%`), search pattern (`/`), last inserted text (`.`), last command (`:`), and macro recording/playback (`q[a-z]`, `@[a-z]`) with count support.
-- **Repeat & Count** – Dot‑repeat (`.`) with count preservation (`2dd` → `.` deletes 2), repeatable Ex commands (`:cn`, `:cp`, git hunks).
-- **Configuration** – `~/.config/vig/config.toml` for theme, line numbers, format‑on‑save, indent guides, LSP toggle, leader key, multi‑key sequences, and more; `~/.config/vig/languages.toml` for LSP definitions and indentation settings. Runtime theme switcher (`<Leader>t`) and indent guides toggle (`<Leader>i`).
-- **Visual Block** – Rectangle selection (`<C-v>`), block insert (`I`), block yank (`y`), block delete (`d`/`x`).
-- **System Integration** – System clipboard (`<Leader>y`, `<Leader>pv`, `<Leader>pp`), bracketed paste, cross‑platform clipboard health check, position cache, thread‑safe event manager, and CLI support (`--help`, `--edit`, `--health`).
+- **Core Editing** – Insert, delete, yank, put, undo/redo, auto-indent, comment toggling, and repeat with `.`.
+- **Motions & Navigation** – Standard Vim motions (`h/j/k/l`, `w/b/e`, `0/$`, `%`, `f/F/t/T`), EasyMotion, marks, and scroll.
+- **Search & Replace** – Incremental search with live highlighting, project-wide search via ripgrep, and substitution with real‑time preview.
+- **File & Buffer Management** – Open/save, buffer picker, MRU, file picker, command palette, and CLI support.
+- **Window Management** – Splits (vertical/horizontal), window cycling, closing, and layout toggling.
+- **Git Integration** – Status panel with staging, diff, commit, push, stash management, hunk navigation, inline blame, and AI‑generated commit messages.
+- **LSP Support** – Autocompletion, go to definition, hover docs, signature help, diagnostics, and quickfix list.
+- **Syntax Highlighting** – Tree‑sitter for Go, Rust, Odin, C, Python, Bash, JSON, TOML, and custom query support.
+- **UI & Interaction** – Statusline, notifications, Which‑Key, command line, popups, and autocomplete navigation.
+- **Registers & Macros** – Named registers, clipboard, macro recording/playback, and dot repeat.
+- **Configuration** – TOML configuration for themes, line numbers, format-on-save, LSP, leader key, and more.
+- **Visual Block** – Rectangle selection, block insert, yank, and delete.
+- **System Integration** – System clipboard, bracketed paste, position cache, and CLI flags.
 
 ---
 
