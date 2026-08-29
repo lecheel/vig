@@ -416,38 +416,44 @@ type Suspendable interface {
 // CmdGitHunkExternalTx runs `tx <current_file> HEAD` in the terminal to
 // show a vim-style 2-pane diff against the HEAD revision. It suspends
 // the editor UI if the View implements Suspendable.
+func logDebugStep(msg string) {
+	f, err := os.OpenFile("/tmp/wig-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err == nil {
+		_, _ = f.WriteString(fmt.Sprintf("[%s] %s\n", time.Now().Format("15:04:05.000"), msg))
+		_ = f.Close()
+	}
+}
+
 func CmdGitHunkExternalTx(ctx wig.Context) {
 	if ctx.Buf == nil || ctx.Buf.FilePath == "" || strings.HasPrefix(ctx.Buf.FilePath, "[") {
 		ctx.Editor.EchoMessage("No file to diff")
 		return
 	}
 
+	logDebugStep("Step 1: CmdGitHunkExternalTx started for " + ctx.Buf.FilePath)
+
 	suspendable, isSuspendable := ctx.Editor.View.(Suspendable)
 	suspended := false
 	if isSuspendable {
+		logDebugStep("Step 2: Calling Suspend()")
 		if err := suspendable.Suspend(); err != nil {
-			ctx.Editor.LogMessage(fmt.Sprintf("tx debug: Suspend() failed: %v", err))
+			logDebugStep(fmt.Sprintf("Step 2: Suspend() failed: %v", err))
 		} else {
 			suspended = true
-			defer suspendable.Resume()
+			logDebugStep("Step 2: Suspend() succeeded")
+			defer func() {
+				if suspended {
+					suspended = false
+					logDebugStep("Step 5 (defer): Resuming...")
+					_ = suspendable.Resume()
+					ctx.Editor.Redraw()
+					ctx.Editor.ScreenSync()
+				}
+			}()
 		}
 	}
-	ctx.Editor.LogMessage(fmt.Sprintf(
-		"tx debug: view=%T isSuspendable=%v suspended=%v",
-		ctx.Editor.View, isSuspendable, suspended,
-	))
 
-	// tx resolves git refs (e.g. HEAD:render/render.go) relative to the
-	// process's working directory. Without setting cmd.Dir explicitly,
-	// tx inherits whatever cwd the editor process happens to have, which
-	// may not be the git repo root - causing git lookups inside tx to
-	// miss even though the same command works fine from a shell at the
-	// repo root. Anchor it to the project root explicitly.
 	root, rootErr := ctx.Editor.Projects.FindRoot(ctx.Buf)
-
-	// tx expects paths relative to the git root (e.g. "render/render.go")
-	// to resolve refs like `HEAD:render/render.go`. Passing an absolute
-	// path causes `git show HEAD:/abs/path` to fail with "does not exist".
 	relPath := ctx.Buf.FilePath
 	if root != "" {
 		if rel, err := filepath.Rel(root, ctx.Buf.FilePath); err == nil {
@@ -465,28 +471,31 @@ func CmdGitHunkExternalTx(ctx wig.Context) {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
 	if root != "" {
 		cmd.Dir = root
 	}
 
-	ctx.Editor.LogMessage(fmt.Sprintf(
-		"tx debug: exec=%v dir=%q filepath=%q rootErr=%v",
-		cmd.Args, cmd.Dir, ctx.Buf.FilePath, rootErr,
-	))
-
+	logDebugStep(fmt.Sprintf("Step 3: Running command %v (rootErr=%v)", cmd.Args, rootErr))
 	if err := cmd.Run(); err != nil {
-		ctx.Editor.LogMessage("tx error: " + err.Error())
+		logDebugStep("Step 3: tx exited with error: " + err.Error())
+	} else {
+		logDebugStep("Step 3: tx exited cleanly")
 	}
 
-	// tx has drawn directly to the real terminal while the editor was
-	// suspended, so tcell's internal "last frame" cache no longer matches
-	// what's actually on screen. A plain Redraw() only pushes a diff
-	// against that stale cache, leaving stray fragments of tx's output
-	// mixed in with wig's own content (the garbled/frozen-looking screen).
-	// ScreenSync() forces tcell to repaint every cell unconditionally.
+	if suspended {
+		suspended = false
+		logDebugStep("Step 4: Calling Resume()")
+		if err := suspendable.Resume(); err != nil {
+			logDebugStep(fmt.Sprintf("Step 4: Resume() failed: %v", err))
+		} else {
+			logDebugStep("Step 4: Resume() succeeded")
+		}
+	}
+
+	logDebugStep("Step 5: Triggering Redraw() and ScreenSync()")
 	ctx.Editor.Redraw()
 	ctx.Editor.ScreenSync()
+	logDebugStep("Step 6: CmdGitHunkExternalTx completed")
 }
 
 func CmdExecute(ctx wig.Context) {

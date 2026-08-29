@@ -2,6 +2,8 @@ package render
 
 import (
 	"fmt"
+	"os"
+	"runtime/pprof"
 	"sync"
 	"time"
 
@@ -351,9 +353,38 @@ func (m *mview) Suspend() error {
 // follow this with a full Redraw + ScreenSync since the terminal's actual
 // contents were overwritten by whatever ran during the suspend.
 func (m *mview) Resume() error {
-	if s, ok := m.view.(tcell.Screen); ok {
-		return s.Resume()
+	f, _ := os.OpenFile("/tmp/wig-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if f != nil {
+		f.WriteString(fmt.Sprintf("[%s] mview.Resume: calling s.Resume()\n", time.Now().Format("15:04:05.000")))
+		f.Close()
 	}
+
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-done:
+			return
+		case <-time.After(1 * time.Second):
+			wf, err := os.OpenFile("/tmp/wig-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err == nil {
+				wf.WriteString(fmt.Sprintf("[%s] WATCHDOG: s.Resume() stuck >1s. Goroutine dump:\n", time.Now().Format("15:04:05.000")))
+				_ = pprof.Lookup("goroutine").WriteTo(wf, 2)
+				wf.Close()
+			}
+		}
+	}()
+
+	if s, ok := m.view.(tcell.Screen); ok {
+		err := s.Resume()
+		close(done)
+		f, _ = os.OpenFile("/tmp/wig-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if f != nil {
+			f.WriteString(fmt.Sprintf("[%s] mview.Resume: s.Resume() returned err=%v\n", time.Now().Format("15:04:05.000"), err))
+			f.Close()
+		}
+		return err
+	}
+	close(done)
 	return fmt.Errorf("view does not support resume")
 }
 
