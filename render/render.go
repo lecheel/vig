@@ -2,8 +2,6 @@ package render
 
 import (
 	"fmt"
-	"os"
-	"runtime/pprof"
 	"sync"
 	"time"
 
@@ -17,16 +15,20 @@ import (
 )
 
 type Renderer struct {
-	rw      sync.Mutex
-	e       *wig.Editor
-	screen  tcell.Screen
-	stopped bool
+	rw        sync.Mutex
+	e         *wig.Editor
+	screen    tcell.Screen
+	stopped   bool
+	suspended bool
 }
 
 func New(e *wig.Editor, screen tcell.Screen) *Renderer {
 	r := &Renderer{
 		e:      e,
 		screen: screen,
+	}
+	if mv, ok := e.View.(*mview); ok {
+		mv.renderer = r
 	}
 	return r
 }
@@ -44,6 +46,9 @@ func (r *Renderer) Stop() {
 // original terminal mode) so an external interactive program can take over
 // stdin/stdout/stderr. Pairs with Resume. Implements commands.Suspendable.
 func (r *Renderer) Suspend() error {
+	r.rw.Lock()
+	r.suspended = true
+	r.rw.Unlock()
 	return r.screen.Suspend()
 }
 
@@ -52,7 +57,11 @@ func (r *Renderer) Suspend() error {
 // follow this with a full Redraw + ScreenSync since the terminal's actual
 // contents were overwritten by whatever ran during the suspend.
 func (r *Renderer) Resume() error {
-	return r.screen.Resume()
+	r.rw.Lock()
+	defer r.rw.Unlock()
+	err := r.screen.Resume()
+	r.suspended = false
+	return err
 }
 
 // TODO: rendering must be optimized.
@@ -61,7 +70,7 @@ func (r *Renderer) Render() {
 	r.rw.Lock()
 	defer r.rw.Unlock()
 
-	if r.stopped {
+	if r.stopped || r.suspended {
 		return
 	}
 
@@ -327,6 +336,7 @@ func (r *Renderer) RenderMetrics(info map[string]time.Duration) {
 type mview struct {
 	viewport *views.ViewPort
 	view     views.View
+	renderer *Renderer
 }
 
 func NewMView(view views.View, x, y, w, h int) *mview {
@@ -342,6 +352,11 @@ func NewMView(view views.View, x, y, w, h int) *mview {
 // This delegates to the underlying tcell.Screen, which handles x/term state
 // restoration and stops its internal input loop from stealing keystrokes.
 func (m *mview) Suspend() error {
+	if m.renderer != nil {
+		m.renderer.rw.Lock()
+		m.renderer.suspended = true
+		m.renderer.rw.Unlock()
+	}
 	if s, ok := m.view.(tcell.Screen); ok {
 		return s.Suspend()
 	}
@@ -353,38 +368,17 @@ func (m *mview) Suspend() error {
 // follow this with a full Redraw + ScreenSync since the terminal's actual
 // contents were overwritten by whatever ran during the suspend.
 func (m *mview) Resume() error {
-	f, _ := os.OpenFile("/tmp/wig-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if f != nil {
-		f.WriteString(fmt.Sprintf("[%s] mview.Resume: calling s.Resume()\n", time.Now().Format("15:04:05.000")))
-		f.Close()
+	if m.renderer != nil {
+		m.renderer.rw.Lock()
+		defer m.renderer.rw.Unlock()
 	}
-
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-done:
-			return
-		case <-time.After(1 * time.Second):
-			wf, err := os.OpenFile("/tmp/wig-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err == nil {
-				wf.WriteString(fmt.Sprintf("[%s] WATCHDOG: s.Resume() stuck >1s. Goroutine dump:\n", time.Now().Format("15:04:05.000")))
-				_ = pprof.Lookup("goroutine").WriteTo(wf, 2)
-				wf.Close()
-			}
-		}
-	}()
-
 	if s, ok := m.view.(tcell.Screen); ok {
 		err := s.Resume()
-		close(done)
-		f, _ = os.OpenFile("/tmp/wig-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if f != nil {
-			f.WriteString(fmt.Sprintf("[%s] mview.Resume: s.Resume() returned err=%v\n", time.Now().Format("15:04:05.000"), err))
-			f.Close()
+		if m.renderer != nil {
+			m.renderer.suspended = false
 		}
 		return err
 	}
-	close(done)
 	return fmt.Errorf("view does not support resume")
 }
 
