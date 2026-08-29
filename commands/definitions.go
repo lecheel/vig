@@ -41,6 +41,7 @@ func init() {
 	wig.AllCommands["CmdMRUBufferPicker"] = wig.CmdDefinition{Desc: "MRU Buffer Picker", Fn: CmdMRUBufferPicker}
 	wig.AllCommands["CmdToggleBool"] = wig.CmdDefinition{Desc: "Toggle boolean under cursor", Fn: CmdToggleBool}
 	wig.AllCommands["toggle"] = wig.CmdDefinition{Desc: "Toggle boolean under cursor", Fn: CmdToggleBool}
+	wig.AllCommands["sort"] = wig.CmdDefinition{Desc: "Sort lines (flags: u n r i)", Fn: CmdSort}
 	wig.AllCommands["CmdCheckHealth"] = wig.CmdDefinition{Desc: "Check health of dependencies", Fn: CmdCheckHealth}
 	wig.AllCommands["checkhealth"] = wig.CmdDefinition{Desc: "Check health of dependencies", Fn: CmdCheckHealth}
 	wig.AllCommands["CmdOpenConfig"] = wig.CmdDefinition{Desc: "Open config file", Fn: ui.ConfigPopupInit}
