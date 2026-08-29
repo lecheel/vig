@@ -416,35 +416,22 @@ type Suspendable interface {
 // CmdGitHunkExternalTx runs `tx <current_file> HEAD` in the terminal to
 // show a vim-style 2-pane diff against the HEAD revision. It suspends
 // the editor UI if the View implements Suspendable.
-func logDebugStep(msg string) {
-	f, err := os.OpenFile("/tmp/wig-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err == nil {
-		_, _ = f.WriteString(fmt.Sprintf("[%s] %s\n", time.Now().Format("15:04:05.000"), msg))
-		_ = f.Close()
-	}
-}
-
 func CmdGitHunkExternalTx(ctx wig.Context) {
 	if ctx.Buf == nil || ctx.Buf.FilePath == "" || strings.HasPrefix(ctx.Buf.FilePath, "[") {
 		ctx.Editor.EchoMessage("No file to diff")
 		return
 	}
 
-	logDebugStep("Step 1: CmdGitHunkExternalTx started for " + ctx.Buf.FilePath)
-
 	suspendable, isSuspendable := ctx.Editor.View.(Suspendable)
 	suspended := false
 	if isSuspendable {
-		logDebugStep("Step 2: Calling Suspend()")
 		if err := suspendable.Suspend(); err != nil {
-			logDebugStep(fmt.Sprintf("Step 2: Suspend() failed: %v", err))
+			ctx.Editor.LogMessage(fmt.Sprintf("tx: Suspend() failed: %v", err))
 		} else {
 			suspended = true
-			logDebugStep("Step 2: Suspend() succeeded")
 			defer func() {
 				if suspended {
 					suspended = false
-					logDebugStep("Step 5 (defer): Resuming...")
 					_ = suspendable.Resume()
 					ctx.Editor.Redraw()
 					ctx.Editor.ScreenSync()
@@ -453,7 +440,7 @@ func CmdGitHunkExternalTx(ctx wig.Context) {
 		}
 	}
 
-	root, rootErr := ctx.Editor.Projects.FindRoot(ctx.Buf)
+	root, _ := ctx.Editor.Projects.FindRoot(ctx.Buf)
 	relPath := ctx.Buf.FilePath
 	if root != "" {
 		if rel, err := filepath.Rel(root, ctx.Buf.FilePath); err == nil {
@@ -475,27 +462,17 @@ func CmdGitHunkExternalTx(ctx wig.Context) {
 		cmd.Dir = root
 	}
 
-	logDebugStep(fmt.Sprintf("Step 3: Running command %v (rootErr=%v)", cmd.Args, rootErr))
 	if err := cmd.Run(); err != nil {
-		logDebugStep("Step 3: tx exited with error: " + err.Error())
-	} else {
-		logDebugStep("Step 3: tx exited cleanly")
+		ctx.Editor.LogMessage("tx error: " + err.Error())
 	}
 
 	if suspended {
 		suspended = false
-		logDebugStep("Step 4: Calling Resume()")
-		if err := suspendable.Resume(); err != nil {
-			logDebugStep(fmt.Sprintf("Step 4: Resume() failed: %v", err))
-		} else {
-			logDebugStep("Step 4: Resume() succeeded")
-		}
+		_ = suspendable.Resume()
 	}
 
-	logDebugStep("Step 5: Triggering Redraw() and ScreenSync()")
 	ctx.Editor.Redraw()
 	ctx.Editor.ScreenSync()
-	logDebugStep("Step 6: CmdGitHunkExternalTx completed")
 }
 
 func CmdExecute(ctx wig.Context) {

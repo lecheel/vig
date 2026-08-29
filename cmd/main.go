@@ -236,11 +236,6 @@ func main() {
 				// renderer.RenderMetrics(metrics.Get())
 			case *tcell.EventError:
 				editor.LogMessage("tcell event error: " + ev.Error())
-				f, _ := os.OpenFile("/tmp/wig-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-				if f != nil {
-					f.WriteString(fmt.Sprintf("[%s] tcell EventError: %v\n", time.Now().Format("15:04:05.000"), ev))
-					f.Close()
-				}
 			}
 		}
 	}()
