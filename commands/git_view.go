@@ -214,7 +214,6 @@ func GetGitStatusItems() []wig.GitViewItem {
 		} else {
 			items = append(items, wig.GitViewItem{Type: "empty", Label: "(none)"})
 		}
-		items = append(items, wig.GitViewItem{Type: "blank"})
 	}
 
 	addSection(fmt.Sprintf("Stage Changes (%d)", len(staged)), staged)
@@ -823,29 +822,30 @@ func getGitStatusLineMap(buf *wig.Buffer) map[int]gitStatusLine {
 func populateGitStatusBuffer(buf *wig.Buffer) (map[int]gitStatusLine, int) {
 	items := GetGitStatusItems()
 	lineMap := make(map[int]gitStatusLine)
-	lines := make([]string, 0, len(items)+2)
+	lines := make([]string, 0, len(items)+1)
 
 	// Top shortcuts guide bar
 	lines = append(lines, "  [Enter] Open/Stash  [s] Stage  [d] Diff  [c] Commit  [a] AI Commit  [p] Push  [z] Stash  [r] Refresh  [Esc] Close")
 	lineMap[0] = gitStatusLine{kind: "shortcut"}
-	lines = append(lines, "")
-	lineMap[1] = gitStatusLine{kind: "none"}
 
-	firstSelectable := 2
+	firstSelectable := 1
 	foundSelectable := false
+	firstSection := true
 
 	for _, it := range items {
+		// Skip separators and blank lines (we don't want empty lines)
+		if it.Type == "separator" || it.Type == "blank" {
+			continue
+		}
 		var lineText string
 		kind := it.Type
 		switch it.Type {
 		case "header":
-			lineText = fmt.Sprintf("── %s ", it.Label)
-			pad := 50 - len([]rune(lineText))
-			if pad > 0 {
-				lineText += strings.Repeat("─", pad)
+			if !firstSection {
+				lines = append(lines, "")
 			}
-		case "separator", "blank":
-			lineText = ""
+			firstSection = false
+			lineText = fmt.Sprintf("── %s ", it.Label)
 		case "empty":
 			lineText = fmt.Sprintf("   %s", it.Label)
 		case "file":
@@ -980,7 +980,6 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 								if nextEntry.kind == "file" || nextEntry.kind == "branch" || nextEntry.kind == "stash" {
 									cur.Line = j
 									cur.Char = 0
-									wig.CmdCursorCenter(ctx)
 									return
 								}
 								// If we hit a blank or another header, the section is empty
@@ -992,7 +991,6 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 						// If no selectable item found in this section, just land on the header
 						cur.Line = i
 						cur.Char = 0
-						wig.CmdCursorCenter(ctx)
 						return
 					}
 				}
@@ -1021,7 +1019,6 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 								if nextEntry.kind == "file" || nextEntry.kind == "branch" || nextEntry.kind == "stash" {
 									cur.Line = j
 									cur.Char = 0
-									wig.CmdCursorCenter(ctx)
 									return
 								}
 								// If we hit a blank or another header, the section is empty
@@ -1033,7 +1030,6 @@ func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
 						// If no selectable item found in this previous section, land on its header
 						cur.Line = i
 						cur.Char = 0
-						wig.CmdCursorCenter(ctx)
 						return
 					}
 				}
