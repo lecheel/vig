@@ -740,12 +740,6 @@ func (h *GitStatusHighlighter) HighlightLine(lineNum int) []wig.Span {
 				Style:    wig.Color("comment"),
 			})
 		}
-	case "header":
-		spans = append(spans, wig.Span{
-			StartCol: 0,
-			EndCol:   lineLen,
-			Style:    wig.Color("ui.statusline"),
-		})
 	case "file":
 		codeStyle := "ui.text"
 		switch entry.item.Code {
