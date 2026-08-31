@@ -295,6 +295,13 @@ func (u *UiPicker[T]) SetInput(val string) {
 	u.chBuf = []rune(val)
 }
 
+// FilterNow triggers the fuzzy filter immediately based on the current
+// input buffer. Useful after calling SetInput to pre-fill the picker,
+// since SetInput alone does not invoke filterItems.
+func (u *UiPicker[T]) FilterNow() {
+	u.filterItems()
+}
+
 func (u *UiPicker[T]) Render(view wig.View) {
 	vw, vh := view.Size()
 

@@ -19,6 +19,8 @@ func init() {
 	wig.AllCommands["CmdNewBuffer"] = wig.CmdDefinition{Desc: "New buffer", Fn: wig.CmdNewBuffer}
 	wig.AllCommands["CmdExit"] = wig.CmdDefinition{Desc: "Quit editor", Fn: CmdExit}
 	wig.AllCommands["CmdCommandPalettePicker"] = wig.CmdDefinition{Desc: "Command palette", Fn: CmdCommandPalettePicker}
+	wig.AllCommands["CmdHelp"] = wig.CmdDefinition{Desc: "Show command help palette", Fn: CmdHelp}
+	wig.AllCommands["help"] = wig.CmdDefinition{Desc: "Show command help palette", Fn: CmdHelp}
 	wig.AllCommands["CmdFindProjectFilePicker"] = wig.CmdDefinition{Desc: "Find file", Fn: CmdFindProjectFilePicker}
 	wig.AllCommands["CmdBufferPicker"] = wig.CmdDefinition{Desc: "Buffer picker", Fn: CmdBufferPicker}
 	wig.AllCommands["CmdMarksPicker"] = wig.CmdDefinition{Desc: "Marks picker (global, cross-buffer)", Fn: wig.CmdGotoMark}

@@ -406,6 +406,60 @@ func CmdCommandPalettePicker(ctx wig.Context) {
 	picker.SetTitle("Command Palette")
 }
 
+// CmdHelp opens a palette popup listing every registered Ex command
+// alongside its description. Selecting an item runs the command, making
+// it both a help browser and a launcher. An optional argument
+// (e.g. `:help wq`) pre-fills the fuzzy filter so the user lands on
+// the relevant entry immediately.
+func CmdHelp(ctx wig.Context) {
+	items := make([]ui.PickerItem[wig.CmdDefinition], 0, 128)
+
+	names := make([]string, 0, len(wig.AllCommands))
+	for name := range wig.AllCommands {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
+		def := wig.AllCommands[name]
+		displayName := strings.TrimPrefix(name, "Cmd")
+		display := displayName
+		if def.Desc != "" {
+			display = fmt.Sprintf("%-28s %s", displayName, def.Desc)
+		}
+		items = append(items, ui.PickerItem[wig.CmdDefinition]{
+			Name:  display,
+			Value: def,
+		})
+	}
+
+	action := func(p *ui.UiPicker[wig.CmdDefinition], i *ui.PickerItem[wig.CmdDefinition]) {
+		ctx.Editor.PopUi()
+
+		if i == nil {
+			return
+		}
+
+		switch cmd := i.Value.Fn.(type) {
+		case func(wig.Context):
+			cmd(ctx)
+		}
+	}
+
+	picker := ui.PickerInit(
+		ctx.Editor,
+		action,
+		items,
+	)
+	picker.SetTitle("Help — Commands [Enter: Run]")
+
+	// Pre-fill the fuzzy filter when an argument is supplied (e.g. :help wq)
+	if query := strings.TrimSpace(ctx.Char); query != "" {
+		picker.SetInput(query)
+		picker.FilterNow()
+	}
+}
+
 // Suspendable allows the editor to temporarily release the terminal
 // so an interactive CLI tool (like `tx`) can run in the foreground.
 type Suspendable interface {
