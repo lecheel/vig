@@ -17,6 +17,7 @@ import (
 	"github.com/firstrow/wig/metrics"
 	"github.com/firstrow/wig/render"
 	"github.com/firstrow/wig/ui"
+	"github.com/firstrow/wig/version"
 )
 
 func main() {
@@ -25,20 +26,26 @@ func main() {
 	var fileArgs []string
 
 	for _, arg := range os.Args[1:] {
+		if arg == "--version" || arg == "version" || arg == "-v" {
+			fmt.Println(version.String())
+			return
+		}
 		if arg == "--help" || arg == "-h" {
 			fmt.Println("Usage: wig [options] [file ...]")
 			fmt.Println("\nOptions:")
-			fmt.Println("  --gf         Open git changed files picker on startup.")
-			fmt.Println("  --gs         Open git status panel on startup.")
-			fmt.Println("  --edit       Open configuration file for editing.")
-			fmt.Println("  --health     Check health of dependencies.")
-			fmt.Println("  --help, -h   Show this help message.")
+			fmt.Println("  --version, -v  Print build version (commit hash, with -dirty marker).")
+			fmt.Println("  --gf           Open git changed files picker on startup.")
+			fmt.Println("  --gs           Open git status panel on startup.")
+			fmt.Println("  --edit         Open configuration file for editing.")
+			fmt.Println("  --health       Check health of dependencies.")
+			fmt.Println("  --help, -h     Show this help message.")
 			fmt.Println("\nExamples:")
-			fmt.Println("  wig main.go          Open main.go")
-			fmt.Println("  wig newfile.txt      Create or open newfile.txt")
-			fmt.Println("  wig --gf             Open git changed files picker")
-			fmt.Println("  wig --gs             Open git status panel")
-			fmt.Println("  wig --edit           Edit config file")
+			fmt.Println("  wig main.go            Open main.go")
+			fmt.Println("  wig newfile.txt        Create or open newfile.txt")
+			fmt.Println("  wig --gf               Open git changed files picker")
+			fmt.Println("  wig --gs               Open git status panel")
+			fmt.Println("  wig --edit             Edit config file")
+			fmt.Println("  wig --version          Print build version info")
 			return
 		}
 		if arg == "--health" || arg == "health" {
