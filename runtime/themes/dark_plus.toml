@@ -51,14 +51,19 @@
 "ui.background"              = { fg = "light_gray", bg = "dark_gray2" }
 "ui.window"                  = { bg = "widget" }
 "ui.popup"                   = { fg = "text", bg = "widget" }
+"ui.popup.title"             = "gold"
 "ui.help"                    = { fg = "text", bg = "widget" }
 "ui.menu"                    = { fg = "text", bg = "widget" }
 "ui.menu.selected"           = { bg = "dark_blue2" }
-# TODO: Alternate bg colour for `ui.cursor.match` and `ui.selection`.
+"ui.mark"                    = "gold"
+"ui.whichkey.key"            = "dark_green"
 "ui.cursor"                  = { fg = "cursor", modifiers = ["reversed"] }
 "ui.cursor.primary"          = { fg = "cursor", modifiers = ["reversed"] }
-"ui.cursor.match"            = { bg = "#3a3d41", underline.style = "line" }
-"ui.selection"               = { bg = "#3a3d41" }
+# Currently focused match / delimiter matching
+"ui.cursor.match"            = { fg = "white", bg = "search_match_active", underline.color = "gold2", underline.style = "line" }
+# Inactive / secondary search matches & multi-occurrences
+"ui.selection"               = { bg = "dark_blue" }
+# Active visual mode text selection
 "ui.selection.primary"       = { bg = "dark_blue" }
 "ui.linenr"                  = { fg = "dark_gray" }
 "ui.linenr.selected"         = { fg = "light_gray2" }
@@ -98,6 +103,10 @@ rainbow = ["#FFD700", "#DA70D6", "#179FFF"]
 
 [palette]
 white = "#ffffff"
+search_match = "#515c6b"
+search_match_active = "#654d2e"
+search_match_border = "#cca700"
+match_paren = "#0e639c"
 orange = "#ce9178"
 gold = "#d7ba7d"
 gold2 = "#cca700"
