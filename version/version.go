@@ -41,7 +41,7 @@ func String() string {
 	}
 
 	if Version != "" {
-		return fmt.Sprintf("wig %s%s (%s)", versionPart, dirtyPart, CommitHash)
+		return fmt.Sprintf("wig %s (%s%s)", versionPart, CommitHash, dirtyPart)
 	}
 	return fmt.Sprintf("wig %s%s", versionPart, dirtyPart)
 }

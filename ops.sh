@@ -5,7 +5,9 @@ echo "build wig"
 # into the version package at link time. The variables are declared in
 # version/version.go and exposed via `wig --version`.
 COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-GIT_VERSION=$(git tag --points-at HEAD | head -n 1)
+# Use `git describe` to find the nearest tag reachable from HEAD.
+# This ensures we get "1.0" even if we are a few commits ahead of the tag.
+GIT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 DIRTY="false"
 # Ignore untracked files (e.g. the `wig` binary, new files not yet added)
 # so the dirty flag only triggers when tracked files are modified.
