@@ -19,6 +19,14 @@ var LastInsertedText string
 // `saved` events without blocking the editor.
 var OnSaveHook func(Context)
 
+// GitBranchProvider, when set, returns the current git branch for the
+// repository containing buf (and whether one was found). Populated by the
+// commands package, which owns git subprocess calls; ui reads this via wig
+// instead of importing commands directly, since commands already imports
+// ui (see commands/git_view.go, git_hunk.go) and a reverse import would
+// create a cycle.
+var GitBranchProvider func(buf *Buffer) (branch string, ok bool)
+
 func TextInsert(buf *Buffer, line *Element[Line], pos int, text string) {
 	if buf == nil || line == nil || text == "" {
 		return

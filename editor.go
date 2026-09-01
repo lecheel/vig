@@ -25,6 +25,7 @@ type EditorConfig struct {
 	WhichKeyFormat      string `toml:"which_key_format"`      // "words", "camel", or "cmd"
 	SameStatuslineColor bool   `toml:"same_statusline_color"` // If true, keeps statusline color consistent across modes (disables distinct insert color)
 	SaveWorkspaces      bool   `toml:"save_workspaces"`       // If true, enables workspace session save & restore across sessions (default: false)
+	StatuslineStyle     string `toml:"statusline_style"`
 }
 
 type View interface {

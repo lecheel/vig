@@ -28,6 +28,54 @@ func gitRun(args ...string) string {
 	return string(out)
 }
 
+// ── statusline branch provider ───────────────────────────
+
+var (
+	branchCacheMu   sync.Mutex
+	branchCache     = make(map[string]string)
+	branchCacheTime = make(map[string]time.Time)
+)
+
+// branchCacheTTL bounds how often we spawn `git rev-parse` per directory.
+// The statusline is redrawn on essentially every keystroke, and shelling
+// out to git on every frame would be far too slow, so results are cached
+// briefly per-directory instead of queried live.
+const branchCacheTTL = 2 * time.Second
+
+func gitBranchForDir(dir string) (string, bool) {
+	branchCacheMu.Lock()
+	if t, ok := branchCacheTime[dir]; ok && time.Since(t) < branchCacheTTL {
+		b := branchCache[dir]
+		branchCacheMu.Unlock()
+		return b, b != ""
+	}
+	branchCacheMu.Unlock()
+
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	branch := ""
+	if err == nil {
+		branch = strings.TrimSpace(string(out))
+	}
+
+	branchCacheMu.Lock()
+	branchCache[dir] = branch
+	branchCacheTime[dir] = time.Now()
+	branchCacheMu.Unlock()
+
+	return branch, branch != ""
+}
+
+func init() {
+	wig.GitBranchProvider = func(buf *wig.Buffer) (string, bool) {
+		if buf == nil || buf.FilePath == "" || strings.HasPrefix(buf.FilePath, "[") {
+			return "", false
+		}
+		return gitBranchForDir(filepath.Dir(buf.FilePath))
+	}
+}
+
 func gitIsRepo() bool {
 	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
 	return cmd.Run() == nil

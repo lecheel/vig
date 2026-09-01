@@ -18,7 +18,7 @@ fi
 LDFLAGS="-X github.com/firstrow/wig/version.Version=${GIT_VERSION} -X github.com/firstrow/wig/version.CommitHash=${COMMIT_HASH} -X github.com/firstrow/wig/version.Dirty=${DIRTY}"
 
 echo "  commit: ${COMMIT_HASH} version: ${GIT_VERSION:-none} (dirty=${DIRTY})"
-GOTOOLCHAIN=go1.25.0  CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o wig.exe ./cmd
+# GOTOOLCHAIN=go1.25.0  CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o wig.exe ./cmd
 GOTOOLCHAIN=go1.25.0 go build -ldflags "${LDFLAGS}" -o wig ./cmd
 # go build -o wig cmd/main.go
 cp wig ~/bin
