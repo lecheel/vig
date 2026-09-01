@@ -49,14 +49,9 @@ func (w *WhichKey) Keymap() *wig.KeyHandler { return w.keymap }
 
 func (w *WhichKey) Update(items wig.KeyMap) {
 	w.items = items
-	w.startTime = time.Now()
-
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		w.e.Redraw()
-	}()
+	w.startTime = time.Now().Add(-300 * time.Millisecond)
+	w.e.Redraw()
 }
-
 func (w *WhichKey) getActionInfo(action any) (desc string, isGroup bool) {
 	if km, ok := action.(wig.KeyMap); ok {
 		return fmt.Sprintf("+prefix (%d)", len(km)), true

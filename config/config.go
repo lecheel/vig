@@ -309,8 +309,8 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 			"w": wig.CmdCommentWord,
 			"G": wig.CmdCommentEndOfFile,
 			"g": wig.CmdCommentStartOfFile,
-			"i": wig.CmdCommentInside,
-			"a": wig.CmdCommentAround,
+			"i": wig.MakeTextObjectKeyMap(true, "comment"),
+			"a": wig.MakeTextObjectKeyMap(false, "comment"),
 		}
 	}
 
@@ -386,16 +386,16 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 				"$": wig.CmdChangeEndOfLine,
 				"c": wig.CmdChangeLine,
 				"w": wig.CmdChangeWord,
-				"a": wig.CmdChangeAround,
-				"i": wig.CmdChangeInside,
+				"a": wig.MakeTextObjectKeyMap(false, "change"),
+				"i": wig.MakeTextObjectKeyMap(true, "change"),
 				"f": wig.CmdChangeTo,
 				"t": wig.CmdChangeBefore,
 			},
 			"d": wig.KeyMap{
 				"d": wig.CmdDeleteLine,
 				"w": wig.CmdDeleteWord,
-				"i": wig.CmdDeleteInside,
-				"a": wig.CmdDeleteAround,
+				"i": wig.MakeTextObjectKeyMap(true, "delete"),
+				"a": wig.MakeTextObjectKeyMap(false, "delete"),
 				"f": wig.CmdDeleteTo,
 				"t": wig.CmdDeleteBefore,
 				"$": wig.CmdDeleteEndOfLine,
@@ -406,8 +406,8 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 				"$": wig.CmdYankEol,
 				"t": wig.CmdYankBeforeChar,
 				"f": wig.CmdYankToChar,
-				"i": wig.CmdYankInside,
-				"a": wig.CmdYankAround,
+				"i": wig.MakeTextObjectKeyMap(true, "yank"),
+				"a": wig.MakeTextObjectKeyMap(false, "yank"),
 			},
 			">": wig.KeyMap{
 				">": wig.CmdIndentLine,

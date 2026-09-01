@@ -692,29 +692,7 @@ func CmdCommentInside(_ Context) func(Context) {
 		if len(ctx.Char) == 0 {
 			return
 		}
-		ch := rune(ctx.Char[0])
-		if ch == 'p' {
-			CmdCommentParagraph(ctx)
-			return
-		}
-		if ch == 'w' || ch == 'W' {
-			CmdCommentWord(ctx)
-			return
-		}
-		var sel *Selection
-		var found bool
-		if ch == 'f' {
-			found, sel = TextObjectFunction(ctx, false)
-		} else if ch == '\'' || ch == '"' || ch == '`' {
-			found, sel = TextObjectQuotes(ctx, ch, false)
-		} else {
-			found, sel = TextObjectBlock(ctx, ch, false)
-		}
-		if !found || sel == nil {
-			return
-		}
-		norm := SelectionNormalize(sel)
-		ToggleCommentRange(ctx, norm.Start.Line, norm.End.Line)
+		TextObjectComment(ctx, rune(ctx.Char[0]), false)
 	}
 }
 
@@ -724,29 +702,7 @@ func CmdCommentAround(_ Context) func(Context) {
 		if len(ctx.Char) == 0 {
 			return
 		}
-		ch := rune(ctx.Char[0])
-		if ch == 'p' {
-			CmdCommentAroundParagraph(ctx)
-			return
-		}
-		if ch == 'w' || ch == 'W' {
-			CmdCommentWord(ctx)
-			return
-		}
-		var sel *Selection
-		var found bool
-		if ch == 'f' {
-			found, sel = TextObjectFunction(ctx, true)
-		} else if ch == '\'' || ch == '"' || ch == '`' {
-			found, sel = TextObjectQuotes(ctx, ch, true)
-		} else {
-			found, sel = TextObjectBlock(ctx, ch, true)
-		}
-		if !found || sel == nil {
-			return
-		}
-		norm := SelectionNormalize(sel)
-		ToggleCommentRange(ctx, norm.Start.Line, norm.End.Line)
+		TextObjectComment(ctx, rune(ctx.Char[0]), true)
 	}
 }
 func CmdSelectionDelete(ctx Context) {
@@ -918,41 +874,629 @@ func CmdIndentOrComplete(ctx Context) {
 	ctx.Editor.Lsp.Completion(ctx.Buf)
 }
 
+func TextObjectDelete(ctx Context, ch rune, include bool) {
+	if ctx.Buf == nil {
+		return
+	}
+	if ch == 'w' {
+		CmdDeleteWord(ctx)
+		return
+	}
+	if ch == 'p' {
+		cur := ContextCursorGet(ctx)
+		start, end := getParagraphRange(ctx.Buf, cur.Line, include)
+		if ctx.Buf.TxStart() {
+			defer ctx.Buf.TxEnd()
+		}
+		CmdVisualLineMode(ctx)
+		ctx.Buf.Selection.Start.Line = start
+		ctx.Buf.Selection.Start.Char = 0
+		ctx.Buf.Selection.End.Line = end
+		ctx.Buf.Selection.End.Char = len(CursorLineByNum(ctx.Buf, end).Value) - 1
+		yankSave(ctx)
+		SelectionDelete(ctx)
+		CmdNormalMode(ctx)
+		return
+	}
+	var sel *Selection
+	var found bool
+	if ch == 'f' {
+		found, sel = TextObjectFunction(ctx, include)
+	} else if ch == '\'' || ch == '"' || ch == '`' {
+		found, sel = TextObjectQuotes(ctx, ch, include)
+	} else {
+		found, sel = TextObjectBlock(ctx, ch, include)
+	}
+	if !found || sel == nil {
+		return
+	}
+
+	if ctx.Buf.TxStart() {
+		defer ctx.Buf.TxEnd()
+	}
+	ctx.Buf.Selection = sel
+	yankSave(ctx)
+	SelectionDelete(ctx)
+	CmdNormalMode(ctx)
+}
+
+func TextObjectChange(ctx Context, ch rune, include bool) {
+	if ctx.Buf == nil {
+		return
+	}
+	if ch == 'w' {
+		if include {
+			CmdChangeWORD(ctx)
+		} else {
+			CmdChangeWord(ctx)
+		}
+		return
+	}
+	if ch == 'W' {
+		CmdChangeWORD(ctx)
+		return
+	}
+	if ch == 'p' {
+		cur := ContextCursorGet(ctx)
+		start, end := getParagraphRange(ctx.Buf, cur.Line, include)
+		if ctx.Buf.TxStart() {
+			defer ctx.Buf.TxEnd()
+		}
+		CmdVisualLineMode(ctx)
+		ctx.Buf.Selection.Start.Line = start
+		ctx.Buf.Selection.Start.Char = 0
+		ctx.Buf.Selection.End.Line = end
+		ctx.Buf.Selection.End.Char = len(CursorLineByNum(ctx.Buf, end).Value) - 1
+		CmdEnterInsertMode(ctx)
+		yankSave(ctx)
+		SelectionDelete(ctx)
+		return
+	}
+	var sel *Selection
+	var found bool
+	if ch == 'f' {
+		found, sel = TextObjectFunction(ctx, include)
+	} else if ch == '\'' || ch == '"' || ch == '`' {
+		found, sel = TextObjectQuotes(ctx, ch, include)
+	} else {
+		found, sel = TextObjectBlock(ctx, ch, include)
+	}
+	if !found {
+		return
+	}
+	if sel == nil {
+		CmdEnterInsertMode(ctx)
+		return
+	}
+
+	ctx.Buf.Selection = sel
+	CmdEnterInsertMode(ctx)
+	yankSave(ctx)
+	SelectionDelete(ctx)
+}
+
+func TextObjectYank(ctx Context, ch rune, include bool) {
+	if ctx.Buf == nil {
+		return
+	}
+	if ch == 'w' {
+		cur := ContextCursorGet(ctx)
+		_, end := TextObjectWord(ctx, false)
+		ctx.Buf.Selection = &Selection{
+			Start: *cur,
+			End:   Cursor{Line: cur.Line, Char: end},
+		}
+		saveYank(ctx, SelectionToString(ctx.Buf, ctx.Buf.Selection), false, false)
+		ctx.Buf.Selection = nil
+		return
+	}
+	if ch == 'W' {
+		cur := ContextCursorGet(ctx)
+		start, end := TextObjectWord(ctx, true)
+		ctx.Buf.Selection = &Selection{
+			Start: Cursor{Line: cur.Line, Char: start},
+			End:   Cursor{Line: cur.Line, Char: end},
+		}
+		saveYank(ctx, SelectionToString(ctx.Buf, ctx.Buf.Selection), false, false)
+		ctx.Buf.Selection = nil
+		return
+	}
+	if ch == 'p' {
+		cur := ContextCursorGet(ctx)
+		start, end := getParagraphRange(ctx.Buf, cur.Line, include)
+		ctx.Buf.Selection = &Selection{
+			Start: Cursor{Line: start, Char: 0},
+			End:   Cursor{Line: end, Char: len(CursorLineByNum(ctx.Buf, end).Value) - 1},
+		}
+		saveYank(ctx, SelectionToString(ctx.Buf, ctx.Buf.Selection), true, false)
+		ctx.Buf.Selection = nil
+		return
+	}
+	var sel *Selection
+	var found bool
+	if ch == 'f' {
+		found, sel = TextObjectFunction(ctx, include)
+	} else if ch == '\'' || ch == '"' || ch == '`' {
+		found, sel = TextObjectQuotes(ctx, ch, include)
+	} else {
+		found, sel = TextObjectBlock(ctx, ch, include)
+	}
+	if !found || sel == nil {
+		return
+	}
+
+	ctx.Buf.Selection = sel
+	val := SelectionToString(ctx.Buf, ctx.Buf.Selection)
+	saveYank(ctx, val, false, false)
+	ctx.Buf.Selection = nil
+}
+
+func TextObjectComment(ctx Context, ch rune, include bool) {
+	if ctx.Buf == nil {
+		return
+	}
+	if ch == 'p' {
+		if include {
+			CmdCommentAroundParagraph(ctx)
+		} else {
+			CmdCommentParagraph(ctx)
+		}
+		return
+	}
+	if ch == 'w' || ch == 'W' {
+		CmdCommentWord(ctx)
+		return
+	}
+	var sel *Selection
+	var found bool
+	if ch == 'f' {
+		found, sel = TextObjectFunction(ctx, include)
+	} else if ch == '\'' || ch == '"' || ch == '`' {
+		found, sel = TextObjectQuotes(ctx, ch, include)
+	} else {
+		found, sel = TextObjectBlock(ctx, ch, include)
+	}
+	if !found || sel == nil {
+		return
+	}
+	norm := SelectionNormalize(sel)
+	ToggleCommentRange(ctx, norm.Start.Line, norm.End.Line)
+}
+
+// Concrete commands for text objects
+func CmdDeleteInsideFunction(ctx Context) {
+	TextObjectDelete(ctx, 'f', false)
+	ctx.Editor.LastRepeatableFn = CmdDeleteInsideFunction
+}
+func CmdDeleteAroundFunction(ctx Context) {
+	TextObjectDelete(ctx, 'f', true)
+	ctx.Editor.LastRepeatableFn = CmdDeleteAroundFunction
+}
+func CmdDeleteInsideWord(ctx Context) {
+	TextObjectDelete(ctx, 'w', false)
+	ctx.Editor.LastRepeatableFn = CmdDeleteInsideWord
+}
+func CmdDeleteAroundWord(ctx Context) {
+	TextObjectDelete(ctx, 'w', true)
+	ctx.Editor.LastRepeatableFn = CmdDeleteAroundWord
+}
+func CmdDeleteInsideParagraph(ctx Context) {
+	TextObjectDelete(ctx, 'p', false)
+	ctx.Editor.LastRepeatableFn = CmdDeleteInsideParagraph
+}
+func CmdDeleteAroundParagraph(ctx Context) {
+	TextObjectDelete(ctx, 'p', true)
+	ctx.Editor.LastRepeatableFn = CmdDeleteAroundParagraph
+}
+func CmdDeleteInsideQuotesDouble(ctx Context) {
+	TextObjectDelete(ctx, '"', false)
+	ctx.Editor.LastRepeatableFn = CmdDeleteInsideQuotesDouble
+}
+func CmdDeleteAroundQuotesDouble(ctx Context) {
+	TextObjectDelete(ctx, '"', true)
+	ctx.Editor.LastRepeatableFn = CmdDeleteAroundQuotesDouble
+}
+func CmdDeleteInsideQuotesSingle(ctx Context) {
+	TextObjectDelete(ctx, '\'', false)
+	ctx.Editor.LastRepeatableFn = CmdDeleteInsideQuotesSingle
+}
+func CmdDeleteAroundQuotesSingle(ctx Context) {
+	TextObjectDelete(ctx, '\'', true)
+	ctx.Editor.LastRepeatableFn = CmdDeleteAroundQuotesSingle
+}
+func CmdDeleteInsideQuotesBacktick(ctx Context) {
+	TextObjectDelete(ctx, '`', false)
+	ctx.Editor.LastRepeatableFn = CmdDeleteInsideQuotesBacktick
+}
+func CmdDeleteAroundQuotesBacktick(ctx Context) {
+	TextObjectDelete(ctx, '`', true)
+	ctx.Editor.LastRepeatableFn = CmdDeleteAroundQuotesBacktick
+}
+func CmdDeleteInsideParen(ctx Context) {
+	TextObjectDelete(ctx, '(', false)
+	ctx.Editor.LastRepeatableFn = CmdDeleteInsideParen
+}
+func CmdDeleteAroundParen(ctx Context) {
+	TextObjectDelete(ctx, '(', true)
+	ctx.Editor.LastRepeatableFn = CmdDeleteAroundParen
+}
+func CmdDeleteInsideBrace(ctx Context) {
+	TextObjectDelete(ctx, '{', false)
+	ctx.Editor.LastRepeatableFn = CmdDeleteInsideBrace
+}
+func CmdDeleteAroundBrace(ctx Context) {
+	TextObjectDelete(ctx, '{', true)
+	ctx.Editor.LastRepeatableFn = CmdDeleteAroundBrace
+}
+func CmdDeleteInsideBracket(ctx Context) {
+	TextObjectDelete(ctx, '[', false)
+	ctx.Editor.LastRepeatableFn = CmdDeleteInsideBracket
+}
+func CmdDeleteAroundBracket(ctx Context) {
+	TextObjectDelete(ctx, '[', true)
+	ctx.Editor.LastRepeatableFn = CmdDeleteAroundBracket
+}
+func CmdDeleteInsideAngle(ctx Context) {
+	TextObjectDelete(ctx, '<', false)
+	ctx.Editor.LastRepeatableFn = CmdDeleteInsideAngle
+}
+func CmdDeleteAroundAngle(ctx Context) {
+	TextObjectDelete(ctx, '<', true)
+	ctx.Editor.LastRepeatableFn = CmdDeleteAroundAngle
+}
+
+func CmdChangeInsideFunction(ctx Context) {
+	TextObjectChange(ctx, 'f', false)
+	ctx.Editor.LastRepeatableFn = CmdChangeInsideFunction
+}
+func CmdChangeAroundFunction(ctx Context) {
+	TextObjectChange(ctx, 'f', true)
+	ctx.Editor.LastRepeatableFn = CmdChangeAroundFunction
+}
+func CmdChangeInsideWord(ctx Context) {
+	TextObjectChange(ctx, 'w', false)
+	ctx.Editor.LastRepeatableFn = CmdChangeInsideWord
+}
+func CmdChangeAroundWord(ctx Context) {
+	TextObjectChange(ctx, 'w', true)
+	ctx.Editor.LastRepeatableFn = CmdChangeAroundWord
+}
+func CmdChangeInsideParagraph(ctx Context) {
+	TextObjectChange(ctx, 'p', false)
+	ctx.Editor.LastRepeatableFn = CmdChangeInsideParagraph
+}
+func CmdChangeAroundParagraph(ctx Context) {
+	TextObjectChange(ctx, 'p', true)
+	ctx.Editor.LastRepeatableFn = CmdChangeAroundParagraph
+}
+func CmdChangeInsideQuotesDouble(ctx Context) {
+	TextObjectChange(ctx, '"', false)
+	ctx.Editor.LastRepeatableFn = CmdChangeInsideQuotesDouble
+}
+func CmdChangeAroundQuotesDouble(ctx Context) {
+	TextObjectChange(ctx, '"', true)
+	ctx.Editor.LastRepeatableFn = CmdChangeAroundQuotesDouble
+}
+func CmdChangeInsideQuotesSingle(ctx Context) {
+	TextObjectChange(ctx, '\'', false)
+	ctx.Editor.LastRepeatableFn = CmdChangeInsideQuotesSingle
+}
+func CmdChangeAroundQuotesSingle(ctx Context) {
+	TextObjectChange(ctx, '\'', true)
+	ctx.Editor.LastRepeatableFn = CmdChangeAroundQuotesSingle
+}
+func CmdChangeInsideQuotesBacktick(ctx Context) {
+	TextObjectChange(ctx, '`', false)
+	ctx.Editor.LastRepeatableFn = CmdChangeInsideQuotesBacktick
+}
+func CmdChangeAroundQuotesBacktick(ctx Context) {
+	TextObjectChange(ctx, '`', true)
+	ctx.Editor.LastRepeatableFn = CmdChangeAroundQuotesBacktick
+}
+func CmdChangeInsideParen(ctx Context) {
+	TextObjectChange(ctx, '(', false)
+	ctx.Editor.LastRepeatableFn = CmdChangeInsideParen
+}
+func CmdChangeAroundParen(ctx Context) {
+	TextObjectChange(ctx, '(', true)
+	ctx.Editor.LastRepeatableFn = CmdChangeAroundParen
+}
+func CmdChangeInsideBrace(ctx Context) {
+	TextObjectChange(ctx, '{', false)
+	ctx.Editor.LastRepeatableFn = CmdChangeInsideBrace
+}
+func CmdChangeAroundBrace(ctx Context) {
+	TextObjectChange(ctx, '{', true)
+	ctx.Editor.LastRepeatableFn = CmdChangeAroundBrace
+}
+func CmdChangeInsideBracket(ctx Context) {
+	TextObjectChange(ctx, '[', false)
+	ctx.Editor.LastRepeatableFn = CmdChangeInsideBracket
+}
+func CmdChangeAroundBracket(ctx Context) {
+	TextObjectChange(ctx, '[', true)
+	ctx.Editor.LastRepeatableFn = CmdChangeAroundBracket
+}
+func CmdChangeInsideAngle(ctx Context) {
+	TextObjectChange(ctx, '<', false)
+	ctx.Editor.LastRepeatableFn = CmdChangeInsideAngle
+}
+func CmdChangeAroundAngle(ctx Context) {
+	TextObjectChange(ctx, '<', true)
+	ctx.Editor.LastRepeatableFn = CmdChangeAroundAngle
+}
+
+func CmdYankInsideFunction(ctx Context)       { TextObjectYank(ctx, 'f', false) }
+func CmdYankAroundFunction(ctx Context)       { TextObjectYank(ctx, 'f', true) }
+func CmdYankInsideWord(ctx Context)           { TextObjectYank(ctx, 'w', false) }
+func CmdYankAroundWord(ctx Context)           { TextObjectYank(ctx, 'w', true) }
+func CmdYankInsideParagraph(ctx Context)      { TextObjectYank(ctx, 'p', false) }
+func CmdYankAroundParagraph(ctx Context)      { TextObjectYank(ctx, 'p', true) }
+func CmdYankInsideQuotesDouble(ctx Context)   { TextObjectYank(ctx, '"', false) }
+func CmdYankAroundQuotesDouble(ctx Context)   { TextObjectYank(ctx, '"', true) }
+func CmdYankInsideQuotesSingle(ctx Context)   { TextObjectYank(ctx, '\'', false) }
+func CmdYankAroundQuotesSingle(ctx Context)   { TextObjectYank(ctx, '\'', true) }
+func CmdYankInsideQuotesBacktick(ctx Context) { TextObjectYank(ctx, '`', false) }
+func CmdYankAroundQuotesBacktick(ctx Context) { TextObjectYank(ctx, '`', true) }
+func CmdYankInsideParen(ctx Context)          { TextObjectYank(ctx, '(', false) }
+func CmdYankAroundParen(ctx Context)          { TextObjectYank(ctx, '(', true) }
+func CmdYankInsideBrace(ctx Context)          { TextObjectYank(ctx, '{', false) }
+func CmdYankAroundBrace(ctx Context)          { TextObjectYank(ctx, '{', true) }
+func CmdYankInsideBracket(ctx Context)        { TextObjectYank(ctx, '[', false) }
+func CmdYankAroundBracket(ctx Context)        { TextObjectYank(ctx, '[', true) }
+func CmdYankInsideAngle(ctx Context)          { TextObjectYank(ctx, '<', false) }
+func CmdYankAroundAngle(ctx Context)          { TextObjectYank(ctx, '<', true) }
+
+func CmdCommentInsideFunction(ctx Context) {
+	TextObjectComment(ctx, 'f', false)
+	ctx.Editor.LastRepeatableFn = CmdCommentInsideFunction
+}
+func CmdCommentAroundFunction(ctx Context) {
+	TextObjectComment(ctx, 'f', true)
+	ctx.Editor.LastRepeatableFn = CmdCommentAroundFunction
+}
+func CmdCommentInsideWord(ctx Context) {
+	TextObjectComment(ctx, 'w', false)
+	ctx.Editor.LastRepeatableFn = CmdCommentInsideWord
+}
+func CmdCommentAroundWord(ctx Context) {
+	TextObjectComment(ctx, 'w', true)
+	ctx.Editor.LastRepeatableFn = CmdCommentAroundWord
+}
+func CmdCommentInsideParagraph(ctx Context) {
+	TextObjectComment(ctx, 'p', false)
+	ctx.Editor.LastRepeatableFn = CmdCommentInsideParagraph
+}
+func CmdCommentAroundParagraphText(ctx Context) {
+	TextObjectComment(ctx, 'p', true)
+	ctx.Editor.LastRepeatableFn = CmdCommentAroundParagraphText
+}
+func CmdCommentInsideQuotesDouble(ctx Context) {
+	TextObjectComment(ctx, '"', false)
+	ctx.Editor.LastRepeatableFn = CmdCommentInsideQuotesDouble
+}
+func CmdCommentAroundQuotesDouble(ctx Context) {
+	TextObjectComment(ctx, '"', true)
+	ctx.Editor.LastRepeatableFn = CmdCommentAroundQuotesDouble
+}
+func CmdCommentInsideQuotesSingle(ctx Context) {
+	TextObjectComment(ctx, '\'', false)
+	ctx.Editor.LastRepeatableFn = CmdCommentInsideQuotesSingle
+}
+func CmdCommentAroundQuotesSingle(ctx Context) {
+	TextObjectComment(ctx, '\'', true)
+	ctx.Editor.LastRepeatableFn = CmdCommentAroundQuotesSingle
+}
+func CmdCommentInsideQuotesBacktick(ctx Context) {
+	TextObjectComment(ctx, '`', false)
+	ctx.Editor.LastRepeatableFn = CmdCommentInsideQuotesBacktick
+}
+func CmdCommentAroundQuotesBacktick(ctx Context) {
+	TextObjectComment(ctx, '`', true)
+	ctx.Editor.LastRepeatableFn = CmdCommentAroundQuotesBacktick
+}
+func CmdCommentInsideParen(ctx Context) {
+	TextObjectComment(ctx, '(', false)
+	ctx.Editor.LastRepeatableFn = CmdCommentInsideParen
+}
+func CmdCommentAroundParen(ctx Context) {
+	TextObjectComment(ctx, '(', true)
+	ctx.Editor.LastRepeatableFn = CmdCommentAroundParen
+}
+func CmdCommentInsideBrace(ctx Context) {
+	TextObjectComment(ctx, '{', false)
+	ctx.Editor.LastRepeatableFn = CmdCommentInsideBrace
+}
+func CmdCommentAroundBrace(ctx Context) {
+	TextObjectComment(ctx, '{', true)
+	ctx.Editor.LastRepeatableFn = CmdCommentAroundBrace
+}
+func CmdCommentInsideBracket(ctx Context) {
+	TextObjectComment(ctx, '[', false)
+	ctx.Editor.LastRepeatableFn = CmdCommentInsideBracket
+}
+func CmdCommentAroundBracket(ctx Context) {
+	TextObjectComment(ctx, '[', true)
+	ctx.Editor.LastRepeatableFn = CmdCommentAroundBracket
+}
+func CmdCommentInsideAngle(ctx Context) {
+	TextObjectComment(ctx, '<', false)
+	ctx.Editor.LastRepeatableFn = CmdCommentInsideAngle
+}
+func CmdCommentAroundAngle(ctx Context) {
+	TextObjectComment(ctx, '<', true)
+	ctx.Editor.LastRepeatableFn = CmdCommentAroundAngle
+}
+
+func MakeTextObjectKeyMap(inside bool, op string) KeyMap {
+	switch op {
+	case "delete":
+		if inside {
+			return KeyMap{
+				"f":  CmdDeleteInsideFunction,
+				"w":  CmdDeleteInsideWord,
+				"p":  CmdDeleteInsideParagraph,
+				"\"": CmdDeleteInsideQuotesDouble,
+				"'":  CmdDeleteInsideQuotesSingle,
+				"`":  CmdDeleteInsideQuotesBacktick,
+				"(":  CmdDeleteInsideParen,
+				")":  CmdDeleteInsideParen,
+				"b":  CmdDeleteInsideParen,
+				"{":  CmdDeleteInsideBrace,
+				"}":  CmdDeleteInsideBrace,
+				"B":  CmdDeleteInsideBrace,
+				"[":  CmdDeleteInsideBracket,
+				"]":  CmdDeleteInsideBracket,
+				"<":  CmdDeleteInsideAngle,
+				">":  CmdDeleteInsideAngle,
+			}
+		}
+		return KeyMap{
+			"f":  CmdDeleteAroundFunction,
+			"w":  CmdDeleteAroundWord,
+			"p":  CmdDeleteAroundParagraph,
+			"\"": CmdDeleteAroundQuotesDouble,
+			"'":  CmdDeleteAroundQuotesSingle,
+			"`":  CmdDeleteAroundQuotesBacktick,
+			"(":  CmdDeleteAroundParen,
+			")":  CmdDeleteAroundParen,
+			"b":  CmdDeleteAroundParen,
+			"{":  CmdDeleteAroundBrace,
+			"}":  CmdDeleteAroundBrace,
+			"B":  CmdDeleteAroundBrace,
+			"[":  CmdDeleteAroundBracket,
+			"]":  CmdDeleteAroundBracket,
+			"<":  CmdDeleteAroundAngle,
+			">":  CmdDeleteAroundAngle,
+		}
+	case "change":
+		if inside {
+			return KeyMap{
+				"f":  CmdChangeInsideFunction,
+				"w":  CmdChangeInsideWord,
+				"W":  CmdChangeWORD,
+				"p":  CmdChangeInsideParagraph,
+				"\"": CmdChangeInsideQuotesDouble,
+				"'":  CmdChangeInsideQuotesSingle,
+				"`":  CmdChangeInsideQuotesBacktick,
+				"(":  CmdChangeInsideParen,
+				")":  CmdChangeInsideParen,
+				"b":  CmdChangeInsideParen,
+				"{":  CmdChangeInsideBrace,
+				"}":  CmdChangeInsideBrace,
+				"B":  CmdChangeInsideBrace,
+				"[":  CmdChangeInsideBracket,
+				"]":  CmdChangeInsideBracket,
+				"<":  CmdChangeInsideAngle,
+				">":  CmdChangeInsideAngle,
+			}
+		}
+		return KeyMap{
+			"f":  CmdChangeAroundFunction,
+			"w":  CmdChangeAroundWord,
+			"p":  CmdChangeAroundParagraph,
+			"\"": CmdChangeAroundQuotesDouble,
+			"'":  CmdChangeAroundQuotesSingle,
+			"`":  CmdChangeAroundQuotesBacktick,
+			"(":  CmdChangeAroundParen,
+			")":  CmdChangeAroundParen,
+			"b":  CmdChangeAroundParen,
+			"{":  CmdChangeAroundBrace,
+			"}":  CmdChangeAroundBrace,
+			"B":  CmdChangeAroundBrace,
+			"[":  CmdChangeAroundBracket,
+			"]":  CmdChangeAroundBracket,
+			"<":  CmdChangeAroundAngle,
+			">":  CmdChangeAroundAngle,
+		}
+	case "yank":
+		if inside {
+			return KeyMap{
+				"f":  CmdYankInsideFunction,
+				"w":  CmdYankInsideWord,
+				"p":  CmdYankInsideParagraph,
+				"\"": CmdYankInsideQuotesDouble,
+				"'":  CmdYankInsideQuotesSingle,
+				"`":  CmdYankInsideQuotesBacktick,
+				"(":  CmdYankInsideParen,
+				")":  CmdYankInsideParen,
+				"b":  CmdYankInsideParen,
+				"{":  CmdYankInsideBrace,
+				"}":  CmdYankInsideBrace,
+				"B":  CmdYankInsideBrace,
+				"[":  CmdYankInsideBracket,
+				"]":  CmdYankInsideBracket,
+				"<":  CmdYankInsideAngle,
+				">":  CmdYankInsideAngle,
+			}
+		}
+		return KeyMap{
+			"f":  CmdYankAroundFunction,
+			"w":  CmdYankAroundWord,
+			"p":  CmdYankAroundParagraph,
+			"\"": CmdYankAroundQuotesDouble,
+			"'":  CmdYankAroundQuotesSingle,
+			"`":  CmdYankAroundQuotesBacktick,
+			"(":  CmdYankAroundParen,
+			")":  CmdYankAroundParen,
+			"b":  CmdYankAroundParen,
+			"{":  CmdYankAroundBrace,
+			"}":  CmdYankAroundBrace,
+			"B":  CmdYankAroundBrace,
+			"[":  CmdYankAroundBracket,
+			"]":  CmdYankAroundBracket,
+			"<":  CmdYankAroundAngle,
+			">":  CmdYankAroundAngle,
+		}
+	case "comment":
+		if inside {
+			return KeyMap{
+				"f":  CmdCommentInsideFunction,
+				"w":  CmdCommentInsideWord,
+				"p":  CmdCommentInsideParagraph,
+				"\"": CmdCommentInsideQuotesDouble,
+				"'":  CmdCommentInsideQuotesSingle,
+				"`":  CmdCommentInsideQuotesBacktick,
+				"(":  CmdCommentInsideParen,
+				")":  CmdCommentInsideParen,
+				"b":  CmdCommentInsideParen,
+				"{":  CmdCommentInsideBrace,
+				"}":  CmdCommentInsideBrace,
+				"B":  CmdCommentInsideBrace,
+				"[":  CmdCommentInsideBracket,
+				"]":  CmdCommentInsideBracket,
+				"<":  CmdCommentInsideAngle,
+				">":  CmdCommentInsideAngle,
+			}
+		}
+		return KeyMap{
+			"f":  CmdCommentAroundFunction,
+			"w":  CmdCommentAroundWord,
+			"p":  CmdCommentAroundParagraphText,
+			"\"": CmdCommentAroundQuotesDouble,
+			"'":  CmdCommentAroundQuotesSingle,
+			"`":  CmdCommentAroundQuotesBacktick,
+			"(":  CmdCommentAroundParen,
+			")":  CmdCommentAroundParen,
+			"b":  CmdCommentAroundParen,
+			"{":  CmdCommentAroundBrace,
+			"}":  CmdCommentAroundBrace,
+			"B":  CmdCommentAroundBrace,
+			"[":  CmdCommentAroundBracket,
+			"]":  CmdCommentAroundBracket,
+			"<":  CmdCommentAroundAngle,
+			">":  CmdCommentAroundAngle,
+		}
+	}
+	return KeyMap{}
+}
+
 func CmdChangeInside(_ Context) func(Context) {
 	return func(ctx Context) {
 		if len(ctx.Char) == 0 {
 			return
 		}
-		ch := rune(ctx.Char[0])
-		if ch == 'w' {
-			CmdChangeWord(ctx)
-			return
-		}
-		if ch == 'W' {
-			CmdChangeWORD(ctx)
-			return
-		}
-		var sel *Selection
-		var found bool
-		if ch == 'f' {
-			found, sel = TextObjectFunction(ctx, false)
-		} else if ch == '\'' || ch == '"' || ch == '`' {
-			found, sel = TextObjectQuotes(ctx, ch, false)
-		} else {
-			found, sel = TextObjectBlock(ctx, ch, false)
-		}
-		if !found {
-			return
-		}
-		if sel == nil {
-			CmdEnterInsertMode(ctx)
-			return
-		}
-
-		ctx.Buf.Selection = sel
-		CmdEnterInsertMode(ctx)
-		yankSave(ctx)
-		SelectionDelete(ctx)
+		TextObjectChange(ctx, rune(ctx.Char[0]), false)
 	}
 }
 
@@ -961,28 +1505,7 @@ func CmdChangeAround(_ Context) func(Context) {
 		if len(ctx.Char) == 0 {
 			return
 		}
-		ch := rune(ctx.Char[0])
-		if ch == 'w' {
-			CmdChangeWORD(ctx)
-			return
-		}
-		var sel *Selection
-		var found bool
-		if ch == 'f' {
-			found, sel = TextObjectFunction(ctx, true)
-		} else if ch == '\'' || ch == '"' || ch == '`' {
-			found, sel = TextObjectQuotes(ctx, ch, true)
-		} else {
-			found, sel = TextObjectBlock(ctx, ch, true)
-		}
-		if !found || sel == nil {
-			return
-		}
-
-		ctx.Buf.Selection = sel
-		CmdEnterInsertMode(ctx)
-		yankSave(ctx)
-		SelectionDelete(ctx)
+		TextObjectChange(ctx, rune(ctx.Char[0]), true)
 	}
 }
 
@@ -991,31 +1514,7 @@ func CmdDeleteInside(_ Context) func(Context) {
 		if len(ctx.Char) == 0 {
 			return
 		}
-		ch := rune(ctx.Char[0])
-		if ch == 'w' {
-			CmdDeleteWord(ctx)
-			return
-		}
-		var sel *Selection
-		var found bool
-		if ch == 'f' {
-			found, sel = TextObjectFunction(ctx, false)
-		} else if ch == '\'' || ch == '"' || ch == '`' {
-			found, sel = TextObjectQuotes(ctx, ch, false)
-		} else {
-			found, sel = TextObjectBlock(ctx, ch, false)
-		}
-		if !found || sel == nil {
-			return
-		}
-
-		if ctx.Buf.TxStart() {
-			defer ctx.Buf.TxEnd()
-		}
-		ctx.Buf.Selection = sel
-		yankSave(ctx)
-		SelectionDelete(ctx)
-		CmdNormalMode(ctx)
+		TextObjectDelete(ctx, rune(ctx.Char[0]), false)
 	}
 }
 
@@ -1024,31 +1523,7 @@ func CmdDeleteAround(_ Context) func(Context) {
 		if len(ctx.Char) == 0 {
 			return
 		}
-		ch := rune(ctx.Char[0])
-		if ch == 'w' {
-			CmdDeleteWord(ctx)
-			return
-		}
-		var sel *Selection
-		var found bool
-		if ch == 'f' {
-			found, sel = TextObjectFunction(ctx, true)
-		} else if ch == '\'' || ch == '"' || ch == '`' {
-			found, sel = TextObjectQuotes(ctx, ch, true)
-		} else {
-			found, sel = TextObjectBlock(ctx, ch, true)
-		}
-		if !found || sel == nil {
-			return
-		}
-
-		if ctx.Buf.TxStart() {
-			defer ctx.Buf.TxEnd()
-		}
-		ctx.Buf.Selection = sel
-		yankSave(ctx)
-		SelectionDelete(ctx)
-		CmdNormalMode(ctx)
+		TextObjectDelete(ctx, rune(ctx.Char[0]), true)
 	}
 }
 
@@ -1057,24 +1532,7 @@ func CmdYankInside(_ Context) func(Context) {
 		if len(ctx.Char) == 0 {
 			return
 		}
-		ch := rune(ctx.Char[0])
-		var sel *Selection
-		var found bool
-		if ch == 'f' {
-			found, sel = TextObjectFunction(ctx, false)
-		} else if ch == '\'' || ch == '"' || ch == '`' {
-			found, sel = TextObjectQuotes(ctx, ch, false)
-		} else {
-			found, sel = TextObjectBlock(ctx, ch, false)
-		}
-		if !found || sel == nil {
-			return
-		}
-
-		ctx.Buf.Selection = sel
-		val := SelectionToString(ctx.Buf, ctx.Buf.Selection)
-		saveYank(ctx, val, false, false)
-		ctx.Buf.Selection = nil
+		TextObjectYank(ctx, rune(ctx.Char[0]), false)
 	}
 }
 
@@ -1083,24 +1541,7 @@ func CmdYankAround(_ Context) func(Context) {
 		if len(ctx.Char) == 0 {
 			return
 		}
-		ch := rune(ctx.Char[0])
-		var sel *Selection
-		var found bool
-		if ch == 'f' {
-			found, sel = TextObjectFunction(ctx, true)
-		} else if ch == '\'' || ch == '"' || ch == '`' {
-			found, sel = TextObjectQuotes(ctx, ch, true)
-		} else {
-			found, sel = TextObjectBlock(ctx, ch, true)
-		}
-		if !found || sel == nil {
-			return
-		}
-
-		ctx.Buf.Selection = sel
-		val := SelectionToString(ctx.Buf, ctx.Buf.Selection)
-		saveYank(ctx, val, false, false)
-		ctx.Buf.Selection = nil
+		TextObjectYank(ctx, rune(ctx.Char[0]), true)
 	}
 }
 
