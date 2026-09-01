@@ -166,23 +166,21 @@
 - [v] **Quickfix List**: `:copen` opens LSP diagnostics in a split buffer (navigate with `:cn`/`:cp` or Enter)
 
 ### Medium Priority (Quality of Life)
-- [ ] **Sessions**: Save & restore workspace sessions (`:mksession`, layout, open buffers, cursor locations)
-- [ ] **Folding**: `zc`, `zo`, `za` with syntax/indent based folding
-- [ ] **Tabs**: Vim-style tabs (`:tabnew`, `gt`, `gT`)
-- [ ] **Jumplist**: `Ctrl-o` (jump back), `Ctrl-i` (jump forward) across all jumps *(basic search‑based jump list exists)*
-- [ ] **Mouse Support**: Click to set cursor, drag to select visual mode, scroll wheel
+- [-] **Sessions**: Save & restore workspace sessions (`:mksession`, layout, open buffers, cursor locations)
+- [x] **Folding**: `zc`, `zo`, `za` with syntax/indent based folding
+- [x] **Tabs**: Vim-style tabs (`:tabnew`, `gt`, `gT`)
+- [x] **Jumplist**: `Ctrl-o` (jump back), `Ctrl-i` (jump forward) across all jumps *(basic search‑based jump list exists)*
+- [x] **Mouse Support**: Click to set cursor, drag to select visual mode, scroll wheel
 - [v] **System Clipboard Integration**: Copy/paste via `<Leader>y`, `<Leader>pv`, `<Leader>pp` and bracketed paste
 - [v] **Named & System Registers** (complete with popup, yank history, system clipboard, etc.)
-- [ ] **Word Motions**: `e` (end of word), `ge` (end of word backward), `W`, `B`, `E` (WORD motions)
-- [ ] **Multi-cursor**: `Ctrl-n`/`Ctrl-v` multi-edit
+- [x] **Word Motions**: `e` (end of word), `ge` (end of word backward), `W`, `B`, `E` (WORD motions)
+- [x] **Multi-cursor**: `Ctrl-n`/`Ctrl-v` multi-edit
 
 ### Low Priority (Advanced / Plugins)
-- [ ] **Terminal Emulator**: Built-in terminal (`:term`)
+- [x] **Terminal Emulator**: Built-in terminal (`:term`)
 - [v] **Tags**: Ctags integration (`:tag`, `Ctrl-]`, `Ctrl-t`) with caching and picker for ambiguous matches
-- [ ] **Diff Mode**: `vimdiff` support
-- [ ] **Statusline Customization**: `set statusline=...` or config equivalent
-- [ ] **Inline LSP Actions**: Rename (`<leader>rn`), Code Actions (`<leader>ca`)
-- [ ] **Snippets UI**: UI for selecting between multiple snippet matches
+- [-] **Diff Mode**: `vimdiff` support (via tx diff/patch)
+- [-] **Statusline Customization**: `set statusline=...` or config equivalent
 
 ---
 
