@@ -391,6 +391,66 @@ func (h *TreeSitterHighlighter) FunctionAtLine(lineNum int) string {
 	return bestName
 }
 
+func (h *TreeSitterHighlighter) FunctionRange(lineNum int) (startLine, endLine int, found bool) {
+	tslock.Lock()
+	defer tslock.Unlock()
+	if h == nil || h.tree == nil {
+		return 0, 0, false
+	}
+	var queryStr string
+	var treeSitterLang unsafe.Pointer
+	shebang := detectShebang(h.buf)
+	base := filepath.Base(h.buf.FilePath)
+	switch {
+	case strings.HasSuffix(h.buf.FilePath, ".go"):
+		queryStr = "(function_declaration name: (identifier) @name) (method_declaration name: (field_identifier) @name)"
+		treeSitterLang = golang.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".rs"):
+		queryStr = "(function_item name: (identifier) @name)"
+		treeSitterLang = rust.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".py") || shebang == "python":
+		queryStr = "(function_definition name: (identifier) @name)"
+		treeSitterLang = python.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".c"), strings.HasSuffix(h.buf.FilePath, ".h"):
+		queryStr = "(function_definition declarator: (function_declarator declarator: (identifier) @name))"
+		treeSitterLang = clang.Language()
+	case strings.HasSuffix(h.buf.FilePath, ".sh"), strings.HasSuffix(h.buf.FilePath, ".bash"), strings.HasSuffix(h.buf.FilePath, ".zsh"),
+		base == ".bashrc" || base == ".bash_profile" || base == ".zshrc" || shebang == "bash":
+		queryStr = "(function_definition name: (word) @name)"
+		treeSitterLang = bash.Language()
+	default:
+		return 0, 0, false
+	}
+	q, err := sitter.NewQuery(sitter.NewLanguage(treeSitterLang), queryStr)
+	if err != nil {
+		return 0, 0, false
+	}
+	defer q.Close()
+	qc := sitter.NewQueryCursor()
+	defer qc.Close()
+	matches := qc.Matches(q, h.tree.RootNode(), h.sourceCode)
+	bestRange := math.MaxInt
+	found = false
+	for match := matches.Next(); match != nil; match = matches.Next() {
+		for _, cap := range match.Captures {
+			nameNode := cap.Node
+			parent := nameNode.Parent()
+			pStart := int(parent.StartPosition().Row)
+			pEnd := int(parent.EndPosition().Row)
+			if lineNum >= pStart && lineNum <= pEnd {
+				rangeSize := pEnd - pStart
+				if rangeSize < bestRange {
+					bestRange = rangeSize
+					startLine = pStart
+					endLine = pEnd
+					found = true
+				}
+			}
+		}
+	}
+	return startLine, endLine, found
+}
+
 func (h *TreeSitterHighlighter) editEditInput(event EventTextChange) (r sitter.InputEdit) {
 	pointToByte := func(buf *Buffer, line, char int) int {
 		size := 0

@@ -187,6 +187,49 @@ func findCloseBracket(ctx Context, openPos Cursor, openCh, closeCh rune, include
 // Supports ', ", `. Pairs are matched left-to-right (first pair, second pair, etc.).
 // If the cursor is inside a pair, that pair is used. If before the first
 // quote, the first pair is used.
+func TextObjectFunction(ctx Context, include bool) (found bool, sel *Selection) {
+	hl, ok := ctx.Buf.Highlighter.(*TreeSitterHighlighter)
+	if !ok || hl == nil {
+		return false, nil
+	}
+	cur := ContextCursorGet(ctx)
+	startLine, endLine, ok := hl.FunctionRange(cur.Line)
+	if !ok {
+		return false, nil
+	}
+
+	startChar := 0
+	endLineNode := CursorLineByNum(ctx.Buf, endLine)
+	endChar := len(endLineNode.Value) - 1
+	if endChar < 0 {
+		endChar = 0
+	}
+
+	if include {
+		if endLine+1 < ctx.Buf.Lines.Len {
+			nextLine := CursorLineByNum(ctx.Buf, endLine+1)
+			if nextLine.Value.IsEmpty() {
+				endLine++
+				endLineNode = nextLine
+				endChar = len(endLineNode.Value) - 1
+				if endChar < 0 {
+					endChar = 0
+				}
+			}
+		}
+	} else {
+		startLineNode := CursorLineByNum(ctx.Buf, startLine)
+		if len(startLineNode.Value) > 1 {
+			startChar = len(startLineNode.Value) - 1
+		}
+	}
+
+	return true, &Selection{
+		Start: Cursor{Line: startLine, Char: startChar},
+		End:   Cursor{Line: endLine, Char: endChar},
+	}
+}
+
 func TextObjectQuotes(ctx Context, ch rune, include bool) (found bool, sel *Selection) {
 	cur := ContextCursorGet(ctx)
 	line := CursorLine(ctx.Buf, cur)

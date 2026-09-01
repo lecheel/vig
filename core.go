@@ -693,19 +693,18 @@ func CmdCommentInside(_ Context) func(Context) {
 			CmdCommentWord(ctx)
 			return
 		}
-
 		var sel *Selection
 		var found bool
-		if ch == '\'' || ch == '"' || ch == '`' {
+		if ch == 'f' {
+			found, sel = TextObjectFunction(ctx, false)
+		} else if ch == '\'' || ch == '"' || ch == '`' {
 			found, sel = TextObjectQuotes(ctx, ch, false)
 		} else {
 			found, sel = TextObjectBlock(ctx, ch, false)
 		}
-
 		if !found || sel == nil {
 			return
 		}
-
 		norm := SelectionNormalize(sel)
 		ToggleCommentRange(ctx, norm.Start.Line, norm.End.Line)
 	}
@@ -726,24 +725,22 @@ func CmdCommentAround(_ Context) func(Context) {
 			CmdCommentWord(ctx)
 			return
 		}
-
 		var sel *Selection
 		var found bool
-		if ch == '\'' || ch == '"' || ch == '`' {
+		if ch == 'f' {
+			found, sel = TextObjectFunction(ctx, true)
+		} else if ch == '\'' || ch == '"' || ch == '`' {
 			found, sel = TextObjectQuotes(ctx, ch, true)
 		} else {
 			found, sel = TextObjectBlock(ctx, ch, true)
 		}
-
 		if !found || sel == nil {
 			return
 		}
-
 		norm := SelectionNormalize(sel)
 		ToggleCommentRange(ctx, norm.Start.Line, norm.End.Line)
 	}
 }
-
 func CmdSelectionDelete(ctx Context) {
 	defer CmdNormalMode(ctx)
 	if ctx.Buf.TxStart() {
@@ -919,7 +916,6 @@ func CmdChangeInside(_ Context) func(Context) {
 			return
 		}
 		ch := rune(ctx.Char[0])
-
 		if ch == 'w' {
 			CmdChangeWord(ctx)
 			return
@@ -928,16 +924,15 @@ func CmdChangeInside(_ Context) func(Context) {
 			CmdChangeWORD(ctx)
 			return
 		}
-
 		var sel *Selection
 		var found bool
-
-		if ch == '\'' || ch == '"' || ch == '`' {
+		if ch == 'f' {
+			found, sel = TextObjectFunction(ctx, false)
+		} else if ch == '\'' || ch == '"' || ch == '`' {
 			found, sel = TextObjectQuotes(ctx, ch, false)
 		} else {
 			found, sel = TextObjectBlock(ctx, ch, false)
 		}
-
 		if !found {
 			return
 		}
@@ -959,21 +954,19 @@ func CmdChangeAround(_ Context) func(Context) {
 			return
 		}
 		ch := rune(ctx.Char[0])
-
 		if ch == 'w' {
 			CmdChangeWORD(ctx)
 			return
 		}
-
 		var sel *Selection
 		var found bool
-
-		if ch == '\'' || ch == '"' || ch == '`' {
+		if ch == 'f' {
+			found, sel = TextObjectFunction(ctx, true)
+		} else if ch == '\'' || ch == '"' || ch == '`' {
 			found, sel = TextObjectQuotes(ctx, ch, true)
 		} else {
 			found, sel = TextObjectBlock(ctx, ch, true)
 		}
-
 		if !found || sel == nil {
 			return
 		}
@@ -991,21 +984,19 @@ func CmdDeleteInside(_ Context) func(Context) {
 			return
 		}
 		ch := rune(ctx.Char[0])
-
 		if ch == 'w' {
 			CmdDeleteWord(ctx)
 			return
 		}
-
 		var sel *Selection
 		var found bool
-
-		if ch == '\'' || ch == '"' || ch == '`' {
+		if ch == 'f' {
+			found, sel = TextObjectFunction(ctx, false)
+		} else if ch == '\'' || ch == '"' || ch == '`' {
 			found, sel = TextObjectQuotes(ctx, ch, false)
 		} else {
 			found, sel = TextObjectBlock(ctx, ch, false)
 		}
-
 		if !found || sel == nil {
 			return
 		}
@@ -1026,21 +1017,19 @@ func CmdDeleteAround(_ Context) func(Context) {
 			return
 		}
 		ch := rune(ctx.Char[0])
-
 		if ch == 'w' {
 			CmdDeleteWord(ctx)
 			return
 		}
-
 		var sel *Selection
 		var found bool
-
-		if ch == '\'' || ch == '"' || ch == '`' {
+		if ch == 'f' {
+			found, sel = TextObjectFunction(ctx, true)
+		} else if ch == '\'' || ch == '"' || ch == '`' {
 			found, sel = TextObjectQuotes(ctx, ch, true)
 		} else {
 			found, sel = TextObjectBlock(ctx, ch, true)
 		}
-
 		if !found || sel == nil {
 			return
 		}
@@ -1061,16 +1050,15 @@ func CmdYankInside(_ Context) func(Context) {
 			return
 		}
 		ch := rune(ctx.Char[0])
-
 		var sel *Selection
 		var found bool
-
-		if ch == '\'' || ch == '"' || ch == '`' {
+		if ch == 'f' {
+			found, sel = TextObjectFunction(ctx, false)
+		} else if ch == '\'' || ch == '"' || ch == '`' {
 			found, sel = TextObjectQuotes(ctx, ch, false)
 		} else {
 			found, sel = TextObjectBlock(ctx, ch, false)
 		}
-
 		if !found || sel == nil {
 			return
 		}
@@ -1088,16 +1076,15 @@ func CmdYankAround(_ Context) func(Context) {
 			return
 		}
 		ch := rune(ctx.Char[0])
-
 		var sel *Selection
 		var found bool
-
-		if ch == '\'' || ch == '"' || ch == '`' {
+		if ch == 'f' {
+			found, sel = TextObjectFunction(ctx, true)
+		} else if ch == '\'' || ch == '"' || ch == '`' {
 			found, sel = TextObjectQuotes(ctx, ch, true)
 		} else {
 			found, sel = TextObjectBlock(ctx, ch, true)
 		}
-
 		if !found || sel == nil {
 			return
 		}
