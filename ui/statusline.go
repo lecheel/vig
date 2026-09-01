@@ -138,6 +138,9 @@ func renderPlain(
 		macroStr = " " + d.Macro
 	}
 	leftSide := fmt.Sprintf("%s %s%s ", d.ModeName, d.BufName, macroStr)
+	if d.HasBranch {
+		leftSide += fmt.Sprintf("  %s ", d.GitBranch)
+	}
 	if d.Message != "" {
 		leftSide = d.Message
 	}
@@ -296,7 +299,7 @@ func renderPowerline(
 			branchBg = bgFill
 		}
 		leftSegs = append(leftSegs, segment{
-			text: fmt.Sprintf(" %s ", d.GitBranch),
+			text: fmt.Sprintf("  %s ", d.GitBranch),
 			fg:   branchFg, bg: branchBg,
 		})
 	}
