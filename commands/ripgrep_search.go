@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/firstrow/wig"
@@ -16,52 +17,131 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 	if err != nil {
 		return
 	}
+	currentDir := rootDir
+	isTreeView := false
 
-	cmd := exec.Command("rg", "--files")
-	cmd.Dir = rootDir
-	stdout, err := cmd.Output()
-	if err != nil {
-		ctx.Editor.LogError(err)
-		return
+	buildFlatItems := func() []ui.PickerItem[string] {
+		cmd := exec.Command("rg", "--files")
+		cmd.Dir = currentDir
+		stdout, err := cmd.Output()
+		if err != nil {
+			ctx.Editor.LogError(err)
+			return nil
+		}
+		items := []ui.PickerItem[string]{}
+		for row := range strings.SplitSeq(string(stdout), "\n") {
+			row = strings.TrimSpace(row)
+			if len(row) == 0 {
+				continue
+			}
+			fullPath := filepath.Join(currentDir, row)
+			color := ""
+			for _, b := range ctx.Editor.Buffers {
+				if b.FilePath == fullPath && b.Dirty {
+					color = "gold"
+					break
+				}
+			}
+			items = append(items, ui.PickerItem[string]{
+				Name:    row,
+				Value:   row,
+				FgColor: color,
+			})
+		}
+		return items
 	}
 
-	items := []ui.PickerItem[string]{}
-	for row := range strings.SplitSeq(string(stdout), "\n") {
-		row = strings.TrimSpace(row)
-		if len(row) == 0 {
-			continue
+	buildTreeItems := func() []ui.PickerItem[string] {
+		items := []ui.PickerItem[string]{}
+		if currentDir != rootDir {
+			items = append(items, ui.PickerItem[string]{
+				Name:  "../",
+				Value: "..",
+			})
 		}
-		fullPath := filepath.Join(rootDir, row)
-		color := ""
-		for _, b := range ctx.Editor.Buffers {
-			if b.FilePath == fullPath && b.Dirty {
-				color = "gold"
-				break
+
+		cmd := exec.Command("ls", "-ap")
+		cmd.Dir = currentDir
+		stdout, err := cmd.Output()
+		if err != nil {
+			ctx.Editor.LogError(err)
+			return items
+		}
+
+		lines := strings.Split(strings.TrimSpace(string(stdout)), "\n")
+		sort.Strings(lines)
+
+		for _, l := range lines {
+			l = strings.TrimSpace(l)
+			if l == "" || l == "./" {
+				continue
 			}
+
+			isDir := strings.HasSuffix(l, "/")
+			value := l
+			if isDir {
+				value = strings.TrimSuffix(l, "/")
+			}
+
+			color := ""
+			if !isDir {
+				fullPath := filepath.Join(currentDir, value)
+				for _, b := range ctx.Editor.Buffers {
+					if b.FilePath == fullPath && b.Dirty {
+						color = "gold"
+						break
+					}
+				}
+			}
+
+			items = append(items, ui.PickerItem[string]{
+				Name:    l,
+				Value:   value,
+				FgColor: color,
+			})
 		}
-		items = append(items, ui.PickerItem[string]{
-			Name:    row,
-			Value:   row,
-			FgColor: color,
-		})
+		return items
 	}
-	picker := ui.PickerInit(
-		ctx.Editor,
-		func(_ *ui.UiPicker[string], i *ui.PickerItem[string]) {
-			defer ctx.Editor.PopUi()
-			if i == nil {
-				return
+
+	action := func(p *ui.UiPicker[string], i *ui.PickerItem[string]) {
+		if i == nil {
+			return
+		}
+		if isTreeView && strings.HasSuffix(i.Name, "/") {
+			if i.Value == ".." {
+				currentDir = filepath.Dir(currentDir)
+			} else {
+				currentDir = filepath.Join(currentDir, i.Value)
 			}
-			path := rootDir + "/" + i.Value
-			ctx.Buf, err = ctx.Editor.OpenFile(path)
-			if err != nil {
-				return
-			}
-			ctx.Editor.ActiveWindow().VisitBuffer(ctx)
-		},
-		items,
-	)
-	picker.SetTitle("Find File")
+			p.SetItems(buildTreeItems())
+			p.ClearInput()
+			return
+		}
+
+		defer ctx.Editor.PopUi()
+		path := filepath.Join(currentDir, i.Value)
+		ctx.Buf, err = ctx.Editor.OpenFile(path)
+		if err != nil {
+			return
+		}
+		ctx.Editor.ActiveWindow().VisitBuffer(ctx)
+	}
+
+	picker := ui.PickerInit(ctx.Editor, action, buildFlatItems())
+	picker.SetTitle("Find File (Tab: Tree)")
+
+	picker.OnKey("Tab", func(ctx wig.Context) {
+		isTreeView = !isTreeView
+		if isTreeView {
+			picker.SetTitle("Directory Tree (Tab: Files)")
+			picker.SetItems(buildTreeItems())
+		} else {
+			picker.SetTitle("Find File (Tab: Tree)")
+			picker.SetItems(buildFlatItems())
+		}
+		picker.ClearInput()
+		ctx.Editor.Redraw()
+	})
 
 	picker.OnKey("ctrl+o", func(ctx wig.Context) {
 		CmdWindowVSplitLimited(ctx)
@@ -69,7 +149,6 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 		picker.CallAction()
 	})
 }
-
 func rgDoSearch(ctx wig.Context, pat string) {
 	rootDir := ctx.Editor.Projects.GetRoot()
 
