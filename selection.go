@@ -112,6 +112,8 @@ func CmdSelectionBlockDelete(ctx Context) {
 		if line == nil {
 			continue
 		}
+		expandStraddlingTab(&line.Value, minVisCol)
+		expandStraddlingTab(&line.Value, maxVisCol)
 		startChar := RuneIndexFromVisualCol(line.Value, minVisCol)
 		endChar := RuneIndexFromVisualCol(line.Value, maxVisCol)
 
@@ -168,6 +170,8 @@ func CmdSelectionBlockYank(ctx Context) {
 			lines = append(lines, "")
 			continue
 		}
+		expandStraddlingTab(&line.Value, minVisCol)
+		expandStraddlingTab(&line.Value, maxVisCol)
 		startChar := RuneIndexFromVisualCol(line.Value, minVisCol)
 		endChar := RuneIndexFromVisualCol(line.Value, maxVisCol)
 

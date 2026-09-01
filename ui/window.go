@@ -165,10 +165,11 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 			}
 
 			// render line
-			currVisCol := 0
+			startVisCol := 0
 			for j := 0; j < skip && j < len(currentLine.Value); j++ {
-				currVisCol += chlen(currentLine.Value[j])
+				startVisCol += chlen(currentLine.Value[j])
 			}
+			currVisCol := startVisCol
 
 			var lineSpans []wig.Span
 			if buf.Highlighter != nil {
@@ -204,8 +205,13 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 							minLine, maxLine = maxLine, minLine
 						}
 						if lineNum >= minLine && lineNum <= maxLine {
-							// Highlight based on visual screen columns
-							if currVisCol < maxVisCol && currVisCol+charLen > minVisCol {
+							// Highlight based on visual screen columns.
+							// Tabs are excluded here and handled per-column
+							// below — a tab is one rune spanning 4 columns,
+							// so this whole-rune check would force the
+							// entire tab in/out as a single unit instead of
+							// only the columns the block actually covers.
+							if currentLine.Value[i] != '\t' && currVisCol < maxVisCol && currVisCol+charLen > minVisCol {
 								textStyle = wig.ApplyBg("ui.selection.primary", textStyle)
 							}
 						}
@@ -254,7 +260,34 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 
 				// todo: handle tabs colors?
 				// render text
-				if x >= 0 && x < termWidth && y >= 0 && y < termHeight {
+				//
+				// A tab is a single rune but occupies charLen (4) visual
+				// columns. In blockwise (Ctrl-V) selection, a boundary can
+				// fall in the middle of that span — rendering it as one
+				// SetContent call can only highlight the whole tab or none
+				// of it. Split it into per-column cells here so only the
+				// columns actually inside [minVisCol,maxVisCol) light up.
+				if currentLine.Value[i] == '\t' && isVisualBlock && buf.Selection != nil && charLen > 1 {
+					sel := buf.Selection
+					blkMinLine, blkMaxLine := sel.Start.Line, sel.End.Line
+					if blkMinLine > blkMaxLine {
+						blkMinLine, blkMaxLine = blkMaxLine, blkMinLine
+					}
+					inRange := lineNum >= blkMinLine && lineNum <= blkMaxLine
+					for col := 0; col < charLen; col++ {
+						cellStyle := textStyle
+						if inRange {
+							cellVisCol := currVisCol + col
+							if cellVisCol >= minVisCol && cellVisCol < maxVisCol {
+								cellStyle = wig.ApplyBg("ui.selection.primary", cellStyle)
+							}
+						}
+						cellX := x + col
+						if cellX >= 0 && cellX < termWidth && y >= 0 && y < termHeight {
+							view.SetContent(cellX, y, " ", cellStyle)
+						}
+					}
+				} else if x >= 0 && x < termWidth && y >= 0 && y < termHeight {
 					view.SetContent(x, y, string(ch), textStyle)
 				}
 
@@ -301,19 +334,14 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 					if startPad < minVisCol {
 						startPad = minVisCol
 					}
-					if startPad < skip {
-						startPad = skip
+					if startPad < startVisCol {
+						startPad = startVisCol
 					}
-					xBaseVisCol := skip
-					if currVisCol > skip {
-						xBaseVisCol = currVisCol
-					}
-					padX := x + startPad - xBaseVisCol
 					for visCol := startPad; visCol < maxVisCol; visCol++ {
+						padX := leftPadding + visCol - startVisCol
 						if padX >= 0 && padX < termWidth && y >= 0 && y < termHeight {
 							view.SetContent(padX, y, " ", selStyle)
 						}
-						padX++
 					}
 				}
 			}

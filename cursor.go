@@ -184,6 +184,42 @@ func RuneIndexFromVisualCol(line []rune, visCol int) int {
 	return len(line)
 }
 
+// expandStraddlingTab replaces, in-place, the tab rune (if any) whose
+// visual span crosses visCol with literal space runes. Blockwise ops
+// (yank/delete) compute boundaries in visual columns, but a tab is a
+// single rune spanning 4 columns — without this, a boundary landing
+// inside a tab gets rounded to the tab's start or end instead of the
+// exact column, corrupting the rectangle. Expanding first guarantees
+// the boundary lands exactly on a rune (short lines need no such fix:
+// they already terminate the slice correctly on their own).
+func expandStraddlingTab(line *Line, visCol int) {
+	col := 0
+	for i, r := range *line {
+		if r == '\n' {
+			return
+		}
+		w := 1
+		if r == '\t' {
+			w = 4
+		} else {
+			w = runewidth.RuneWidth(r)
+		}
+		if r == '\t' && col < visCol && visCol < col+w {
+			spaces := make(Line, w)
+			for k := range spaces {
+				spaces[k] = ' '
+			}
+			expanded := make(Line, 0, len(*line)+w-1)
+			expanded = append(expanded, (*line)[:i]...)
+			expanded = append(expanded, spaces...)
+			expanded = append(expanded, (*line)[i+1:]...)
+			*line = expanded
+			return
+		}
+		col += w
+	}
+}
+
 // class of char under cursor
 type chClass int
 
