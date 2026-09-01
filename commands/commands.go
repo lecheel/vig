@@ -67,8 +67,6 @@ func CmdBufferPicker(ctx wig.Context) {
 	for _, b := range ctx.Editor.Buffers {
 		color := ""
 		if b.Dirty {
-			color = "warning"
-		} else if b == ctx.Editor.ActiveBuffer() {
 			color = "ui.popup.title"
 		}
 		items = append(items, ui.PickerItem[*wig.Buffer]{

@@ -38,7 +38,7 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 			color := ""
 			for _, b := range ctx.Editor.Buffers {
 				if b.FilePath == fullPath && b.Dirty {
-					color = "gold"
+					color = "ui.popup.title"
 					break
 				}
 			}
@@ -55,8 +55,9 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 		items := []ui.PickerItem[string]{}
 		if currentDir != rootDir {
 			items = append(items, ui.PickerItem[string]{
-				Name:  "../",
-				Value: "..",
+				Name:    "../",
+				Value:   "..",
+				FgColor: "ui.text.directory",
 			})
 		}
 
@@ -73,7 +74,7 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 
 		for _, l := range lines {
 			l = strings.TrimSpace(l)
-			if l == "" || l == "./" {
+			if l == "" || l == "./" || l == "../" {
 				continue
 			}
 
@@ -84,11 +85,13 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 			}
 
 			color := ""
-			if !isDir {
+			if isDir {
+				color = "ui.text.directory"
+			} else {
 				fullPath := filepath.Join(currentDir, value)
 				for _, b := range ctx.Editor.Buffers {
 					if b.FilePath == fullPath && b.Dirty {
-						color = "gold"
+						color = "ui.popup.title"
 						break
 					}
 				}
