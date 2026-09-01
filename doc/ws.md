@@ -61,6 +61,7 @@ When starting `wig` (`cmd/main.go`):
 3. If no file arguments are passed and `editor.Config.SaveWorkspaces == true`:
    - `LoadWorkspaceCache(editor.Projects.GetRoot())` reads the project's cache file.
    - `wsCache.RestoreAll(editor)` restores all workspaces, their exact split layouts, background buffers, and focuses the previous active workspace and window.
+4. If `editor.Config.SaveWorkspaces == false`, any previously saved state via `:wssave` is ignored. `ws1` will start as a blank, empty workspace.
 
 ### 4.2. Exit & Auto-Save
 When the editor exits (`<-editor.ExitCh`):
@@ -110,3 +111,4 @@ Moves the active window from the current workspace to another:
 2. **Buffer Deduplication**: Global buffers (`editor.BufferFindByFilePath`) are reused across workspaces without re-reading from disk.
 3. **Buffer Destruction on `:q`**: Killing a buffer (`CmdKillBuffer`) safely substitutes a replacement across all workspaces and prunes it from `ws.Files` and `ws.Root`.
 4. **Legacy Fallback**: If a project-specific workspace cache does not yet exist, `LoadWorkspaceCache` transparently checks legacy global files (`workspaces.json`) for seamless upgrades.
+5. **Manual Save with Disabled Auto-Restore**: `ws1` is a special workspace. If `save_workspaces` is `false` in the config but the user manually saves using `:wssave`, the rest of the workspaces are written to the cache file. However, because auto-restore is disabled, `ws1` will ignore this on the next startup, and running `./wig` will result in an empty state (nothing loaded).
