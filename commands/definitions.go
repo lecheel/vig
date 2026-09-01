@@ -181,25 +181,25 @@ func init() {
 	wig.AllCommands["wssave"] = wig.CmdDefinition{Desc: "Save workspaces", Fn: CmdWorkspaceSave}
 	wig.AllCommands["CmdWorkspaceSave"] = wig.CmdDefinition{Desc: "Save workspaces", Fn: CmdWorkspaceSave}
 
-	wig.AllCommands["CmdDeleteInsideFunction"] = wig.CmdDefinition{Desc: "Delete inside function", Fn: wig.CmdDeleteInsideFunction, Repeatable: true}
+	wig.AllCommands["CmdDeleteInsideFunction"] = wig.CmdDefinition{Desc: "di function", Fn: wig.CmdDeleteInsideFunction, Repeatable: true}
 	wig.AllCommands["CmdDeleteAroundFunction"] = wig.CmdDefinition{Desc: "da function", Fn: wig.CmdDeleteAroundFunction, Repeatable: true}
-	wig.AllCommands["CmdDeleteInsideWord"] = wig.CmdDefinition{Desc: "Delete inside word", Fn: wig.CmdDeleteInsideWord, Repeatable: true}
+	wig.AllCommands["CmdDeleteInsideWord"] = wig.CmdDefinition{Desc: "di word", Fn: wig.CmdDeleteInsideWord, Repeatable: true}
 	wig.AllCommands["CmdDeleteAroundWord"] = wig.CmdDefinition{Desc: "da word", Fn: wig.CmdDeleteAroundWord, Repeatable: true}
-	wig.AllCommands["CmdDeleteInsideParagraph"] = wig.CmdDefinition{Desc: "Delete inside paragraph", Fn: wig.CmdDeleteInsideParagraph, Repeatable: true}
+	wig.AllCommands["CmdDeleteInsideParagraph"] = wig.CmdDefinition{Desc: "di paragraph", Fn: wig.CmdDeleteInsideParagraph, Repeatable: true}
 	wig.AllCommands["CmdDeleteAroundParagraph"] = wig.CmdDefinition{Desc: "da paragraph", Fn: wig.CmdDeleteAroundParagraph, Repeatable: true}
-	wig.AllCommands["CmdDeleteInsideQuotesDouble"] = wig.CmdDefinition{Desc: "Delete inside double quotes", Fn: wig.CmdDeleteInsideQuotesDouble, Repeatable: true}
+	wig.AllCommands["CmdDeleteInsideQuotesDouble"] = wig.CmdDefinition{Desc: "di double quotes", Fn: wig.CmdDeleteInsideQuotesDouble, Repeatable: true}
 	wig.AllCommands["CmdDeleteAroundQuotesDouble"] = wig.CmdDefinition{Desc: "da double quotes", Fn: wig.CmdDeleteAroundQuotesDouble, Repeatable: true}
-	wig.AllCommands["CmdDeleteInsideQuotesSingle"] = wig.CmdDefinition{Desc: "Delete inside single quotes", Fn: wig.CmdDeleteInsideQuotesSingle, Repeatable: true}
+	wig.AllCommands["CmdDeleteInsideQuotesSingle"] = wig.CmdDefinition{Desc: "di single quotes", Fn: wig.CmdDeleteInsideQuotesSingle, Repeatable: true}
 	wig.AllCommands["CmdDeleteAroundQuotesSingle"] = wig.CmdDefinition{Desc: "da single quotes", Fn: wig.CmdDeleteAroundQuotesSingle, Repeatable: true}
-	wig.AllCommands["CmdDeleteInsideQuotesBacktick"] = wig.CmdDefinition{Desc: "Delete inside backtick quotes", Fn: wig.CmdDeleteInsideQuotesBacktick, Repeatable: true}
+	wig.AllCommands["CmdDeleteInsideQuotesBacktick"] = wig.CmdDefinition{Desc: "di backtick quotes", Fn: wig.CmdDeleteInsideQuotesBacktick, Repeatable: true}
 	wig.AllCommands["CmdDeleteAroundQuotesBacktick"] = wig.CmdDefinition{Desc: "da backtick quotes", Fn: wig.CmdDeleteAroundQuotesBacktick, Repeatable: true}
-	wig.AllCommands["CmdDeleteInsideParen"] = wig.CmdDefinition{Desc: "Delete inside parentheses", Fn: wig.CmdDeleteInsideParen, Repeatable: true}
+	wig.AllCommands["CmdDeleteInsideParen"] = wig.CmdDefinition{Desc: "di parentheses", Fn: wig.CmdDeleteInsideParen, Repeatable: true}
 	wig.AllCommands["CmdDeleteAroundParen"] = wig.CmdDefinition{Desc: "da parentheses", Fn: wig.CmdDeleteAroundParen, Repeatable: true}
-	wig.AllCommands["CmdDeleteInsideBrace"] = wig.CmdDefinition{Desc: "Delete inside braces", Fn: wig.CmdDeleteInsideBrace, Repeatable: true}
+	wig.AllCommands["CmdDeleteInsideBrace"] = wig.CmdDefinition{Desc: "di braces", Fn: wig.CmdDeleteInsideBrace, Repeatable: true}
 	wig.AllCommands["CmdDeleteAroundBrace"] = wig.CmdDefinition{Desc: "da braces", Fn: wig.CmdDeleteAroundBrace, Repeatable: true}
-	wig.AllCommands["CmdDeleteInsideBracket"] = wig.CmdDefinition{Desc: "Delete inside brackets", Fn: wig.CmdDeleteInsideBracket, Repeatable: true}
+	wig.AllCommands["CmdDeleteInsideBracket"] = wig.CmdDefinition{Desc: "di brackets", Fn: wig.CmdDeleteInsideBracket, Repeatable: true}
 	wig.AllCommands["CmdDeleteAroundBracket"] = wig.CmdDefinition{Desc: "da brackets", Fn: wig.CmdDeleteAroundBracket, Repeatable: true}
-	wig.AllCommands["CmdDeleteInsideAngle"] = wig.CmdDefinition{Desc: "Delete inside angle brackets", Fn: wig.CmdDeleteInsideAngle, Repeatable: true}
+	wig.AllCommands["CmdDeleteInsideAngle"] = wig.CmdDefinition{Desc: "di angle brackets", Fn: wig.CmdDeleteInsideAngle, Repeatable: true}
 	wig.AllCommands["CmdDeleteAroundAngle"] = wig.CmdDefinition{Desc: "da angle brackets", Fn: wig.CmdDeleteAroundAngle, Repeatable: true}
 
 	wig.AllCommands["CmdChangeInsideFunction"] = wig.CmdDefinition{Desc: "Change inside function", Fn: wig.CmdChangeInsideFunction, Repeatable: true}
