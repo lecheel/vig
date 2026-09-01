@@ -155,52 +155,52 @@ func init() {
 			wig.CmdBufferCycle(ctx)
 		}
 	}}
-	wig.AllCommands["CmdWorkspaceSwitch_1"] = wig.CmdDefinition{Desc: "Switch to workspace 1", Fn: wig.CmdWorkspaceSwitch_1}
-	wig.AllCommands["CmdWorkspaceSwitch_2"] = wig.CmdDefinition{Desc: "Switch to workspace 2", Fn: wig.CmdWorkspaceSwitch_2}
-	wig.AllCommands["CmdWorkspaceSwitch_3"] = wig.CmdDefinition{Desc: "Switch to workspace 3", Fn: wig.CmdWorkspaceSwitch_3}
-	wig.AllCommands["CmdWorkspaceSwitch_4"] = wig.CmdDefinition{Desc: "Switch to workspace 4", Fn: wig.CmdWorkspaceSwitch_4}
-	wig.AllCommands["CmdWorkspaceSwitch_5"] = wig.CmdDefinition{Desc: "Switch to workspace 5", Fn: wig.CmdWorkspaceSwitch_5}
-	wig.AllCommands["CmdWorkspaceSwitch_6"] = wig.CmdDefinition{Desc: "Switch to workspace 6", Fn: wig.CmdWorkspaceSwitch_6}
-	wig.AllCommands["CmdWorkspaceSwitch_7"] = wig.CmdDefinition{Desc: "Switch to workspace 7", Fn: wig.CmdWorkspaceSwitch_7}
-	wig.AllCommands["CmdWorkspaceSwitch_8"] = wig.CmdDefinition{Desc: "Switch to workspace 8", Fn: wig.CmdWorkspaceSwitch_8}
-	wig.AllCommands["CmdWorkspaceSwitch_9"] = wig.CmdDefinition{Desc: "Switch to workspace 9", Fn: wig.CmdWorkspaceSwitch_9}
-	wig.AllCommands["CmdWorkspaceSwitch_0"] = wig.CmdDefinition{Desc: "Switch to workspace 0", Fn: wig.CmdWorkspaceSwitch_0}
+	wig.AllCommands["CmdWorkspaceSwitch_1"] = wig.CmdDefinition{Desc: "Switch to ws 1", Fn: wig.CmdWorkspaceSwitch_1}
+	wig.AllCommands["CmdWorkspaceSwitch_2"] = wig.CmdDefinition{Desc: "Switch to ws 2", Fn: wig.CmdWorkspaceSwitch_2}
+	wig.AllCommands["CmdWorkspaceSwitch_3"] = wig.CmdDefinition{Desc: "Switch to ws 3", Fn: wig.CmdWorkspaceSwitch_3}
+	wig.AllCommands["CmdWorkspaceSwitch_4"] = wig.CmdDefinition{Desc: "Switch to ws 4", Fn: wig.CmdWorkspaceSwitch_4}
+	wig.AllCommands["CmdWorkspaceSwitch_5"] = wig.CmdDefinition{Desc: "Switch to ws 5", Fn: wig.CmdWorkspaceSwitch_5}
+	wig.AllCommands["CmdWorkspaceSwitch_6"] = wig.CmdDefinition{Desc: "Switch to ws 6", Fn: wig.CmdWorkspaceSwitch_6}
+	wig.AllCommands["CmdWorkspaceSwitch_7"] = wig.CmdDefinition{Desc: "Switch to ws 7", Fn: wig.CmdWorkspaceSwitch_7}
+	wig.AllCommands["CmdWorkspaceSwitch_8"] = wig.CmdDefinition{Desc: "Switch to ws 8", Fn: wig.CmdWorkspaceSwitch_8}
+	wig.AllCommands["CmdWorkspaceSwitch_9"] = wig.CmdDefinition{Desc: "Switch to ws 9", Fn: wig.CmdWorkspaceSwitch_9}
+	wig.AllCommands["CmdWorkspaceSwitch_0"] = wig.CmdDefinition{Desc: "Switch to ws 0", Fn: wig.CmdWorkspaceSwitch_0}
 
-	wig.AllCommands["CmdWindowMoveToWorkspace_1"] = wig.CmdDefinition{Desc: "Move window to workspace 1", Fn: wig.CmdWindowMoveToWorkspace_1}
-	wig.AllCommands["CmdWindowMoveToWorkspace_2"] = wig.CmdDefinition{Desc: "Move window to workspace 2", Fn: wig.CmdWindowMoveToWorkspace_2}
-	wig.AllCommands["CmdWindowMoveToWorkspace_3"] = wig.CmdDefinition{Desc: "Move window to workspace 3", Fn: wig.CmdWindowMoveToWorkspace_3}
-	wig.AllCommands["CmdWindowMoveToWorkspace_4"] = wig.CmdDefinition{Desc: "Move window to workspace 4", Fn: wig.CmdWindowMoveToWorkspace_4}
-	wig.AllCommands["CmdWindowMoveToWorkspace_5"] = wig.CmdDefinition{Desc: "Move window to workspace 5", Fn: wig.CmdWindowMoveToWorkspace_5}
-	wig.AllCommands["CmdWindowMoveToWorkspace_6"] = wig.CmdDefinition{Desc: "Move window to workspace 6", Fn: wig.CmdWindowMoveToWorkspace_6}
-	wig.AllCommands["CmdWindowMoveToWorkspace_7"] = wig.CmdDefinition{Desc: "Move window to workspace 7", Fn: wig.CmdWindowMoveToWorkspace_7}
-	wig.AllCommands["CmdWindowMoveToWorkspace_8"] = wig.CmdDefinition{Desc: "Move window to workspace 8", Fn: wig.CmdWindowMoveToWorkspace_8}
-	wig.AllCommands["CmdWindowMoveToWorkspace_9"] = wig.CmdDefinition{Desc: "Move window to workspace 9", Fn: wig.CmdWindowMoveToWorkspace_9}
-	wig.AllCommands["CmdWindowMoveToWorkspace_0"] = wig.CmdDefinition{Desc: "Move window to workspace 0", Fn: wig.CmdWindowMoveToWorkspace_0}
+	wig.AllCommands["CmdWindowMoveToWorkspace_1"] = wig.CmdDefinition{Desc: "Move window to ws 1", Fn: wig.CmdWindowMoveToWorkspace_1}
+	wig.AllCommands["CmdWindowMoveToWorkspace_2"] = wig.CmdDefinition{Desc: "Move window to ws 2", Fn: wig.CmdWindowMoveToWorkspace_2}
+	wig.AllCommands["CmdWindowMoveToWorkspace_3"] = wig.CmdDefinition{Desc: "Move window to ws 3", Fn: wig.CmdWindowMoveToWorkspace_3}
+	wig.AllCommands["CmdWindowMoveToWorkspace_4"] = wig.CmdDefinition{Desc: "Move window to ws 4", Fn: wig.CmdWindowMoveToWorkspace_4}
+	wig.AllCommands["CmdWindowMoveToWorkspace_5"] = wig.CmdDefinition{Desc: "Move window to ws 5", Fn: wig.CmdWindowMoveToWorkspace_5}
+	wig.AllCommands["CmdWindowMoveToWorkspace_6"] = wig.CmdDefinition{Desc: "Move window to ws 6", Fn: wig.CmdWindowMoveToWorkspace_6}
+	wig.AllCommands["CmdWindowMoveToWorkspace_7"] = wig.CmdDefinition{Desc: "Move window to ws 7", Fn: wig.CmdWindowMoveToWorkspace_7}
+	wig.AllCommands["CmdWindowMoveToWorkspace_8"] = wig.CmdDefinition{Desc: "Move window to ws 8", Fn: wig.CmdWindowMoveToWorkspace_8}
+	wig.AllCommands["CmdWindowMoveToWorkspace_9"] = wig.CmdDefinition{Desc: "Move window to ws 9", Fn: wig.CmdWindowMoveToWorkspace_9}
+	wig.AllCommands["CmdWindowMoveToWorkspace_0"] = wig.CmdDefinition{Desc: "Move window to ws 0", Fn: wig.CmdWindowMoveToWorkspace_0}
 
 	wig.AllCommands["wslist"] = wig.CmdDefinition{Desc: "List and switch workspaces", Fn: CmdWorkspaceListPicker}
 	wig.AllCommands["wssave"] = wig.CmdDefinition{Desc: "Save workspaces", Fn: CmdWorkspaceSave}
 	wig.AllCommands["CmdWorkspaceSave"] = wig.CmdDefinition{Desc: "Save workspaces", Fn: CmdWorkspaceSave}
 
 	wig.AllCommands["CmdDeleteInsideFunction"] = wig.CmdDefinition{Desc: "Delete inside function", Fn: wig.CmdDeleteInsideFunction, Repeatable: true}
-	wig.AllCommands["CmdDeleteAroundFunction"] = wig.CmdDefinition{Desc: "Delete around function", Fn: wig.CmdDeleteAroundFunction, Repeatable: true}
+	wig.AllCommands["CmdDeleteAroundFunction"] = wig.CmdDefinition{Desc: "da function", Fn: wig.CmdDeleteAroundFunction, Repeatable: true}
 	wig.AllCommands["CmdDeleteInsideWord"] = wig.CmdDefinition{Desc: "Delete inside word", Fn: wig.CmdDeleteInsideWord, Repeatable: true}
-	wig.AllCommands["CmdDeleteAroundWord"] = wig.CmdDefinition{Desc: "Delete around word", Fn: wig.CmdDeleteAroundWord, Repeatable: true}
+	wig.AllCommands["CmdDeleteAroundWord"] = wig.CmdDefinition{Desc: "da word", Fn: wig.CmdDeleteAroundWord, Repeatable: true}
 	wig.AllCommands["CmdDeleteInsideParagraph"] = wig.CmdDefinition{Desc: "Delete inside paragraph", Fn: wig.CmdDeleteInsideParagraph, Repeatable: true}
-	wig.AllCommands["CmdDeleteAroundParagraph"] = wig.CmdDefinition{Desc: "Delete around paragraph", Fn: wig.CmdDeleteAroundParagraph, Repeatable: true}
+	wig.AllCommands["CmdDeleteAroundParagraph"] = wig.CmdDefinition{Desc: "da paragraph", Fn: wig.CmdDeleteAroundParagraph, Repeatable: true}
 	wig.AllCommands["CmdDeleteInsideQuotesDouble"] = wig.CmdDefinition{Desc: "Delete inside double quotes", Fn: wig.CmdDeleteInsideQuotesDouble, Repeatable: true}
-	wig.AllCommands["CmdDeleteAroundQuotesDouble"] = wig.CmdDefinition{Desc: "Delete around double quotes", Fn: wig.CmdDeleteAroundQuotesDouble, Repeatable: true}
+	wig.AllCommands["CmdDeleteAroundQuotesDouble"] = wig.CmdDefinition{Desc: "da double quotes", Fn: wig.CmdDeleteAroundQuotesDouble, Repeatable: true}
 	wig.AllCommands["CmdDeleteInsideQuotesSingle"] = wig.CmdDefinition{Desc: "Delete inside single quotes", Fn: wig.CmdDeleteInsideQuotesSingle, Repeatable: true}
-	wig.AllCommands["CmdDeleteAroundQuotesSingle"] = wig.CmdDefinition{Desc: "Delete around single quotes", Fn: wig.CmdDeleteAroundQuotesSingle, Repeatable: true}
+	wig.AllCommands["CmdDeleteAroundQuotesSingle"] = wig.CmdDefinition{Desc: "da single quotes", Fn: wig.CmdDeleteAroundQuotesSingle, Repeatable: true}
 	wig.AllCommands["CmdDeleteInsideQuotesBacktick"] = wig.CmdDefinition{Desc: "Delete inside backtick quotes", Fn: wig.CmdDeleteInsideQuotesBacktick, Repeatable: true}
-	wig.AllCommands["CmdDeleteAroundQuotesBacktick"] = wig.CmdDefinition{Desc: "Delete around backtick quotes", Fn: wig.CmdDeleteAroundQuotesBacktick, Repeatable: true}
+	wig.AllCommands["CmdDeleteAroundQuotesBacktick"] = wig.CmdDefinition{Desc: "da backtick quotes", Fn: wig.CmdDeleteAroundQuotesBacktick, Repeatable: true}
 	wig.AllCommands["CmdDeleteInsideParen"] = wig.CmdDefinition{Desc: "Delete inside parentheses", Fn: wig.CmdDeleteInsideParen, Repeatable: true}
-	wig.AllCommands["CmdDeleteAroundParen"] = wig.CmdDefinition{Desc: "Delete around parentheses", Fn: wig.CmdDeleteAroundParen, Repeatable: true}
+	wig.AllCommands["CmdDeleteAroundParen"] = wig.CmdDefinition{Desc: "da parentheses", Fn: wig.CmdDeleteAroundParen, Repeatable: true}
 	wig.AllCommands["CmdDeleteInsideBrace"] = wig.CmdDefinition{Desc: "Delete inside braces", Fn: wig.CmdDeleteInsideBrace, Repeatable: true}
-	wig.AllCommands["CmdDeleteAroundBrace"] = wig.CmdDefinition{Desc: "Delete around braces", Fn: wig.CmdDeleteAroundBrace, Repeatable: true}
+	wig.AllCommands["CmdDeleteAroundBrace"] = wig.CmdDefinition{Desc: "da braces", Fn: wig.CmdDeleteAroundBrace, Repeatable: true}
 	wig.AllCommands["CmdDeleteInsideBracket"] = wig.CmdDefinition{Desc: "Delete inside brackets", Fn: wig.CmdDeleteInsideBracket, Repeatable: true}
-	wig.AllCommands["CmdDeleteAroundBracket"] = wig.CmdDefinition{Desc: "Delete around brackets", Fn: wig.CmdDeleteAroundBracket, Repeatable: true}
+	wig.AllCommands["CmdDeleteAroundBracket"] = wig.CmdDefinition{Desc: "da brackets", Fn: wig.CmdDeleteAroundBracket, Repeatable: true}
 	wig.AllCommands["CmdDeleteInsideAngle"] = wig.CmdDefinition{Desc: "Delete inside angle brackets", Fn: wig.CmdDeleteInsideAngle, Repeatable: true}
-	wig.AllCommands["CmdDeleteAroundAngle"] = wig.CmdDefinition{Desc: "Delete around angle brackets", Fn: wig.CmdDeleteAroundAngle, Repeatable: true}
+	wig.AllCommands["CmdDeleteAroundAngle"] = wig.CmdDefinition{Desc: "da angle brackets", Fn: wig.CmdDeleteAroundAngle, Repeatable: true}
 
 	wig.AllCommands["CmdChangeInsideFunction"] = wig.CmdDefinition{Desc: "Change inside function", Fn: wig.CmdChangeInsideFunction, Repeatable: true}
 	wig.AllCommands["CmdChangeAroundFunction"] = wig.CmdDefinition{Desc: "Change around function", Fn: wig.CmdChangeAroundFunction, Repeatable: true}
