@@ -128,7 +128,7 @@ func (h *RgHighlighter) HighlightLine(lineNum int) []wig.Span {
 		return []wig.Span{{
 			StartCol: 0,
 			EndCol:   uint16(colonIdx + 1),
-			Style:    wig.Color("ui.linenr"),
+			Style:    wig.Color("comment"),
 		}}
 	}
 
@@ -144,7 +144,7 @@ func (h *RgHighlighter) HighlightLine(lineNum int) []wig.Span {
 		return []wig.Span{{
 			StartCol: 0,
 			EndCol:   lineLen,
-			Style:    wig.Color("ui.statusline"),
+			Style:    wig.Color("ui.popup.title"),
 		}}
 	}
 

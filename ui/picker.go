@@ -22,6 +22,7 @@ type PickerItem[T any] struct {
 	Active   bool
 	Location wig.Location
 	Score    int
+	FgColor  string
 }
 
 type PickerAction[T any] func(p *UiPicker[T], i *PickerItem[T])
@@ -345,13 +346,20 @@ func (u *UiPicker[T]) Render(view wig.View) {
 		if row.Active {
 			isCurrent = "*"
 		}
+		itemStyle := wig.Color("default")
+		if row.FgColor != "" {
+			itemStyle = wig.Color(row.FgColor)
+		}
 		if key+startIndex == u.activeItem {
 			u.activeItemT = &row
 			line = fmt.Sprintf("> %s %s", isCurrent, truncate(row.Name, w-8))
+			if row.FgColor == "" {
+				itemStyle = wig.Color("ui.popup.title")
+			}
 		} else {
 			line = fmt.Sprintf("  %s %s", isCurrent, truncate(row.Name, w-8))
 		}
-		view.SetContent(x+2, y+i+3, line, wig.Color("default"))
+		view.SetContent(x+2, y+i+3, line, itemStyle)
 		i++
 	}
 }

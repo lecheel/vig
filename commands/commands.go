@@ -65,10 +65,17 @@ func CmdThemeSelect(ctx wig.Context) {
 func CmdBufferPicker(ctx wig.Context) {
 	items := make([]ui.PickerItem[*wig.Buffer], 0, 32)
 	for _, b := range ctx.Editor.Buffers {
+		color := ""
+		if b.Dirty {
+			color = "warning"
+		} else if b == ctx.Editor.ActiveBuffer() {
+			color = "ui.popup.title"
+		}
 		items = append(items, ui.PickerItem[*wig.Buffer]{
-			Name:   b.GetName(),
-			Value:  b,
-			Active: b == ctx.Editor.ActiveBuffer(),
+			Name:    b.GetName(),
+			Value:   b,
+			Active:  b == ctx.Editor.ActiveBuffer(),
+			FgColor: color,
 		})
 	}
 

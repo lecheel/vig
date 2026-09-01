@@ -26,18 +26,25 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 	}
 
 	items := []ui.PickerItem[string]{}
-
 	for row := range strings.SplitSeq(string(stdout), "\n") {
 		row = strings.TrimSpace(row)
 		if len(row) == 0 {
 			continue
 		}
+		fullPath := filepath.Join(rootDir, row)
+		color := ""
+		for _, b := range ctx.Editor.Buffers {
+			if b.FilePath == fullPath && b.Dirty {
+				color = "gold"
+				break
+			}
+		}
 		items = append(items, ui.PickerItem[string]{
-			Name:  row,
-			Value: row,
+			Name:    row,
+			Value:   row,
+			FgColor: color,
 		})
 	}
-
 	picker := ui.PickerInit(
 		ctx.Editor,
 		func(_ *ui.UiPicker[string], i *ui.PickerItem[string]) {
