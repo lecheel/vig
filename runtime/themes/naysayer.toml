@@ -11,6 +11,16 @@
 "ui.cursorline" = { bg = "highlight-line" }
 "ui.statusline" = { fg = "bg", bg = "text" }
 "ui.statusline.inactive" = { fg = "text", bg = "bg" }
+"ui.statusline.powerline.normal"   = { fg = "bg", bg = "text" }
+"ui.statusline.powerline.insert"   = { fg = "bg", bg = "strings" }
+"ui.statusline.powerline.visual"   = { fg = "bg", bg = "magenta" }
+"ui.statusline.powerline.branch"   = { fg = "white", bg = "line-fg" }
+"ui.statusline.powerline.file"     = { fg = "text", bg = "highlight-line" }
+"ui.statusline.powerline.fill"     = { bg = "highlight-line" }
+"ui.statusline.powerline.pos"      = { fg = "bg", bg = "text" }
+"ui.statusline.powerline.lang"     = { fg = "white", bg = "line-fg" }
+"ui.statusline.powerline.scope"    = { fg = "text", bg = "highlight-line" }
+"ui.statusline.powerline.ws"       = { fg = "text", bg = "highlight-line" }
 "ui.virtual" = "indent"
 "ui.virtual.ruler" = { bg = "line-fg" }
 "ui.cursor.match" = { bg = "cyan" }
