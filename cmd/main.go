@@ -186,13 +186,8 @@ func main() {
 		wig.CmdNewBuffer(editor.NewContext())
 
 		if editor.Config.SaveWorkspaces {
-			home, _ := os.UserHomeDir()
-			wsPath := filepath.Join(home, ".config", "wig", "workspace.json")
-			// Only attempt to restore the workspace if the cache file
-			// actually exists. Otherwise RestoreAll panics trying to
-			// switch to a missing workspace.
-			if _, err := os.Stat(wsPath); err == nil {
-				wsCache := wig.LoadWorkspaceCache()
+			wsCache := wig.LoadWorkspaceCache(editor.Projects.GetRoot())
+			if len(wsCache.Workspaces) > 0 {
 				wsCache.RestoreAll(editor)
 			}
 		}
@@ -309,9 +304,10 @@ func main() {
 
 	// Save workspace state (files per workspace) for session persistence
 	if editor.Config.SaveWorkspaces {
-		wsCache := wig.LoadWorkspaceCache()
+		root := editor.Projects.GetRoot()
+		wsCache := wig.LoadWorkspaceCache(root)
 		wsCache.CaptureAll(editor)
-		wsCache.Save()
+		wsCache.Save(root)
 	}
 
 	// Stop the renderer before finalizing the screen to prevent

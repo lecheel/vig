@@ -1,7 +1,9 @@
 package wig
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,42 +26,73 @@ type WorkspaceCacheEntry struct {
 }
 
 // WorkspaceCache is the on-disk persistence store for workspace state.
-// It is saved to ~/.config/wig/workspaces.json on exit and loaded on
-// startup or when the workspace picker is opened.
+// It is saved per project directory to ~/.config/wig/workspaces/<hash>.json.
 type WorkspaceCache struct {
+	ProjectRoot     string                      `json:"project_root,omitempty"`
 	Workspaces      map[int]WorkspaceCacheEntry `json:"workspaces"`
 	ActiveWorkspace int                         `json:"active_workspace"`
+	rootDir         string
 }
 
-// LoadWorkspaceCache reads the workspace cache from disk. If the file
-// does not exist or is corrupt, an empty cache is returned.
-func LoadWorkspaceCache() *WorkspaceCache {
+func workspaceCachePath(rootDir string) string {
 	home, _ := os.UserHomeDir()
-	p := filepath.Join(home, ".config", "wig", "workspaces.json")
+	dir := filepath.Join(home, ".config", "wig", "workspaces")
+	_ = os.MkdirAll(dir, 0755)
+	if rootDir == "" {
+		rootDir, _ = os.Getwd()
+	}
+	abs, err := filepath.Abs(rootDir)
+	if err == nil {
+		rootDir = abs
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(rootDir)))
+	return filepath.Join(dir, hash[:16]+".json")
+}
+
+// LoadWorkspaceCache reads the workspace cache for the given project directory from disk.
+// If the file does not exist or is corrupt, an empty cache is returned.
+func LoadWorkspaceCache(rootDir ...string) *WorkspaceCache {
+	var root string
+	if len(rootDir) > 0 {
+		root = rootDir[0]
+	}
+	p := workspaceCachePath(root)
 
 	data, err := os.ReadFile(p)
 	if err != nil {
-		return &WorkspaceCache{Workspaces: make(map[int]WorkspaceCacheEntry)}
+		// Fallback check for legacy global workspaces.json
+		home, _ := os.UserHomeDir()
+		legacyPath := filepath.Join(home, ".config", "wig", "workspaces.json")
+		data, err = os.ReadFile(legacyPath)
+		if err != nil {
+			legacyPath = filepath.Join(home, ".config", "wig", "workspace.json")
+			data, err = os.ReadFile(legacyPath)
+		}
+		if err != nil {
+			return &WorkspaceCache{Workspaces: make(map[int]WorkspaceCacheEntry), rootDir: root}
+		}
 	}
 
 	var cache WorkspaceCache
 	if err := json.Unmarshal(data, &cache); err != nil {
-		return &WorkspaceCache{Workspaces: make(map[int]WorkspaceCacheEntry)}
+		return &WorkspaceCache{Workspaces: make(map[int]WorkspaceCacheEntry), rootDir: root}
 	}
+	cache.rootDir = root
 	if cache.Workspaces == nil {
 		cache.Workspaces = make(map[int]WorkspaceCacheEntry)
 	}
 	return &cache
 }
 
-// Save writes the workspace cache to disk.
-func (c *WorkspaceCache) Save() {
-	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, ".config", "wig")
-	os.MkdirAll(dir, 0755)
-	p := filepath.Join(dir, "workspaces.json")
+// Save writes the workspace cache to disk for the current project.
+func (c *WorkspaceCache) Save(rootDir ...string) {
+	root := c.rootDir
+	if len(rootDir) > 0 && rootDir[0] != "" {
+		root = rootDir[0]
+	}
+	p := workspaceCachePath(root)
 	data, _ := json.MarshalIndent(c, "", "  ")
-	os.WriteFile(p, data, 0644)
+	_ = os.WriteFile(p, data, 0644)
 }
 
 // CaptureWorkspace records the file paths open in a workspace into the

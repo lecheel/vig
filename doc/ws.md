@@ -1,99 +1,112 @@
 # Wig Workspace Design Specification
 
-Based on a review of the codebase (`editor.go`, `workspace_cache.go`, `movements_cmds.go`, `commands/commands.go`), here is the design specification for the workspace management system.
+Based on a review of the codebase (`editor.go`, `workspace_cache.go`, `project.go`, `ui/statusline.go`, `ui/config_popup.go`, `cmd/main.go`), here is the design specification for the workspace management and session persistence system.
 
 ## 1. Overview
 
-The workspace system allows users to manage multiple independent editing contexts simultaneously. Each workspace maintains its own set of windows and active buffer state, enabling rapid context switching between different tasks (e.g., frontend vs. backend, editing vs. debugging).
+The workspace system allows users to manage multiple independent editing contexts simultaneously. Each workspace maintains its own set of windows, split-tree hierarchy (`WinNode`), layout orientation, open file history, and active buffer state.
 
-The workspace system is deeply integrated with the `Editor` singleton and includes an on-disk persistence layer to restore sessions across editor restarts.
+The workspace system is deeply integrated with the `Editor` singleton and includes an on-disk persistence layer scoped to the active project root directory, enabling seamless per-project session save and restore across editor restarts.
 
 ## 2. Core Components
 
 ### 2.1. Workspace
 A struct representing a single editing context.
-- **`Num int`**: The 0-indexed identifier of the workspace.
-- **`Windows []*Window`**: A list of all windows currently open in this workspace.
-- **`ActiveWindow *Window`**: The window currently receiving input and focus.
+- **`Num int`**: The 0-indexed identifier of the workspace (0–9).
+- **`Windows []*Window`**: A flat slice of all window instances currently visible in this workspace.
+- **`ActiveWindow *Window`**: The window currently receiving user input and focus.
+- **`Root *WinNode`**: Root of the recursive split tree (`SplitVertical` or `SplitHorizontal`) managing visible window geometry.
+- **`Layout Layout`**: Layout orientation mode (`LayoutVertical` or `LayoutHorizontal`).
+- **`Files []string`**: The ordered history of every real file opened while this workspace was active (independent of visible window splits).
 
 ### 2.2. Editor (Workspaces Array)
 The `Editor` struct holds a fixed-size array of workspaces:
-- **`Workspaces []Workspace`**: Currently hardcoded to a length of 10 (indexes 0-9).
+- **`Workspaces []Workspace`**: Array of 10 workspace slots (indexes 0–9).
 - **`ActiveWorkspace int`**: The index of the currently active workspace.
-- *Initial State*: On startup, `NewEditor` initializes `Workspace[1]` with a single window and sets it as active. Workspace 0 is left empty initially.
+- *Initial State*: On startup, `NewEditor` initializes `Workspace[1]` with a single window, sets it as active, and sets `Root = leafNode(window)`. Workspace 0 is reserved.
 
-### 2.3. WorkspaceCache (Persistence)
-A struct stored on disk at `~/.config/wig/workspaces.json` responsible for session persistence.
+### 2.3. WorkspaceCache (Per-Project Persistence)
+Responsible for session persistence, keyed by the project's root directory:
+- **Storage Location**: `~/.config/wig/workspaces/<sha256-project-hash>.json` (derived from `editor.Projects.GetRoot()`).
+- **`ProjectRoot string`**: The canonical absolute path of the project associated with this cache.
 - **`Workspaces map[int]WorkspaceCacheEntry`**: Maps workspace numbers to their cached state.
-- **`ActiveWorkspace int`**: The workspace that was active when the editor was closed.
+- **`ActiveWorkspace int`**: The workspace index that was active when the editor session ended.
 
 ### 2.4. WorkspaceCacheEntry
-Represents the saved state of a single workspace.
-- **`Files []string`**: A deduplicated list of absolute file paths open in the workspace.
-- **`ActiveFile string`**: The file path of the buffer that was active in the workspace.
+Represents the saved state of a single workspace:
+- **`Windows []string`**: The real on-screen split layout: ordered slice of file paths corresponding 1:1 to visible windows.
+- **`Files []string`**: The full open-file history for the workspace. Restored as background buffers without creating unwanted split windows.
+- **`ActiveFile string`**: Absolute file path of the buffer focused when the session ended.
+- **`Layout int`**: Saved split layout orientation (`0` = Horizontal, `1` = Vertical).
 
-## 3. Lifecycle & State Management
+## 3. Configuration & Statusline Integration
 
-### 3.1. Initialization
-When the editor starts without file arguments (`cmd/main.go`):
-1. `LoadWorkspaceCache()` is called.
-2. If `ActiveWorkspace` from the cache has files associated with it, `RestoreWorkspace` is called.
-3. If the target workspace has no windows (fresh start), a default window is created.
+### 3.1. User Configuration (`config.toml`)
+Session persistence is controlled by the `save_workspaces` setting:
+[editor]
+save_workspaces = true # Enables auto-save & auto-restore per project
+*(Also accepts aliases `workspaces = true` or `ws = true`)*
 
-### 3.2. Switching Workspaces
-Triggered via `CmdWorkspaceSwitch_[0-9]` or the workspace picker (`CmdWorkspaceListPicker`).
-The `workspaceSwitch(ctx, num)` function executes the following sequence:
-1. **Guard**: Ignore if `num` is the current `ActiveWorkspace` or out of bounds.
-2. **Capture**: Record the current workspace's open files into the `WorkspaceCache` and save to disk.
-3. **Seed**: If the target workspace has no windows, create a default window.
-4. **Activate**: Set `editor.ActiveWorkspace = num`.
-5. **Restore**: Call `RestoreWorkspace` to open cached files if the target workspace is currently empty.
-6. **Render**: Trigger an editor redraw.
+### 3.2. Statusline Indicators
+Both plain and powerline statusline styles display the workspace state and persistence status on the right side:
+- `💾 [ws:1]`: Workspace 1 active, **session persistence enabled** (`save_workspaces = true`).
+- `🔒 [ws:1]`: Workspace 1 active, **session persistence disabled** (`save_workspaces = false`).
 
-### 3.3. Moving Windows Between Workspaces
-Triggered via `CmdWindowMoveToWorkspace_[0-9]`.
-The `moveWindowToWorkspace(ctx, num)` function:
-1. Creates a new window in the target workspace cloned from the active window.
-2. Closes the window in the current workspace using `CmdWindowClose`.
+## 4. Lifecycle & State Management
 
-## 4. Persistence Logic
+### 4.1. Startup & Auto-Restore
+When starting `wig` (`cmd/main.go`):
+1. User config is loaded from `~/.config/wig/config.toml`.
+2. If file arguments are passed (e.g. `wig main.go`), specific files are opened directly.
+3. If no file arguments are passed and `editor.Config.SaveWorkspaces == true`:
+   - `LoadWorkspaceCache(editor.Projects.GetRoot())` reads the project's cache file.
+   - `wsCache.RestoreAll(editor)` restores all workspaces, their exact split layouts, background buffers, and focuses the previous active workspace and window.
 
-### 4.1. Capturing State (`CaptureWorkspace`)
-Iterates through all windows in a given workspace to build a `WorkspaceCacheEntry`.
-- **Filtering**: Skips windows with nil buffers, special buffers (e.g., `[Messages]`, `[git]`), or file paths that no longer exist on disk.
-- **Deduplication**: Uses a `seen` map to ensure files appearing in multiple splits are only listed once.
-- **Protection**: If the workspace ends up with zero file-backed buffers (e.g., only scratch buffers), the cache entry is *not* overwritten. This prevents silently erasing a previous session's file list just because the user opened a blank workspace.
+### 4.2. Exit & Auto-Save
+When the editor exits (`<-editor.ExitCh`):
+1. If `editor.Config.SaveWorkspaces == true`:
+   - `wsCache.CaptureAll(editor)` records visible windows, split layouts, and file histories for all workspaces.
+   - `wsCache.Save(editor.Projects.GetRoot())` writes the state to `~/.config/wig/workspaces/<hash>.json`.
 
-### 4.2. Restoring State (`RestoreWorkspace`)
-Rebuilds the window layout of a workspace from a `WorkspaceCacheEntry`.
-- **Guard**: Only restores if the workspace currently has no real file-backed buffers (prevents duplicating files on a "warm" workspace).
-- **File Validation**: Checks `os.Stat(fp)` before opening. Deleted files are skipped gracefully.
-- **Window Creation**: Opens the file via `editor.OpenFile`, creates a new window, and attaches the buffer. Every cached file gets its own window.
-- **Focus**: Sets `ws.ActiveWindow` to the window holding `entry.ActiveFile`. Falls back to the first surviving window if the active file was deleted.
+### 4.3. Switching Workspaces (`CmdWorkspaceSwitch_[0-9]`)
+The `workspaceSwitch(ctx, num)` flow executes:
+1. **Guard**: Ignores if `num` is out of bounds or already the active workspace.
+2. **Capture**: Records the current workspace's state.
+3. **Seed**: If the target workspace has no windows, initializes a default window.
+4. **Activate**: Sets `editor.ActiveWorkspace = num`.
+5. **Restore**: Calls `RestoreWorkspace` if the target workspace has not been populated in the current session.
+6. **Redraw**: Requests an editor redraw.
 
-## 5. UI & Interaction
+### 4.4. Moving Windows Between Workspaces (`CmdWindowMoveToWorkspace_[0-9]`)
+Moves the active window from the current workspace to another:
+1. Adds the window/buffer to the target workspace's window list and split tree.
+2. Closes the window in the current workspace via `removeLeaf` / `CmdWindowClose`.
 
-### 5.1. Statusline Integration
-The `ui/statusline.go` module displays the current workspace index on the right side of the status bar:
-`[workspace: %d] %d:%d`
+## 5. Persistence Mechanics
 
-### 5.2. Workspace Picker (`CmdWorkspaceListPicker`)
-Provides a fuzzy-finding interface for workspace management.
-- **Display**: Lists all 10 workspaces. Appends ` *` to the active one. Shows a list of base filenames for each workspace, or `(empty)`.
-- **Switching (Enter)**: Captures current workspace state, switches to the selected workspace, and restores it.
-- **Clearing (Delete)**: Explicitly removes a workspace's entry from `WorkspaceCache` and saves the cache. This is the only way to permanently clear a persisted workspace.
+### 5.1. Capturing State (`CaptureWorkspace` / `CaptureAll`)
+- **Filtering**: Ignores scratch/system buffers (e.g., `[Messages]`, `[git]`, `[No Name]`) and deleted files.
+- **Split Preservation**: `Windows` records the exact on-screen window order.
+- **History Preservation**: `ws.Files` contains all files opened during the session, appended chronologically via `recordWorkspaceFile`.
+- **Protection**: Empty/unmodified workspaces from prior sessions are preserved in the cache without being overwritten.
 
-## 6. API Surface (Commands)
+### 5.2. Restoring State (`RestoreWorkspace` / `RestoreAll`)
+- **Split Rebuilding**: Recreates `Window` instances and builds the `WinNode` split tree from `entry.Windows`.
+- **Background Buffers**: Loads non-visible files from `entry.Files` as background buffers via `editor.OpenFile` so they remain accessible in buffer pickers (MRU) without cluttering visible splits.
+- **Window Focus**: Sets `ws.ActiveWindow` to the window matching `entry.ActiveFile`, falling back to the first window.
+- **Missing File Grace**: If cached files were deleted from disk, `os.Stat` checks skip them safely, and `ensureWorkspaceBuffer` attaches a clean buffer to prevent nil-dereference panics.
 
-| Command | Description |
-| :--- | :--- |
-| `CmdWorkspaceSwitch_[0-9]` | Instantly switches to the corresponding workspace index. |
-| `CmdWindowMoveToWorkspace_[0-9]` | Moves the currently active window to the target workspace. |
-| `CmdWorkspaceListPicker` (`wslist`) | Opens the workspace management fuzzy finder. |
+## 6. Command Reference
 
-## 7. Design Constraints & Edge Cases Handled
+| Command | Keybinding / Alias | Description |
+| :--- | :--- | :--- |
+| `CmdWorkspaceSwitch_0` .. `_9` | `<Leader>w0` .. `<Leader>w9` | Switch directly to workspace 0 through 9. |
+| `CmdWorkspaceListPicker` | `<Leader>ww` | Open fuzzy picker listing all workspaces with open file summaries. |
+| `ConfigPopupInit` | `:config` / UI | Interactive popup to toggle `save_workspaces` at runtime. |
 
-1. **Nil Buffers on Teardown**: If `CmdWindowClose` removes the last window, `HandleInput` and `ActiveBuffer()` gracefully handle nil buffers instead of panicking.
-2. **Deleted Files**: Both `CaptureWorkspace` and `RestoreWorkspace` verify file existence on disk (`os.Stat`). Deleted files are dropped from the cache or skipped during restore.
-3. **Empty Workspaces**: If a workspace is restored but all its cached files have been deleted, `ensureWorkspaceBuffer` attaches a fresh empty buffer to the active window to prevent a nil-pointer panic.
-4. **Buffer Deduplication**: `editor.BufferFindByFilePath` ensures that opening a file that is already open globally does not create a duplicate buffer; it simply brings it into the workspace's window.
+## 7. Edge Cases Handled
+
+1. **Multi-Project Isolation**: Workspaces for different repositories or directories do not conflict or overwrite each other.
+2. **Buffer Deduplication**: Global buffers (`editor.BufferFindByFilePath`) are reused across workspaces without re-reading from disk.
+3. **Buffer Destruction on `:q`**: Killing a buffer (`CmdKillBuffer`) safely substitutes a replacement across all workspaces and prunes it from `ws.Files` and `ws.Root`.
+4. **Legacy Fallback**: If a project-specific workspace cache does not yet exist, `LoadWorkspaceCache` transparently checks legacy global files (`workspaces.json`) for seamless upgrades.
