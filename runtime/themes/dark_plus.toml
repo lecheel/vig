@@ -81,6 +81,7 @@
 "ui.statusline.powerline.pos"      = { fg = "white", bg = "navy" }
 "ui.statusline.powerline.lang"     = { fg = "white", bg = "dark_blue2" }
 "ui.statusline.powerline.scope"    = { fg = "light_gray", bg = "dark_blue" }
+"ui.statusline.powerline.ws"       = { fg = "light_gray", bg = "dark_blue" }
 "ui.bufferline"              = { fg = "text", bg = "widget" }
 "ui.bufferline.active"       = { fg = "white", bg = "blue" }
 "ui.bufferline.background"   = { bg = "background" }

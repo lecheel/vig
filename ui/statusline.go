@@ -69,9 +69,9 @@ func renderPlain(
 
 	cur := wig.CursorGet(e, buf)
 
-	wsIndicator := "ð"
+	wsIndicator := "🔒"
 	if e.Config.SaveWorkspaces {
-		wsIndicator = "ð"
+		wsIndicator = "💾"
 	}
 
 	funcName := ""
@@ -310,6 +310,16 @@ func renderPowerline(
 			fg:   bufFg, bg: bufBg,
 		})
 	}
+
+	wsIndicator := "🔒"
+	if e.Config.SaveWorkspaces {
+		wsIndicator = "💾"
+	}
+	wsBg, wsFg := plColor("ui.statusline.powerline.ws", tcell.NewRGBColor(38, 79, 120), tcell.NewRGBColor(210, 210, 230))
+	rightSegs = append(rightSegs, segment{
+		text: fmt.Sprintf(" %s [ws:%d] ", wsIndicator, e.ActiveWorkspace),
+		fg:   wsFg, bg: wsBg,
+	})
 
 	if e.Keys.GetCount() > 1 {
 		rightSegs = append(rightSegs, segment{
