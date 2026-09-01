@@ -38,8 +38,6 @@ func StatuslineRender(
 
 	if e.Config.StatuslineStyle == "powerline" {
 		renderPowerline(e, view, win, st, w, h)
-	} else if e.Config.StatuslineStyle == "airline" {
-		renderAirline(e, view, win, w, h)
 	} else {
 		renderPlain(e, view, win, st, stInactive, w, h)
 	}
@@ -97,27 +95,67 @@ func renderPlain(
 	}
 }
 
-// Powerline palette, ported from the reference statusbar.rs implementation.
-// Each color is a distinct dark-slate tone so segments read clearly against
-// each other without relying on terminal-defined ANSI colors.
-var (
-	plBgFill   = tcell.NewRGBColor(36, 36, 44) // deep slate base (gap fill)
-	plBgFile   = tcell.NewRGBColor(50, 50, 60) // slightly lighter slate
-	plBranchBg = tcell.NewRGBColor(45, 70, 55) // muted forest green
-	plRPos     = tcell.NewRGBColor(60, 70, 95) // dark steel blue
-	plRScope   = tcell.NewRGBColor(55, 55, 68) // muted purple-gray
-	plRLang    = tcell.NewRGBColor(45, 65, 75) // dark teal
-	plRBuf     = tcell.NewRGBColor(65, 55, 80) // dark indigo
-)
-
 const plMaxScope = 24
 
+func plColor(key string, fallbackBg, fallbackFg tcell.Color) (bg, fg tcell.Color) {
+	if s, ok := wig.FindColor(key); ok {
+		f, b, _ := s.Decompose()
+		if b != tcell.ColorDefault {
+			fallbackBg = b
+		}
+		if f != tcell.ColorDefault {
+			fallbackFg = f
+		}
+	}
+	return fallbackBg, fallbackFg
+}
+
 // plModeColors returns the (bg, fg) pair for the leftmost mode segment,
-// using theme-defined airline colors (e.g. navy for normal in dark_plus).
+// checking theme-defined powerline colors with fallback to statusline colors.
 func plModeColors(mode wig.Mode) (bg, fg tcell.Color) {
-	st := airlineModeStyle(mode)
-	fg, bg, _ = st.Decompose()
-	return bg, fg
+	var key string
+	var fallbackBg, fallbackFg tcell.Color
+
+	switch mode {
+	case wig.MODE_INSERT:
+		key = "ui.statusline.powerline.insert"
+		fallbackBg, fallbackFg = tcell.NewRGBColor(0x3a, 0x6b, 0x1f), tcell.ColorWhite
+		if s, ok := wig.FindColor("ui.statusline.insert"); ok {
+			f, b, _ := s.Decompose()
+			if b != tcell.ColorDefault {
+				fallbackBg = b
+			}
+			if f != tcell.ColorDefault {
+				fallbackFg = f
+			}
+		}
+	case wig.MODE_VISUAL, wig.MODE_VISUAL_LINE, wig.MODE_VISUAL_BLOCK:
+		key = "ui.statusline.powerline.visual"
+		fallbackBg, fallbackFg = tcell.NewRGBColor(0x5c, 0x3f, 0x7d), tcell.ColorWhite
+		if s, ok := wig.FindColor("ui.statusline.select"); ok {
+			f, b, _ := s.Decompose()
+			if b != tcell.ColorDefault {
+				fallbackBg = b
+			}
+			if f != tcell.ColorDefault {
+				fallbackFg = f
+			}
+		}
+	default:
+		key = "ui.statusline.powerline.normal"
+		fallbackBg, fallbackFg = tcell.NewRGBColor(0x00, 0x2b, 0x50), tcell.ColorWhite
+		if s, ok := wig.FindColor("ui.statusline"); ok {
+			f, b, _ := s.Decompose()
+			if b != tcell.ColorDefault {
+				fallbackBg = b
+			}
+			if f != tcell.ColorDefault {
+				fallbackFg = f
+			}
+		}
+	}
+
+	return plColor(key, fallbackBg, fallbackFg)
 }
 
 // trimScope shortens a function/scope name to at most plMaxScope runes,
@@ -181,7 +219,14 @@ func renderPowerline(
 	buf := win.Buffer()
 	active := win == e.ActiveWindow()
 
-	bgFill := plBgFill
+	fallbackFillBg := tcell.NewRGBColor(0, 122, 204)
+	if s, ok := wig.FindColor("ui.statusline"); ok {
+		_, b, _ := s.Decompose()
+		if b != tcell.ColorDefault {
+			fallbackFillBg = b
+		}
+	}
+	bgFill, _ := plColor("ui.statusline.powerline.fill", fallbackFillBg, tcell.ColorWhite)
 	if !active {
 		_, inactiveBg, _ := wig.Color("ui.statusline.inactive").Decompose()
 		bgFill = inactiveBg
@@ -207,13 +252,13 @@ func renderPowerline(
 
 	if wig.GitBranchProvider != nil {
 		if branch, ok := wig.GitBranchProvider(buf); ok {
-			branchBg := plBranchBg
+			branchBg, branchFg := plColor("ui.statusline.powerline.branch", tcell.NewRGBColor(9, 71, 113), tcell.ColorWhite)
 			if !active {
 				branchBg = bgFill
 			}
 			leftSegs = append(leftSegs, segment{
 				text: fmt.Sprintf(" %s ", branch),
-				fg:   tcell.NewRGBColor(215, 235, 220), bg: branchBg,
+				fg:   branchFg, bg: branchBg,
 			})
 		}
 	}
@@ -222,13 +267,13 @@ func renderPowerline(
 	if buf.Dirty {
 		nameText += " [+]"
 	}
-	fileBg := plBgFile
+	fileBg, fileFg := plColor("ui.statusline.powerline.file", tcell.NewRGBColor(38, 79, 120), tcell.NewRGBColor(230, 230, 230))
 	if !active {
 		fileBg = bgFill
 	}
 	leftSegs = append(leftSegs, segment{
 		text: fmt.Sprintf(" %s ", nameText),
-		fg:   tcell.NewRGBColor(210, 215, 225), bg: fileBg,
+		fg:   fileFg, bg: fileBg,
 	})
 
 	if e.Keys.Macros.Recording() {
@@ -244,9 +289,6 @@ func renderPowerline(
 
 	cur := wig.CursorGet(e, buf)
 
-	// Right side, built in final left-to-right visual order: optional
-	// scope/buffer-count segments, then filetype, then position last so
-	// it always sits at the far right edge (no AI segment anymore).
 	var rightSegs []segment
 
 	funcName := ""
@@ -254,16 +296,18 @@ func renderPowerline(
 		funcName = ts.FunctionAtLine(cur.Line)
 	}
 	if funcName != "" {
+		scopeBg, scopeFg := plColor("ui.statusline.powerline.scope", tcell.NewRGBColor(38, 79, 120), tcell.NewRGBColor(210, 210, 210))
 		rightSegs = append(rightSegs, segment{
 			text: fmt.Sprintf(" %s ", trimScope(funcName)),
-			fg:   tcell.NewRGBColor(180, 180, 195), bg: plRScope,
+			fg:   scopeFg, bg: scopeBg,
 		})
 	}
 
 	if len(e.Buffers) > 1 {
+		bufBg, bufFg := plColor("ui.statusline.powerline.buf", tcell.NewRGBColor(27, 129, 168), tcell.NewRGBColor(220, 220, 235))
 		rightSegs = append(rightSegs, segment{
 			text: fmt.Sprintf(" %d/%d ", bufferIndex(e, buf), len(e.Buffers)),
-			fg:   tcell.NewRGBColor(210, 205, 230), bg: plRBuf,
+			fg:   bufFg, bg: bufBg,
 		})
 	}
 
@@ -274,16 +318,16 @@ func renderPowerline(
 		})
 	}
 
+	langBg, langFg := plColor("ui.statusline.powerline.lang", tcell.NewRGBColor(9, 71, 113), tcell.ColorWhite)
 	rightSegs = append(rightSegs, segment{
 		text: fmt.Sprintf(" %s ", detectFiletypeLabel(buf.GetName())),
-		fg:   tcell.NewRGBColor(200, 220, 225), bg: plRLang,
+		fg:   langFg, bg: langBg,
 	})
 
-	// Rightmost: fixed-width line:col, so the position doesn't jitter the
-	// segments to its left as digit counts change.
+	posBg, posFg := plColor("ui.statusline.powerline.pos", tcell.NewRGBColor(0, 122, 204), tcell.ColorWhite)
 	rightSegs = append(rightSegs, segment{
 		text: fmt.Sprintf(" %4d:%-3d", cur.Line+1, cur.Char+1),
-		fg:   tcell.NewRGBColor(200, 210, 230), bg: plRPos,
+		fg:   posFg, bg: posBg,
 	})
 
 	arrowL := "\ue0b0" // points right: leaving-segment fg -> entering-segment bg
@@ -335,160 +379,9 @@ func renderPowerline(
 	}
 }
 
-// airlineModeStyle returns the mode-specific background/foreground style
-// for the leading "NORMAL"/"INSERT"/"VISUAL" box, mimicking vim-airline's
-// per-mode coloring. Themes can override any of these via
-// "ui.statusline.airline.normal" / ".insert" / ".visual"; otherwise a
-// sensible hardcoded fallback color is used.
-func airlineModeStyle(mode wig.Mode) tcell.Style {
-	var key string
-	var fallbackBg tcell.Color
-
-	switch mode {
-	case wig.MODE_INSERT:
-		key = "ui.statusline.airline.insert"
-		fallbackBg = tcell.NewRGBColor(0x5f, 0x87, 0x00)
-	case wig.MODE_VISUAL, wig.MODE_VISUAL_LINE, wig.MODE_VISUAL_BLOCK:
-		key = "ui.statusline.airline.visual"
-		fallbackBg = tcell.NewRGBColor(0x87, 0x5f, 0x87)
-	default:
-		key = "ui.statusline.airline.normal"
-		fallbackBg = tcell.NewRGBColor(0x00, 0x5f, 0x87)
-	}
-
-	if s, ok := wig.FindColor(key); ok {
-		return s
-	}
-	return tcell.StyleDefault.Background(fallbackBg).Foreground(tcell.ColorWhite)
-}
-
-// renderAirline draws a flat, boxed statusline (no powerline triangles):
-// a per-mode colored box on the far left, a slightly lighter box for the
-// buffer name, and thin-divider-separated boxes on the right for
-// filetype/AI status and the cursor position — similar to a minimal
-// VS Code / Zed style statusbar rather than classic vim-airline arrows.
-func renderAirline(
-	e *wig.Editor,
-	view wig.View,
-	win *wig.Window,
-	w int,
-	h int,
-) {
-	buf := win.Buffer()
-
-	baseSt := wig.Color("ui.statusline.inactive")
-	if win == e.ActiveWindow() {
-		baseSt = wig.Color("ui.statusline")
-	}
-
-	bgFill := strings.Repeat(" ", w)
-	view.SetContent(0, h, bgFill, baseSt)
-
-	type segment struct {
-		text  string
-		style tcell.Style
-	}
-
-	modeSt := baseSt
-	if win == e.ActiveWindow() {
-		modeSt = airlineModeStyle(buf.Mode())
-	}
-
-	// A subtly lighter box than the base background, used for the
-	// filename and the right-hand info boxes.
-	boxSt := baseSt
-	if _, ok := wig.FindColor("ui.statusline.airline.box"); ok {
-		boxSt = wig.Color("ui.statusline.airline.box")
-	}
-
-	var leftSegs []segment
-	leftSegs = append(leftSegs, segment{text: fmt.Sprintf(" %s ", strings.ToUpper(buf.Mode().String())), style: modeSt})
-
-	nameText := buf.GetName()
-	if buf.Dirty {
-		nameText += " +"
-	}
-	leftSegs = append(leftSegs, segment{text: fmt.Sprintf(" %s ", nameText), style: boxSt})
-
-	if e.Keys.Macros.Recording() {
-		leftSegs = append(leftSegs, segment{text: fmt.Sprintf(" REC @%s ", e.Keys.Macros.Register), style: baseSt})
-	}
-
-	if (win == e.ActiveWindow() || win.Buffer() == e.ActiveWindow().Buffer()) && len(e.Message) > 0 {
-		leftSegs = []segment{{text: fmt.Sprintf(" %s ", e.Message), style: baseSt}}
-	}
-
-	cur := wig.CursorGet(e, buf)
-
-	var rightSegs []segment
-
-	funcName := ""
-	if ts, ok := buf.Highlighter.(*wig.TreeSitterHighlighter); ok && ts != nil {
-		funcName = ts.FunctionAtLine(cur.Line)
-	}
-	if funcName != "" {
-		if len(funcName) > 30 {
-			funcName = funcName[:27] + "..."
-		}
-		rightSegs = append(rightSegs, segment{text: fmt.Sprintf(" %s ", funcName), style: baseSt})
-	}
-
-	ft := detectFiletypeLabel(buf.GetName())
-	rightSegs = append(rightSegs, segment{text: fmt.Sprintf(" %s ", ft), style: baseSt})
-
-	aiStatus := "LSP OFF"
-	if e.Config.LspEnabled {
-		aiStatus = "LSP ON "
-	}
-	rightSegs = append(rightSegs, segment{text: fmt.Sprintf(" %s ", aiStatus), style: baseSt})
-
-	posText := fmt.Sprintf(" %d:%d ", cur.Line+1, cur.Char+1)
-	rightSegs = append(rightSegs, segment{text: posText, style: baseSt})
-
-	if e.Keys.GetCount() > 1 {
-		rightSegs = append([]segment{{text: fmt.Sprintf(" %d ", e.Keys.GetCount()), style: baseSt}}, rightSegs...)
-	}
-
-	// Draw left side: solid boxes, no separators between mode and name.
-	x := 0
-	for _, s := range leftSegs {
-		view.SetContent(x, h, s.text, s.style)
-		x += runewidth.StringWidth(s.text)
-	}
-
-	// Draw right side: right-aligned boxes separated by vim-airline's
-	// "thin" separator glyph (U+E0B1), used between same-colored
-	// sections — as opposed to the bold U+E0B0/U+E0B2 triangles used
-	// for color-changing transitions in renderPowerline above.
-	//
-	// NOTE: this glyph lives in the Private Use Area and requires a
-	// Nerd Font (or another font patched with powerline symbols) to be
-	// selected in the terminal. Without one, it renders as a blank,
-	// tofu box, or missing-glyph placeholder — this is a terminal/font
-	// configuration issue, not a bug in wig. See:
-	// https://discourse.nixos.org/t/airline-powerline-in-neovim-not-working-not-showing-glyphs/14211
-	divider := "\ue0b1"
-	x = w
-	for i := len(rightSegs) - 1; i >= 0; i-- {
-		s := rightSegs[i]
-		textWidth := runewidth.StringWidth(s.text)
-		view.SetContent(x-textWidth, h, s.text, s.style)
-		x -= textWidth
-
-		if i > 0 {
-			dw := runewidth.StringWidth(divider)
-			if dw == 0 {
-				dw = 1
-			}
-			view.SetContent(x-dw, h, divider, baseSt)
-			x -= dw
-		}
-	}
-}
-
 // detectFiletypeLabel returns a short human-readable filetype label based
-// on the buffer's filename extension, used in the airline-style
-// statusline's right-hand info boxes (e.g. "Go", "Plain Text").
+// on the buffer's filename extension, used in statusline info boxes
+// (e.g. "Go", "Plain Text").
 func detectFiletypeLabel(name string) string {
 	switch {
 	case strings.HasSuffix(name, ".go"):

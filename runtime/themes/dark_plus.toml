@@ -72,10 +72,15 @@
 "ui.statusline.inactive"     = { fg = "white", bg = "widget" }
 "ui.statusline.insert"       = { fg = "white", bg = "yellow" }
 "ui.statusline.select"       = { fg = "white", bg = "magenta" }
-"ui.statusline.airline.normal" = { fg = "white", bg = "navy" }
-"ui.statusline.airline.insert" = { fg = "white", bg = "airline_green" }
-"ui.statusline.airline.visual" = { fg = "white", bg = "airline_purple" }
-"ui.statusline.airline.box"    = { fg = "airline_box_fg", bg = "airline_box" }
+"ui.statusline.powerline.normal"   = { fg = "white", bg = "navy" }
+"ui.statusline.powerline.insert"   = { fg = "white", bg = "dark_green2" }
+"ui.statusline.powerline.visual"   = { fg = "white", bg = "special" }
+"ui.statusline.powerline.branch"   = { fg = "white", bg = "dark_blue2" }
+"ui.statusline.powerline.file"     = { fg = "light_gray3", bg = "dark_blue" }
+"ui.statusline.powerline.fill"     = { bg = "blue" }
+"ui.statusline.powerline.pos"      = { fg = "white", bg = "navy" }
+"ui.statusline.powerline.lang"     = { fg = "white", bg = "dark_blue2" }
+"ui.statusline.powerline.scope"    = { fg = "light_gray", bg = "dark_blue" }
 "ui.bufferline"              = { fg = "text", bg = "widget" }
 "ui.bufferline.active"       = { fg = "white", bg = "blue" }
 "ui.bufferline.background"   = { bg = "background" }
@@ -148,7 +153,3 @@ widget = "#252526"
 borders = "#323232"
 
 navy = "#002b50"
-airline_green = "#3a6b1f"
-airline_purple = "#5c3f7d"
-airline_box = "#e8e8e8"
-airline_box_fg = "#1e1e1e"
