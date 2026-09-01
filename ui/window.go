@@ -289,12 +289,40 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 			}
 
 			// render cursor after the end of the line in insert mode
+			if isVisualBlock && buf.Selection != nil {
+				sel := buf.Selection
+				minLine, maxLine := sel.Start.Line, sel.End.Line
+				if minLine > maxLine {
+					minLine, maxLine = maxLine, minLine
+				}
+				if lineNum >= minLine && lineNum <= maxLine && currVisCol < maxVisCol {
+					selStyle := wig.ApplyBg("ui.selection.primary", wig.Color("default"))
+					startPad := currVisCol
+					if startPad < minVisCol {
+						startPad = minVisCol
+					}
+					if startPad < skip {
+						startPad = skip
+					}
+					xBaseVisCol := skip
+					if currVisCol > skip {
+						xBaseVisCol = currVisCol
+					}
+					padX := x + startPad - xBaseVisCol
+					for visCol := startPad; visCol < maxVisCol; visCol++ {
+						if padX >= 0 && padX < termWidth && y >= 0 && y < termHeight {
+							view.SetContent(padX, y, " ", selStyle)
+						}
+						padX++
+					}
+				}
+			}
+
 			if lineNum == cur.Line && cur.Char >= len(currentLine.Value) && isActiveWin {
 				if x >= 0 && x < termWidth && y >= 0 && y < termHeight {
 					view.SetContent(x, y, " ", wig.Color("ui.cursor"))
 				}
 			}
-
 			y++
 		}
 
