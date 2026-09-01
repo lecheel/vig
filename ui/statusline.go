@@ -9,13 +9,93 @@ import (
 	"github.com/mattn/go-runewidth"
 )
 
+// StatuslineData aggregates all buffer, editor, and workspace information
+// needed to render any statusline style in a single pass.
+type StatuslineData struct {
+	Mode        wig.Mode
+	ModeName    string
+	BufName     string
+	IsDirty     bool
+	Macro       string
+	Message     string
+	Line        int
+	Char        int
+	Scope       string
+	WsIndicator string
+	WsNum       int
+	Filetype    string
+	BufIdx      int
+	BufTotal    int
+	KeyCount    int
+	GitBranch   string
+	HasBranch   bool
+	IsActive    bool
+}
+
+func extractStatuslineData(e *wig.Editor, win *wig.Window) *StatuslineData {
+	buf := win.Buffer()
+	if buf == nil {
+		return nil
+	}
+
+	active := win == e.ActiveWindow()
+	cur := wig.CursorGet(e, buf)
+
+	wsIndicator := "🔒"
+	if e.Config.SaveWorkspaces {
+		wsIndicator = "💾"
+	}
+
+	funcName := ""
+	if ts, ok := buf.Highlighter.(*wig.TreeSitterHighlighter); ok && ts != nil {
+		funcName = ts.FunctionAtLine(cur.Line)
+	}
+
+	var branch string
+	var hasBranch bool
+	if wig.GitBranchProvider != nil {
+		branch, hasBranch = wig.GitBranchProvider(buf)
+	}
+
+	var msg string
+	if (active || win.Buffer() == e.ActiveWindow().Buffer()) && len(e.Message) > 0 {
+		msg = e.Message
+	}
+
+	var macro string
+	if e.Keys.Macros.Recording() {
+		macro = "recording @" + e.Keys.Macros.Register
+	}
+
+	return &StatuslineData{
+		Mode:        buf.Mode(),
+		ModeName:    strings.ToUpper(buf.Mode().String()),
+		BufName:     buf.GetName(),
+		IsDirty:     buf.Dirty,
+		Macro:       macro,
+		Message:     msg,
+		Line:        cur.Line + 1,
+		Char:        cur.Char + 1,
+		Scope:       trimScope(funcName),
+		WsIndicator: wsIndicator,
+		WsNum:       e.ActiveWorkspace,
+		Filetype:    detectFiletypeLabel(buf.GetName()),
+		BufIdx:      bufferIndex(e, buf),
+		BufTotal:    len(e.Buffers),
+		KeyCount:    e.Keys.GetCount(),
+		GitBranch:   branch,
+		HasBranch:   hasBranch,
+		IsActive:    active,
+	}
+}
+
 func StatuslineRender(
 	e *wig.Editor,
 	view wig.View,
 	win *wig.Window,
 ) {
-	buf := win.Buffer()
-	if buf == nil {
+	d := extractStatuslineData(e, win)
+	if d == nil {
 		return
 	}
 	w, h := view.Size()
@@ -29,64 +109,50 @@ func StatuslineRender(
 	stInsert := wig.Color("ui.statusline.insert")
 
 	st := stInactive
-	if win == e.ActiveWindow() {
+	if d.IsActive {
 		st = stActive
-		if !e.Config.SameStatuslineColor && buf.Mode() == wig.MODE_INSERT {
+		if !e.Config.SameStatuslineColor && d.Mode == wig.MODE_INSERT {
 			st = stInsert
 		}
 	}
 
 	if e.Config.StatuslineStyle == "powerline" {
-		renderPowerline(e, view, win, st, w, h)
+		renderPowerline(e, view, d, w, h)
 	} else {
-		renderPlain(e, view, win, st, stInactive, w, h)
+		renderPlain(e, view, d, st, w, h)
 	}
 }
 
 func renderPlain(
 	e *wig.Editor,
 	view wig.View,
-	win *wig.Window,
+	d *StatuslineData,
 	st tcell.Style,
-	stInactive tcell.Style,
 	w int,
 	h int,
 ) {
-	buf := win.Buffer()
+	view.SetContent(0, h, strings.Repeat(" ", w), st)
 
-	bg := strings.Repeat(" ", w)
-	view.SetContent(0, h, bg, st)
-
-	macroStatus := ""
-	if e.Keys.Macros.Recording() {
-		macroStatus = "recording @" + e.Keys.Macros.Register
+	macroStr := ""
+	if d.Macro != "" {
+		macroStr = " " + d.Macro
 	}
-	leftSide := fmt.Sprintf("%s %s %s ", buf.Mode().String(), buf.GetName(), macroStatus)
-	if (win == e.ActiveWindow() || win.Buffer() == e.ActiveWindow().Buffer()) && len(e.Message) > 0 {
-		leftSide = e.Message
+	leftSide := fmt.Sprintf("%s %s%s ", d.ModeName, d.BufName, macroStr)
+	if d.Message != "" {
+		leftSide = d.Message
 	}
 	view.SetContent(2, h, leftSide, st)
 
-	cur := wig.CursorGet(e, buf)
-
-	wsIndicator := "🔒"
-	if e.Config.SaveWorkspaces {
-		wsIndicator = "💾"
-	}
-
-	funcName := ""
-	if ts, ok := buf.Highlighter.(*wig.TreeSitterHighlighter); ok && ts != nil {
-		funcName = ts.FunctionAtLine(cur.Line)
-	}
-	rightSide := fmt.Sprintf("%s[ws:%d] %d:%d", wsIndicator, e.ActiveWorkspace, cur.Line+1, cur.Char)
-	if funcName != "" {
-		if len(funcName) > 30 {
-			funcName = funcName[:27] + "..."
+	rightSide := fmt.Sprintf("%s[ws:%d] %d:%d", d.WsIndicator, d.WsNum, d.Line, d.Char)
+	if d.Scope != "" {
+		scope := d.Scope
+		if len(scope) > 30 {
+			scope = scope[:27] + "..."
 		}
-		rightSide = fmt.Sprintf("%s  %s", funcName, rightSide)
+		rightSide = fmt.Sprintf("%s  %s", scope, rightSide)
 	}
-	if e.Keys.GetCount() > 1 {
-		rightSide = fmt.Sprintf("%d   %s", e.Keys.GetCount(), rightSide)
+	if d.KeyCount > 1 {
+		rightSide = fmt.Sprintf("%d   %s", d.KeyCount, rightSide)
 	}
 
 	visWidth := runewidth.StringWidth(rightSide)
@@ -110,8 +176,6 @@ func plColor(key string, fallbackBg, fallbackFg tcell.Color) (bg, fg tcell.Color
 	return fallbackBg, fallbackFg
 }
 
-// plModeColors returns the (bg, fg) pair for the leftmost mode segment,
-// checking theme-defined powerline colors with fallback to statusline colors.
 func plModeColors(mode wig.Mode) (bg, fg tcell.Color) {
 	var key string
 	var fallbackBg, fallbackFg tcell.Color
@@ -158,10 +222,6 @@ func plModeColors(mode wig.Mode) (bg, fg tcell.Color) {
 	return plColor(key, fallbackBg, fallbackFg)
 }
 
-// trimScope shortens a function/scope name to at most plMaxScope runes,
-// preferring the last "::" or "." component (e.g. "impl Foo::bar" -> "bar")
-// before falling back to a hard truncate — ported from the reference
-// implementation's trim_scope.
 func trimScope(scope string) string {
 	if runewidth.StringWidth(scope) <= plMaxScope {
 		return scope
@@ -183,8 +243,6 @@ func trimScope(scope string) string {
 	return string(r)
 }
 
-// bufferIndex returns the 1-based position of buf within e.Buffers, or 0
-// if not found — used for the "N/total" buffer-count segment.
 func bufferIndex(e *wig.Editor, buf *wig.Buffer) int {
 	for i, b := range e.Buffers {
 		if b == buf {
@@ -194,31 +252,13 @@ func bufferIndex(e *wig.Editor, buf *wig.Buffer) int {
 	return 0
 }
 
-// renderPowerline draws a richly-segmented powerline statusline, ported
-// from the reference statusbar.rs: a per-mode colored mode segment,
-// filename (with a "[+]" modified marker), then on the right a fixed-width
-// position, LSP/AI status, filetype, enclosing function scope, and buffer
-// count — each segment chained with a triangle arrow whose colors
-// transition from the segment it's leaving into the segment (or fill) it's
-// entering, matching left_span/right_span in the reference.
-//
-// NOTE: a real git branch/diff-stat segment (as in the reference) isn't
-// wired in here because that data lives in the commands package, and
-// commands already imports ui (see commands/git_view.go, git_hunk.go),
-// so ui importing commands back would create an import cycle. Exposing
-// git status on wig.Editor itself (populated by commands, read by ui)
-// would let this segment be added without that cycle.
 func renderPowerline(
 	e *wig.Editor,
 	view wig.View,
-	win *wig.Window,
-	st tcell.Style,
+	d *StatuslineData,
 	w int,
 	h int,
 ) {
-	buf := win.Buffer()
-	active := win == e.ActiveWindow()
-
 	fallbackFillBg := tcell.NewRGBColor(0, 122, 204)
 	if s, ok := wig.FindColor("ui.statusline"); ok {
 		_, b, _ := s.Decompose()
@@ -227,7 +267,7 @@ func renderPowerline(
 		}
 	}
 	bgFill, _ := plColor("ui.statusline.powerline.fill", fallbackFillBg, tcell.ColorWhite)
-	if !active {
+	if !d.IsActive {
 		_, inactiveBg, _ := wig.Color("ui.statusline.inactive").Decompose()
 		bgFill = inactiveBg
 	}
@@ -239,36 +279,34 @@ func renderPowerline(
 		bg   tcell.Color
 	}
 
-	modeBg, modeFg := plModeColors(buf.Mode())
-	if !active {
+	modeBg, modeFg := plModeColors(d.Mode)
+	if !d.IsActive {
 		modeBg, modeFg = bgFill, tcell.ColorSilver
 	}
 
 	var leftSegs []segment
 	leftSegs = append(leftSegs, segment{
-		text: fmt.Sprintf(" %s ", strings.ToUpper(buf.Mode().String())),
+		text: fmt.Sprintf(" %s ", d.ModeName),
 		fg:   modeFg, bg: modeBg,
 	})
 
-	if wig.GitBranchProvider != nil {
-		if branch, ok := wig.GitBranchProvider(buf); ok {
-			branchBg, branchFg := plColor("ui.statusline.powerline.branch", tcell.NewRGBColor(9, 71, 113), tcell.ColorWhite)
-			if !active {
-				branchBg = bgFill
-			}
-			leftSegs = append(leftSegs, segment{
-				text: fmt.Sprintf(" %s ", branch),
-				fg:   branchFg, bg: branchBg,
-			})
+	if d.HasBranch {
+		branchBg, branchFg := plColor("ui.statusline.powerline.branch", tcell.NewRGBColor(9, 71, 113), tcell.ColorWhite)
+		if !d.IsActive {
+			branchBg = bgFill
 		}
+		leftSegs = append(leftSegs, segment{
+			text: fmt.Sprintf(" %s ", d.GitBranch),
+			fg:   branchFg, bg: branchBg,
+		})
 	}
 
-	nameText := buf.GetName()
-	if buf.Dirty {
+	nameText := d.BufName
+	if d.IsDirty {
 		nameText += " [+]"
 	}
 	fileBg, fileFg := plColor("ui.statusline.powerline.file", tcell.NewRGBColor(38, 79, 120), tcell.NewRGBColor(230, 230, 230))
-	if !active {
+	if !d.IsActive {
 		fileBg = bgFill
 	}
 	leftSegs = append(leftSegs, segment{
@@ -276,72 +314,62 @@ func renderPowerline(
 		fg:   fileFg, bg: fileBg,
 	})
 
-	if e.Keys.Macros.Recording() {
+	if d.Macro != "" {
 		leftSegs = append(leftSegs, segment{
-			text: fmt.Sprintf(" REC @%s ", e.Keys.Macros.Register),
+			text: fmt.Sprintf(" REC @%s ", strings.TrimPrefix(d.Macro, "recording @")),
 			fg:   tcell.ColorWhite, bg: bgFill,
 		})
 	}
 
-	if (active || win.Buffer() == e.ActiveWindow().Buffer()) && len(e.Message) > 0 {
-		leftSegs = []segment{{text: fmt.Sprintf(" %s ", e.Message), fg: tcell.ColorWhite, bg: bgFill}}
+	if d.Message != "" {
+		leftSegs = []segment{{text: fmt.Sprintf(" %s ", d.Message), fg: tcell.ColorWhite, bg: bgFill}}
 	}
-
-	cur := wig.CursorGet(e, buf)
 
 	var rightSegs []segment
 
-	funcName := ""
-	if ts, ok := buf.Highlighter.(*wig.TreeSitterHighlighter); ok && ts != nil {
-		funcName = ts.FunctionAtLine(cur.Line)
-	}
-	if funcName != "" {
+	if d.Scope != "" {
 		scopeBg, scopeFg := plColor("ui.statusline.powerline.scope", tcell.NewRGBColor(38, 79, 120), tcell.NewRGBColor(210, 210, 210))
 		rightSegs = append(rightSegs, segment{
-			text: fmt.Sprintf(" %s ", trimScope(funcName)),
+			text: fmt.Sprintf(" %s ", d.Scope),
 			fg:   scopeFg, bg: scopeBg,
 		})
 	}
 
-	if len(e.Buffers) > 1 {
+	if d.BufTotal > 1 {
 		bufBg, bufFg := plColor("ui.statusline.powerline.buf", tcell.NewRGBColor(27, 129, 168), tcell.NewRGBColor(220, 220, 235))
 		rightSegs = append(rightSegs, segment{
-			text: fmt.Sprintf(" %d/%d ", bufferIndex(e, buf), len(e.Buffers)),
+			text: fmt.Sprintf(" %d/%d ", d.BufIdx, d.BufTotal),
 			fg:   bufFg, bg: bufBg,
 		})
 	}
 
-	wsIndicator := "🔒"
-	if e.Config.SaveWorkspaces {
-		wsIndicator = "💾"
-	}
 	wsBg, wsFg := plColor("ui.statusline.powerline.ws", tcell.NewRGBColor(38, 79, 120), tcell.NewRGBColor(210, 210, 230))
 	rightSegs = append(rightSegs, segment{
-		text: fmt.Sprintf(" %s [ws:%d] ", wsIndicator, e.ActiveWorkspace),
+		text: fmt.Sprintf(" %s [ws:%d] ", d.WsIndicator, d.WsNum),
 		fg:   wsFg, bg: wsBg,
 	})
 
-	if e.Keys.GetCount() > 1 {
+	if d.KeyCount > 1 {
 		rightSegs = append(rightSegs, segment{
-			text: fmt.Sprintf(" %d ", e.Keys.GetCount()),
+			text: fmt.Sprintf(" %d ", d.KeyCount),
 			fg:   tcell.ColorWhite, bg: bgFill,
 		})
 	}
 
 	langBg, langFg := plColor("ui.statusline.powerline.lang", tcell.NewRGBColor(9, 71, 113), tcell.ColorWhite)
 	rightSegs = append(rightSegs, segment{
-		text: fmt.Sprintf(" %s ", detectFiletypeLabel(buf.GetName())),
+		text: fmt.Sprintf(" %s ", d.Filetype),
 		fg:   langFg, bg: langBg,
 	})
 
 	posBg, posFg := plColor("ui.statusline.powerline.pos", tcell.NewRGBColor(0, 122, 204), tcell.ColorWhite)
 	rightSegs = append(rightSegs, segment{
-		text: fmt.Sprintf(" %4d:%-3d", cur.Line+1, cur.Char+1),
+		text: fmt.Sprintf(" %4d:%-3d", d.Line, d.Char),
 		fg:   posFg, bg: posBg,
 	})
 
-	arrowL := "\ue0b0" // points right: leaving-segment fg -> entering-segment bg
-	arrowR := "\ue0b2" // points left: entering-segment fg -> leaving-segment bg
+	arrowL := "\ue0b0" // points right
+	arrowR := "\ue0b2" // points left
 	aw := runewidth.StringWidth(arrowL)
 	if aw == 0 {
 		aw = 1
