@@ -297,6 +297,28 @@ func getColor(color string) tcell.Style {
 	return tcell.StyleDefault.Background(tcell.GetColor(defaultBg)).Foreground(tcell.GetColor(defaultFg))
 }
 
+func GetStyleBg(name string) tcell.Color {
+	stylesMutex.RLock()
+	defer stylesMutex.RUnlock()
+	if styles == nil {
+		return tcell.ColorDefault
+	}
+	st := styles[name]
+	_, bg, _ := st.Decompose()
+	return bg
+}
+
+func GetStyleFg(name string) tcell.Color {
+	stylesMutex.RLock()
+	defer stylesMutex.RUnlock()
+	if styles == nil {
+		return tcell.ColorDefault
+	}
+	st := styles[name]
+	fg, _, _ := st.Decompose()
+	return fg
+}
+
 func ApplyBg(color string, style tcell.Style) tcell.Style {
 	_, bg, _ := Color(color).Decompose()
 	return style.Background(bg)

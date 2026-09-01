@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/firstrow/wig"
+	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -17,76 +18,129 @@ func StatuslineRender(
 	if buf == nil {
 		return
 	}
-
 	w, h := view.Size()
 	h -= 1
+	if h < 0 {
+		return
+	}
 
-	st := wig.Color("ui.statusline.inactive")
+	stActive := wig.Color("ui.statusline")
+	stInactive := wig.Color("ui.statusline.inactive")
+	stInsert := wig.Color("ui.statusline.insert")
 
+	st := stInactive
 	if win == e.ActiveWindow() {
-		st = wig.Color("ui.statusline")
-
+		st = stActive
 		if !e.Config.SameStatuslineColor && buf.Mode() == wig.MODE_INSERT {
-			st = wig.Color("ui.statusline.insert")
+			st = stInsert
 		}
 	}
 
-	bg := strings.Repeat(" ", w)
-	if h >= 0 {
-		view.SetContent(0, h, bg, st)
+	// Background fill
+	bgFill := strings.Repeat(" ", w)
+	view.SetContent(0, h, bgFill, st)
+
+	type segment struct {
+		text  string
+		style tcell.Style
 	}
+
+	stContrast := st.Reverse(true)
+
+	var leftSegs []segment
+	var rightSegs []segment
+
+	modeText := fmt.Sprintf(" %s ", strings.ToUpper(buf.Mode().String()))
+	leftSegs = append(leftSegs, segment{text: modeText, style: st})
+
+	nameText := fmt.Sprintf(" %s ", buf.GetName())
+	leftSegs = append(leftSegs, segment{text: nameText, style: stContrast})
 
 	macroStatus := ""
 	if e.Keys.Macros.Recording() {
-		macroStatus = "recording @" + e.Keys.Macros.Register
+		macroStatus = fmt.Sprintf(" REC @%s ", e.Keys.Macros.Register)
+		leftSegs = append(leftSegs, segment{text: macroStatus, style: st})
 	}
-
-	leftSide := fmt.Sprintf("%s %s %s ", buf.Mode().String(), buf.GetName(), macroStatus)
 
 	if (win == e.ActiveWindow() || win.Buffer() == e.ActiveWindow().Buffer()) && len(e.Message) > 0 {
-		leftSide = e.Message
-	}
-
-	if h >= 0 {
-		view.SetContent(2, h, leftSide, st)
+		leftSegs = []segment{{text: fmt.Sprintf(" %s ", e.Message), style: st}}
 	}
 
 	cur := wig.CursorGet(e, buf)
-	wsIndicator := "🔒"
-	if e.Config.SaveWorkspaces {
-		wsIndicator = "💾"
-	}
 
-	// Show the innermost function containing the cursor line, beside the
-	// workspace indicator on the right side of the statusline. Uses the
-	// same tree-sitter query as CmdFunctionList (F8) — via
-	// TreeSitterHighlighter.FunctionAtLine — so the name shown matches
-	// what the F8 picker would list for this buffer. Empty for non-TS
-	// buffers (no Highlighter, or a non-tree-sitter Highlighter like the
-	// git diff / quickfix / health ones) or when the cursor is outside
-	// any function (imports, package decl, top-level constants, etc.).
+	wsIndicator := "ð"
+	if e.Config.SaveWorkspaces {
+		wsIndicator = "ð"
+	}
+	wsText := fmt.Sprintf(" %s ws:%d ", wsIndicator, e.ActiveWorkspace)
+	rightSegs = append(rightSegs, segment{text: wsText, style: stContrast})
+
+	posText := fmt.Sprintf(" %d:%d ", cur.Line+1, cur.Char)
+	rightSegs = append(rightSegs, segment{text: posText, style: st})
+
 	funcName := ""
 	if ts, ok := buf.Highlighter.(*wig.TreeSitterHighlighter); ok && ts != nil {
 		funcName = ts.FunctionAtLine(cur.Line)
 	}
-
-	rightSide := fmt.Sprintf("%s[ws:%d] %d:%d", wsIndicator, e.ActiveWorkspace, cur.Line+1, cur.Char)
 	if funcName != "" {
-		// Cap function name length so very long Go method names
-		// (e.g. TestSomeVeryLongScenario_Subcase_ABC) don't push the
-		// workspace indicator off-screen on narrow terminals.
 		if len(funcName) > 30 {
 			funcName = funcName[:27] + "..."
 		}
-		rightSide = fmt.Sprintf("%s  %s", funcName, rightSide)
+		rightSegs = append([]segment{{text: fmt.Sprintf(" %s ", funcName), style: stContrast}}, rightSegs...)
 	}
 
 	if e.Keys.GetCount() > 1 {
-		rightSide = fmt.Sprintf("%d   %s", e.Keys.GetCount(), rightSide)
+		rightSegs = append([]segment{{text: fmt.Sprintf(" %d ", e.Keys.GetCount()), style: st}}, rightSegs...)
 	}
 
-	visWidth := runewidth.StringWidth(rightSide)
-	if w-visWidth-1 >= 0 && h >= 0 {
-		view.SetContent(w-visWidth-1, h, rightSide, st)
+	baseBg := wig.GetStyleBg("ui.statusline")
+	if win != e.ActiveWindow() {
+		baseBg = wig.GetStyleBg("ui.statusline.inactive")
+	}
+
+	arrowL := "\ue0b0"
+	arrowR := "\ue0b2"
+	aw := runewidth.StringWidth(arrowL)
+	if aw == 0 {
+		aw = 1
+	}
+
+	// Draw left side
+	x := 0
+	prevBg := baseBg
+	for _, s := range leftSegs {
+		_, bg, _ := s.style.Decompose()
+		if bg == tcell.ColorDefault {
+			bg = baseBg
+		}
+		arrowStyle := tcell.StyleDefault.Background(bg).Foreground(prevBg)
+		view.SetContent(x, h, arrowL, arrowStyle)
+		x += aw
+
+		view.SetContent(x, h, s.text, s.style)
+		x += runewidth.StringWidth(s.text)
+		prevBg = bg
+	}
+
+	// Draw right side
+	x = w
+	prevBg = baseBg
+	for i := len(rightSegs) - 1; i >= 0; i-- {
+		s := rightSegs[i]
+		_, bg, _ := s.style.Decompose()
+		if bg == tcell.ColorDefault {
+			bg = baseBg
+		}
+		textWidth := runewidth.StringWidth(s.text)
+
+		// Draw text
+		view.SetContent(x-textWidth, h, s.text, s.style)
+		x -= textWidth
+
+		// Draw arrow on the left of the text
+		arrowStyle := tcell.StyleDefault.Background(prevBg).Foreground(bg)
+		view.SetContent(x-aw, h, arrowR, arrowStyle)
+		x -= aw
+		prevBg = bg
 	}
 }
