@@ -113,18 +113,11 @@ var (
 const plMaxScope = 24
 
 // plModeColors returns the (bg, fg) pair for the leftmost mode segment,
-// mirroring the reference implementation's per-mode palette. wig's Mode
-// type doesn't distinguish Command/Search/Brief/LlmPrompt the way the
-// reference editor does, so those collapse onto the closest wig mode.
+// using theme-defined airline colors (e.g. navy for normal in dark_plus).
 func plModeColors(mode wig.Mode) (bg, fg tcell.Color) {
-	switch mode {
-	case wig.MODE_INSERT:
-		return tcell.NewRGBColor(45, 75, 55), tcell.NewRGBColor(220, 245, 230)
-	case wig.MODE_VISUAL, wig.MODE_VISUAL_LINE, wig.MODE_VISUAL_BLOCK:
-		return tcell.NewRGBColor(100, 65, 45), tcell.NewRGBColor(245, 230, 220)
-	default: // wig.MODE_NORMAL
-		return tcell.NewRGBColor(40, 70, 85), tcell.NewRGBColor(220, 235, 245)
-	}
+	st := airlineModeStyle(mode)
+	fg, bg, _ = st.Decompose()
+	return bg, fg
 }
 
 // trimScope shortens a function/scope name to at most plMaxScope runes,
@@ -300,16 +293,12 @@ func renderPowerline(
 		aw = 1
 	}
 
-	// Draw left side. The first segment starts flush against the left
-	// edge with no leading arrow — there's nothing before it to
-	// transition from, so a cap there would just be a triangle pointing
-	// out of the plain background into itself. Arrows only appear
-	// between two real segments.
+	// Draw left side.
 	x := 0
 	for i, s := range leftSegs {
 		if i > 0 {
 			prevBg := leftSegs[i-1].bg
-			arrowStyle := tcell.StyleDefault.Background(s.bg).Foreground(prevBg).Bold(true)
+			arrowStyle := tcell.StyleDefault.Background(s.bg).Foreground(prevBg)
 			view.SetContent(x, h, arrowL, arrowStyle)
 			x += aw
 		}
@@ -317,10 +306,14 @@ func renderPowerline(
 		view.SetContent(x, h, s.text, tcell.StyleDefault.Background(s.bg).Foreground(s.fg).Bold(true))
 		x += runewidth.StringWidth(s.text)
 	}
+	if len(leftSegs) > 0 {
+		lastBg := leftSegs[len(leftSegs)-1].bg
+		arrowStyle := tcell.StyleDefault.Background(bgFill).Foreground(lastBg)
+		view.SetContent(x, h, arrowL, arrowStyle)
+		x += aw
+	}
 
-	// Draw right side leftward from the screen's right edge. Same rule
-	// mirrored: the last segment (rightmost, position) ends flush with
-	// no trailing arrow past it into the plain background.
+	// Draw right side leftward from the screen's right edge.
 	x = w
 	for i := len(rightSegs) - 1; i >= 0; i-- {
 		s := rightSegs[i]
@@ -332,6 +325,10 @@ func renderPowerline(
 		if i > 0 {
 			prevBg := rightSegs[i-1].bg
 			arrowStyle := tcell.StyleDefault.Background(prevBg).Foreground(s.bg)
+			view.SetContent(x-aw, h, arrowR, arrowStyle)
+			x -= aw
+		} else {
+			arrowStyle := tcell.StyleDefault.Background(bgFill).Foreground(s.bg)
 			view.SetContent(x-aw, h, arrowR, arrowStyle)
 			x -= aw
 		}
@@ -439,9 +436,9 @@ func renderAirline(
 	ft := detectFiletypeLabel(buf.GetName())
 	rightSegs = append(rightSegs, segment{text: fmt.Sprintf(" %s ", ft), style: baseSt})
 
-	aiStatus := "AI OFF"
+	aiStatus := "LSP OFF"
 	if e.Config.LspEnabled {
-		aiStatus = "AI ON"
+		aiStatus = "LSP ON "
 	}
 	rightSegs = append(rightSegs, segment{text: fmt.Sprintf(" %s ", aiStatus), style: baseSt})
 
