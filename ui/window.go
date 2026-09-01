@@ -55,7 +55,12 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 	}
 
 	// Precalculate visual block bounds for efficient rendering
+	// Block-selection bounds are fixed for the whole render pass — compute
+	// them once here instead of re-deriving minLine/maxLine from
+	// buf.Selection on every character (as the per-character code below
+	// used to do, in three separate places).
 	var minVisCol, maxVisCol int
+	var blockMinLine, blockMaxLine int
 	isVisualBlock := buf.Mode() == wig.MODE_VISUAL_BLOCK && buf.Selection != nil
 	if isVisualBlock {
 		sel := buf.Selection
@@ -65,12 +70,18 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 		endVisCol := wig.VisualCol(endLineNode.Value, sel.End.Char)
 		minVisCol = min(startVisCol, endVisCol)
 		maxVisCol = max(startVisCol, endVisCol)
+		blockMinLine, blockMaxLine = sel.Start.Line, sel.End.Line
+		if blockMinLine > blockMaxLine {
+			blockMinLine, blockMaxLine = blockMaxLine, blockMinLine
+		}
 	}
 
 	for currentLine != nil {
 		if lineNum >= offset && y <= termHeight {
 			// render each character in the line separately
 			x := leftPadding // onscreen position
+
+			isLineInBlockRange := isVisualBlock && lineNum >= blockMinLine && lineNum <= blockMaxLine
 
 			// highlight search
 			searchMatches := [][]int{}
@@ -199,21 +210,13 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 				// selection
 				if buf.Selection != nil {
 					if isVisualBlock {
-						sel := buf.Selection
-						minLine, maxLine := sel.Start.Line, sel.End.Line
-						if minLine > maxLine {
-							minLine, maxLine = maxLine, minLine
-						}
-						if lineNum >= minLine && lineNum <= maxLine {
-							// Highlight based on visual screen columns.
-							// Tabs are excluded here and handled per-column
-							// below — a tab is one rune spanning 4 columns,
-							// so this whole-rune check would force the
-							// entire tab in/out as a single unit instead of
-							// only the columns the block actually covers.
-							if currentLine.Value[i] != '\t' && currVisCol < maxVisCol && currVisCol+charLen > minVisCol {
-								textStyle = wig.ApplyBg("ui.selection.primary", textStyle)
-							}
+						// Tabs are excluded here and handled per-column
+						// below — a tab is one rune spanning 4 columns,
+						// so this whole-rune check would force the
+						// entire tab in/out as a single unit instead of
+						// only the columns the block actually covers.
+						if isLineInBlockRange && currentLine.Value[i] != '\t' && currVisCol < maxVisCol && currVisCol+charLen > minVisCol {
+							textStyle = wig.ApplyBg("ui.selection.primary", textStyle)
 						}
 					} else if wig.SelectionCursorInRange(buf.Selection, wig.Cursor{Line: lineNum, Char: i}) {
 						textStyle = wig.ApplyBg("ui.selection.primary", textStyle)
@@ -267,20 +270,14 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 				// SetContent call can only highlight the whole tab or none
 				// of it. Split it into per-column cells here so only the
 				// columns actually inside [minVisCol,maxVisCol) light up.
-				if currentLine.Value[i] == '\t' && isVisualBlock && buf.Selection != nil && charLen > 1 {
-					sel := buf.Selection
-					blkMinLine, blkMaxLine := sel.Start.Line, sel.End.Line
-					if blkMinLine > blkMaxLine {
-						blkMinLine, blkMaxLine = blkMaxLine, blkMinLine
-					}
-					inRange := lineNum >= blkMinLine && lineNum <= blkMaxLine
+				// Only needed when this line is actually part of the block
+				// and the char is a tab; otherwise render normally.
+				if currentLine.Value[i] == '\t' && isLineInBlockRange {
 					for col := 0; col < charLen; col++ {
 						cellStyle := textStyle
-						if inRange {
-							cellVisCol := currVisCol + col
-							if cellVisCol >= minVisCol && cellVisCol < maxVisCol {
-								cellStyle = wig.ApplyBg("ui.selection.primary", cellStyle)
-							}
+						cellVisCol := currVisCol + col
+						if cellVisCol >= minVisCol && cellVisCol < maxVisCol {
+							cellStyle = wig.ApplyBg("ui.selection.primary", cellStyle)
 						}
 						cellX := x + col
 						if cellX >= 0 && cellX < termWidth && y >= 0 && y < termHeight {
@@ -322,26 +319,19 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 			}
 
 			// render cursor after the end of the line in insert mode
-			if isVisualBlock && buf.Selection != nil {
-				sel := buf.Selection
-				minLine, maxLine := sel.Start.Line, sel.End.Line
-				if minLine > maxLine {
-					minLine, maxLine = maxLine, minLine
+			if isLineInBlockRange && currVisCol < maxVisCol {
+				selStyle := wig.ApplyBg("ui.selection.primary", wig.Color("default"))
+				startPad := currVisCol
+				if startPad < minVisCol {
+					startPad = minVisCol
 				}
-				if lineNum >= minLine && lineNum <= maxLine && currVisCol < maxVisCol {
-					selStyle := wig.ApplyBg("ui.selection.primary", wig.Color("default"))
-					startPad := currVisCol
-					if startPad < minVisCol {
-						startPad = minVisCol
-					}
-					if startPad < startVisCol {
-						startPad = startVisCol
-					}
-					for visCol := startPad; visCol < maxVisCol; visCol++ {
-						padX := leftPadding + visCol - startVisCol
-						if padX >= 0 && padX < termWidth && y >= 0 && y < termHeight {
-							view.SetContent(padX, y, " ", selStyle)
-						}
+				if startPad < startVisCol {
+					startPad = startVisCol
+				}
+				for visCol := startPad; visCol < maxVisCol; visCol++ {
+					padX := leftPadding + visCol - startVisCol
+					if padX >= 0 && padX < termWidth && y >= 0 && y < termHeight {
+						view.SetContent(padX, y, " ", selStyle)
 					}
 				}
 			}
