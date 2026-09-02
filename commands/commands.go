@@ -350,14 +350,14 @@ func CmdMRUBufferPicker(ctx wig.Context) {
 
 	updateTitle := func() {
 		if sortByRecent {
-			picker.SetTitle("MRU Buffers (Most Recent) [Ins: Most Used]")
+			picker.SetTitle("MRU Buffers (Most Recent) [Tab: Most Used]")
 		} else {
-			picker.SetTitle("MRU Buffers (Most Used) [Ins: Most Recent]")
+			picker.SetTitle("MRU Buffers (Most Used) [Tab: Most Recent]")
 		}
 	}
 	updateTitle()
 
-	picker.OnKey("Insert", func(ctx wig.Context) {
+	picker.OnKey("Tab", func(ctx wig.Context) {
 		sortByRecent = !sortByRecent
 		updateTitle()
 		picker.SetItems(buildItems())
