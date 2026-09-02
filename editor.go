@@ -26,6 +26,7 @@ type EditorConfig struct {
 	SameStatuslineColor bool   `toml:"same_statusline_color"` // If true, keeps statusline color consistent across modes (disables distinct insert color)
 	StatuslineStyle     string `toml:"statusline_style"`
 	FilePickerView      string `toml:"file_picker_view"` // "tree" (default) or "files"
+	AutoSession         bool   `toml:"auto_session"`     // Automatically save/restore the last session on startup/quit
 }
 
 type View interface {

@@ -12,22 +12,23 @@ import (
 // StatuslineData aggregates all buffer, editor, and workspace information
 // needed to render any statusline style in a single pass.
 type StatuslineData struct {
-	Mode      wig.Mode
-	ModeName  string
-	BufName   string
-	IsDirty   bool
-	Macro     string
-	Message   string
-	Line      int
-	Char      int
-	Scope     string
-	Filetype  string
-	BufIdx    int
-	BufTotal  int
-	KeyCount  int
-	GitBranch string
-	HasBranch bool
-	IsActive  bool
+	Mode        wig.Mode
+	ModeName    string
+	BufName     string
+	IsDirty     bool
+	Macro       string
+	Message     string
+	Line        int
+	Char        int
+	Scope       string
+	Filetype    string
+	BufIdx      int
+	BufTotal    int
+	KeyCount    int
+	GitBranch   string
+	HasBranch   bool
+	IsActive    bool
+	SessionName string
 }
 
 func extractStatuslineData(e *wig.Editor, win *wig.Window) *StatuslineData {
@@ -60,23 +61,29 @@ func extractStatuslineData(e *wig.Editor, win *wig.Window) *StatuslineData {
 		macro = "recording @" + e.Keys.Macros.Register
 	}
 
+	var sessionName string
+	if ws := e.GetActiveWorkspace(); ws != nil {
+		sessionName = ws.ActiveSession
+	}
+
 	return &StatuslineData{
-		Mode:      buf.Mode(),
-		ModeName:  strings.ToUpper(buf.Mode().String()),
-		BufName:   buf.GetName(),
-		IsDirty:   buf.Dirty,
-		Macro:     macro,
-		Message:   msg,
-		Line:      cur.Line + 1,
-		Char:      cur.Char + 1,
-		Scope:     trimScope(funcName),
-		Filetype:  detectFiletypeLabel(buf.GetName()),
-		BufIdx:    bufferIndex(e, buf),
-		BufTotal:  len(e.Buffers),
-		KeyCount:  e.Keys.GetCount(),
-		GitBranch: branch,
-		HasBranch: hasBranch,
-		IsActive:  active,
+		Mode:        buf.Mode(),
+		ModeName:    strings.ToUpper(buf.Mode().String()),
+		BufName:     buf.GetName(),
+		IsDirty:     buf.Dirty,
+		Macro:       macro,
+		Message:     msg,
+		Line:        cur.Line + 1,
+		Char:        cur.Char + 1,
+		Scope:       trimScope(funcName),
+		Filetype:    detectFiletypeLabel(buf.GetName()),
+		BufIdx:      bufferIndex(e, buf),
+		BufTotal:    len(e.Buffers),
+		KeyCount:    e.Keys.GetCount(),
+		GitBranch:   branch,
+		HasBranch:   hasBranch,
+		IsActive:    active,
+		SessionName: sessionName,
 	}
 }
 
@@ -130,7 +137,7 @@ func renderPlain(
 	}
 	leftSide := fmt.Sprintf("%s %s%s ", d.ModeName, d.BufName, macroStr)
 	if d.HasBranch {
-		leftSide += fmt.Sprintf("  %s ", d.GitBranch)
+		leftSide += fmt.Sprintf("  %s ", d.GitBranch)
 	}
 	if d.Message != "" {
 		leftSide = d.Message
@@ -138,6 +145,9 @@ func renderPlain(
 	view.SetContent(2, h, leftSide, st)
 
 	rightSide := fmt.Sprintf("%d:%d", d.Line, d.Char)
+	if d.SessionName != "" {
+		rightSide = fmt.Sprintf("[%s]  %s", d.SessionName, rightSide)
+	}
 	if d.Scope != "" {
 		scope := d.Scope
 		if len(scope) > 30 {
@@ -355,6 +365,17 @@ func renderPowerline(
 		text: fmt.Sprintf(" %4d:%-3d", d.Line, d.Char),
 		fg:   posFg, bg: posBg,
 	})
+
+	if d.SessionName != "" {
+		sesBg, sesFg := plColor("ui.statusline.powerline.session", tcell.NewRGBColor(0x6a, 0x4c, 0x93), tcell.ColorWhite)
+		if !d.IsActive {
+			sesBg = bgFill
+		}
+		rightSegs = append(rightSegs, segment{
+			text: fmt.Sprintf(" %s  ", d.SessionName),
+			fg:   sesFg, bg: sesBg,
+		})
+	}
 
 	arrowL := "\ue0b0" // points right
 	arrowR := "\ue0b2" // points left

@@ -101,7 +101,39 @@ func ListSessions() ([]*Session, error) {
 }
 
 func DeleteSession(name string) error {
-	return os.Remove(filepath.Join(sessionsDir(), name+".json"))
+	err := os.Remove(filepath.Join(sessionsDir(), name+".json"))
+	if err != nil {
+		return err
+	}
+	// If we deleted the last active session, clear the last_session file
+	if last, err := GetLastActiveSession(); err == nil && last == name {
+		_ = os.Remove(lastSessionPath())
+	}
+	return nil
+}
+
+func lastSessionPath() string {
+	return filepath.Join(sessionsDir(), "last_session")
+}
+
+// SaveLastActiveSession writes the name of the last loaded/saved session
+// to ~/.config/wig/sessions/last_session. This is used by the auto-session
+// feature to know exactly which session to restore on startup, instead
+// of guessing based on file modification times.
+func SaveLastActiveSession(name string) error {
+	if err := os.MkdirAll(sessionsDir(), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(lastSessionPath(), []byte(name), 0644)
+}
+
+// GetLastActiveSession reads the name of the last active session.
+func GetLastActiveSession() (string, error) {
+	data, err := os.ReadFile(lastSessionPath())
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
 }
 
 // captureSessionNode walks the WinNode tree and produces a serializable
@@ -214,6 +246,16 @@ func buildSessionTree(
 // argument the session is named after the workspace's last loaded
 // session, the project root directory, or "default" if neither is known.
 func CmdMakeSession(ctx wig.Context) {
+	// Prevent data loss: saving a session doesn't save unsaved buffer
+	// contents to disk. If a buffer is dirty, saving the session would
+	// lose those changes on next load.
+	for _, b := range ctx.Editor.Buffers {
+		if b.Dirty {
+			ctx.Editor.EchoMessage("Unsaved changes in buffers. Save before saving session.")
+			return
+		}
+	}
+
 	name := strings.TrimSpace(ctx.Char)
 	ws := ctx.Editor.GetActiveWorkspace()
 	if name == "" {
@@ -247,6 +289,10 @@ func CmdMakeSession(ctx wig.Context) {
 		return
 	}
 
+	if err := SaveLastActiveSession(name); err != nil {
+		ctx.Editor.LogMessage("Failed to save last session state: " + err.Error())
+	}
+
 	count := 0
 	for _, w := range ws.Windows {
 		if w != nil && w.Buffer() != nil {
@@ -268,6 +314,14 @@ func CmdLoadSession(ctx wig.Context) {
 }
 
 func loadSessionByName(ctx wig.Context, name string) {
+	// Prevent data loss: check for dirty buffers before switching
+	for _, b := range ctx.Editor.Buffers {
+		if b.Dirty {
+			ctx.Editor.EchoMessage("Unsaved changes in buffers. Save or close before switching sessions.")
+			return
+		}
+	}
+
 	session, err := LoadSession(name)
 	if err != nil {
 		ctx.Editor.EchoMessage("load session error: " + err.Error())
@@ -309,6 +363,11 @@ func loadSessionByName(ctx wig.Context, name string) {
 
 	ctx.Editor.Redraw()
 	ctx.Editor.ScreenSync()
+
+	if err := SaveLastActiveSession(name); err != nil {
+		ctx.Editor.LogMessage("Failed to save last session state: " + err.Error())
+	}
+
 	ctx.Editor.EchoMessage(fmt.Sprintf("Session %q loaded (%d windows)", name, len(newWins)))
 }
 
@@ -334,6 +393,17 @@ func CmdSessionList(ctx wig.Context) {
 	}
 
 	action := func(p *ui.UiPicker[string], i *ui.PickerItem[string]) {
+		// Prevent data loss: check for dirty buffers before switching
+		// or saving sessions. Unsaved content is not part of the session
+		// file, so saving over a session with dirty buffers would lose
+		// the unsaved changes on next load.
+		for _, b := range ctx.Editor.Buffers {
+			if b.Dirty {
+				ctx.Editor.EchoMessage("Unsaved changes in buffers. Save or close before managing sessions.")
+				return
+			}
+		}
+
 		defer ctx.Editor.PopUi()
 		sessionPopupActive = false
 		if i == nil {

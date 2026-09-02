@@ -135,6 +135,32 @@ func main() {
 		wig.Color("ui.background")
 	}()
 
+	renderer := render.New(editor, tscreen)
+
+	// Start background loops early so startup commands (like session loading)
+	// can call Redraw() and ScreenSync() without blocking on unconsumed channels.
+	go func() {
+		for {
+			<-editor.ScreenSyncCh
+			tscreen.Sync()
+		}
+	}()
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				renderer.Stop()
+				tscreen.Fini()
+				fmt.Fprintf(os.Stderr, "wig: rendering error: %v\n", r)
+				os.Exit(1)
+			}
+		}()
+		for {
+			<-editor.RedrawCh
+			renderer.Render()
+		}
+	}()
+
 	gutterMgr := commands.NewGitGutterManager(editor)
 
 	posCache := wig.LoadPositionCache()
@@ -183,7 +209,19 @@ func main() {
 			wig.CmdNewBuffer(editor.NewContext())
 		}
 	} else {
-		wig.CmdNewBuffer(editor.NewContext())
+		if editorCfg.AutoSession {
+			// Load the explicitly tracked last active session, instead of
+			// guessing based on the most recently modified file.
+			last, err := commands.GetLastActiveSession()
+			if err == nil && last != "" {
+				ctx := editor.NewContext()
+				ctx.Char = last
+				commands.CmdLoadSession(ctx)
+			}
+		}
+		if len(editor.Buffers) == 0 {
+			wig.CmdNewBuffer(editor.NewContext())
+		}
 	}
 	if openGitStatus {
 		commands.CmdGitView(editor.NewContext())
@@ -196,7 +234,7 @@ func main() {
 		gutterMgr.UpdateBuffer(buf)
 	}
 
-	renderer := render.New(editor, tscreen)
+	renderer.Render()
 
 	var pasteStarted bool
 	var pastedText string
@@ -274,14 +312,27 @@ func main() {
 		}
 	}()
 
-	go func() {
-		for {
-			<-editor.ScreenSyncCh
-			tscreen.Sync()
-		}
-	}()
-
 	<-editor.ExitCh
+
+	// Auto-save session on exit if enabled, no dirty buffers exist, and
+	// a session is already active. We don't auto-save if ActiveSession
+	// is empty to prevent blindly creating sessions named after the
+	// project root (e.g. "vig.json") without the user explicitly
+	// starting a session.
+	if editor.Config.AutoSession {
+		dirty := false
+		for _, b := range editor.Buffers {
+			if b.Dirty {
+				dirty = true
+				break
+			}
+		}
+		if !dirty && editor.GetActiveWorkspace().ActiveSession != "" {
+			ctx := editor.NewContext()
+			ctx.Char = "" // Reuse ActiveSession name
+			commands.CmdMakeSession(ctx)
+		}
+	}
 
 	activeBuf := editor.ActiveBuffer()
 	if activeBuf != nil && activeBuf.FilePath != "" && !strings.HasPrefix(activeBuf.FilePath, "[") {

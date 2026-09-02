@@ -70,6 +70,7 @@ type EditorSettings struct {
 	NotifyOnSave        *bool   `toml:"notify_on_save"`
 	GitAiCommit         *bool   `toml:"git_ai_commit"`
 	GitAiTool           *string `toml:"git_ai_tool"`
+	AutoSession         *bool   `toml:"auto_session"`
 }
 
 type UserKeysConfig struct {
@@ -108,6 +109,7 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		SameStatuslineColor: false,
 		StatuslineStyle:     "plain",
 		FilePickerView:      "files",
+		AutoSession:         false,
 	}
 	userMap := wig.ModeKeyMap{
 		wig.MODE_NORMAL:       wig.KeyMap{},
@@ -185,6 +187,9 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	}
 	if cfg.Editor.FilePickerView != nil {
 		editorCfg.FilePickerView = *cfg.Editor.FilePickerView
+	}
+	if cfg.Editor.AutoSession != nil {
+		editorCfg.AutoSession = *cfg.Editor.AutoSession
 	}
 	commands.NotifyOnSave = false
 	commands.GitAiCommit = false
