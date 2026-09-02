@@ -113,41 +113,43 @@ func (h *RgHighlighter) HighlightLine(lineNum int) []wig.Span {
 		return nil
 	}
 
-	colonIdx := -1
-	for i, r := range runes {
-		if r == ':' {
-			colonIdx = i
-			break
-		}
-		if !unicode.IsDigit(r) {
-			break
-		}
+	entry, ok := h.LineMap[lineNum]
+	if !ok {
+		return nil
 	}
 
-	if colonIdx > 0 {
-		return []wig.Span{{
-			StartCol: 0,
-			EndCol:   uint16(colonIdx + 1),
-			Style:    wig.Color("comment"),
-		}}
-	}
-
-	isBlank := true
-	for _, r := range runes {
-		if r != ' ' && r != '\t' && r != '\n' && r != '\r' {
-			isBlank = false
-			break
-		}
-	}
-
-	if !isBlank {
+	switch entry.kind {
+	case 0: // title
 		return []wig.Span{{
 			StartCol: 0,
 			EndCol:   lineLen,
-			Style:    wig.Color("ui.popup.title"),
+			Style:    wig.Color("ui.text.focus"), // White
 		}}
+	case 1: // file header
+		return []wig.Span{{
+			StartCol: 0,
+			EndCol:   lineLen,
+			Style:    wig.Color("ui.text.directory"), // Blue
+		}}
+	case 2: // result line
+		colonIdx := -1
+		for i, r := range runes {
+			if r == ':' {
+				colonIdx = i
+				break
+			}
+			if !unicode.IsDigit(r) {
+				break
+			}
+		}
+		if colonIdx > 0 {
+			return []wig.Span{{
+				StartCol: 0,
+				EndCol:   uint16(colonIdx + 1),
+				Style:    wig.Color("comment"), // Green
+			}}
+		}
 	}
-
 	return nil
 }
 
