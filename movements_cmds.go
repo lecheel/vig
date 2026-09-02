@@ -13,8 +13,75 @@ import (
 // the statusline). Scroll/visibility math must use this, not the raw
 // ctx.Editor.View.Size() height, or PgUp/PgDn drift from what's on screen.
 func viewHeight(ctx Context) int {
-	_, h := ctx.Editor.View.Size()
+	_, h := activeWindowSize(ctx)
 	return h - 1
+}
+
+// activeWindowSize computes the width and height of the active window by
+// walking the WinNode split tree. This is necessary because View.Size()
+// returns the dimensions of the entire screen, not the active window.
+// Without this, split windows incorrectly scroll by the full screen height
+// instead of the height of the individual pane.
+func activeWindowSize(ctx Context) (int, int) {
+	vw, vh := ctx.Editor.View.Size()
+	root := ctx.Editor.Root()
+	if root == nil {
+		return vw, vh
+	}
+	target := ctx.Editor.ActiveWindow()
+	w, h := winSize(root, target, vw, vh)
+	if w == 0 && h == 0 {
+		return vw, vh
+	}
+	return w, h
+}
+
+// winSize recursively computes the dimensions of target within node.
+// It assumes equal splits among children, distributing remainder pixels
+// to the first N children to match typical terminal rendering.
+func winSize(node *WinNode, target *Window, w, h int) (int, int) {
+	if node == nil {
+		return 0, 0
+	}
+	if node.Dir == SplitNone {
+		if node.Win == target {
+			return w, h
+		}
+		return 0, 0
+	}
+	if len(node.Children) == 0 {
+		return 0, 0
+	}
+
+	if node.Dir == SplitHorizontal {
+		childH := h / len(node.Children)
+		remainder := h % len(node.Children)
+		for i, c := range node.Children {
+			chH := childH
+			if i < remainder {
+				chH++
+			}
+			cw, ch := winSize(c, target, w, chH)
+			if cw > 0 || ch > 0 {
+				return cw, ch
+			}
+		}
+	} else if node.Dir == SplitVertical {
+		childW := w / len(node.Children)
+		remainder := w % len(node.Children)
+		for i, c := range node.Children {
+			chW := childW
+			if i < remainder {
+				chW++
+			}
+			cw, ch := winSize(c, target, chW, h)
+			if cw > 0 || ch > 0 {
+				return cw, ch
+			}
+		}
+	}
+
+	return 0, 0
 }
 
 func CmdScrollUpPage(ctx Context) {
