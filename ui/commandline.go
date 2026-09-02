@@ -362,17 +362,17 @@ func (u *uiCommandLine) navigateCandidate(dx, dy int) {
 			maxLen = len([]rune(c))
 		}
 	}
-	colWidth := maxLen + 2
-	if colWidth > 30 {
-		colWidth = 30
+	minColWidth := maxLen + 2
+	if minColWidth < 10 {
+		minColWidth = 10
 	}
 	vw, _ := u.e.View.Size()
-	cols := vw / colWidth
+	cols := vw / minColWidth
 	if cols == 0 {
 		cols = 1
 	}
-	if cols > 5 {
-		cols = 5
+	if cols > len(u.candidates) {
+		cols = len(u.candidates)
 	}
 
 	rows := (len(u.candidates) + cols - 1) / cols
@@ -867,18 +867,19 @@ func (u *uiCommandLine) Render(view wig.View) {
 				maxLen = len([]rune(c))
 			}
 		}
-		colWidth := maxLen + 2
-		if colWidth > 30 {
-			colWidth = 30
+		minColWidth := maxLen + 2
+		if minColWidth < 10 {
+			minColWidth = 10
 		}
 
-		cols := vw / colWidth
+		cols := vw / minColWidth
 		if cols == 0 {
 			cols = 1
 		}
-		if cols > 5 {
-			cols = 5
+		if cols > len(u.candidates) {
+			cols = len(u.candidates)
 		}
+		colWidth := vw / cols
 
 		rows := (len(u.candidates) + cols - 1) / cols
 		for r := 0; r < rows; r++ {
@@ -901,9 +902,13 @@ func (u *uiCommandLine) Render(view wig.View) {
 			if i == u.candIdx {
 				itemStyle = bgStyle.Reverse(true)
 			}
-			cStr := truncate(c, colWidth)
+			cWidth := colWidth
+			if col == cols-1 && x+cWidth < vw {
+				cWidth = vw - x
+			}
+			cStr := truncate(c, cWidth)
 			view.SetContent(x, y, cStr, itemStyle)
-			if pad := colWidth - len([]rune(cStr)); pad > 0 {
+			if pad := cWidth - len([]rune(cStr)); pad > 0 {
 				view.SetContent(x+len([]rune(cStr)), y, strings.Repeat(" ", pad), itemStyle)
 			}
 		}
