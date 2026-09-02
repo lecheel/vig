@@ -32,6 +32,7 @@ type sessionWinNode struct {
 // by :mksession and restored by :session / :sessions.
 type Session struct {
 	Name      string          `json:"name"`
+	Remark    string          `json:"remark,omitempty"`
 	CreatedAt int64           `json:"created_at"`
 	UpdatedAt int64           `json:"updated_at"`
 	Layout    wig.Layout      `json:"layout"`
@@ -98,29 +99,6 @@ func ListSessions() ([]*Session, error) {
 		return sessions[i].UpdatedAt > sessions[j].UpdatedAt
 	})
 	return sessions, nil
-}
-
-// sessionConfirmPopup is a minimal UI component that prompts the user
-// for a yes/no decision directly on the statusline, avoiding the heavy
-// picker popup for a simple confirmation.
-type sessionConfirmPopup struct {
-	e      *wig.Editor
-	keymap *wig.KeyHandler
-	msg    string
-	onYes  func()
-	onNo   func()
-}
-
-func (c *sessionConfirmPopup) Mode() wig.Mode          { return wig.MODE_NORMAL }
-func (c *sessionConfirmPopup) Keymap() *wig.KeyHandler { return c.keymap }
-func (c *sessionConfirmPopup) Plane() wig.RenderPlane  { return wig.PlaneEditor }
-
-func (c *sessionConfirmPopup) Render(view wig.View) {
-	w, h := view.Size()
-	st := wig.Color("ui.statusline")
-	// Clear the statusline and render the confirmation message.
-	view.SetContent(0, h-1, strings.Repeat(" ", w), st)
-	view.SetContent(0, h-1, " "+c.msg, st)
 }
 
 func DeleteSession(name string) error {
@@ -266,7 +244,7 @@ func buildSessionTree(
 
 // saveSession writes the current workspace state to the given session name
 // and updates the last active session tracker.
-func saveSession(ctx wig.Context, name string) error {
+func saveSession(ctx wig.Context, name string, remark string) error {
 	ws := ctx.Editor.GetActiveWorkspace()
 	ws.ActiveSession = name
 
@@ -279,11 +257,18 @@ func saveSession(ctx wig.Context, name string) error {
 		Files:     append([]string{}, ws.Files...),
 		Root:      captureSessionNode(ws.Root, activeWin),
 	}
-	if existing, err := LoadSession(name); err == nil && existing.CreatedAt > 0 {
-		session.CreatedAt = existing.CreatedAt
+	if existing, err := LoadSession(name); err == nil {
+		if existing.CreatedAt > 0 {
+			session.CreatedAt = existing.CreatedAt
+		}
+		// Preserve existing remark if no new one is provided
+		if remark == "" {
+			remark = existing.Remark
+		}
 	} else {
 		session.CreatedAt = now
 	}
+	session.Remark = remark
 
 	if err := session.Save(); err != nil {
 		return err
@@ -320,7 +305,17 @@ func CmdMakeSession(ctx wig.Context) {
 		}
 	}
 
-	name := strings.TrimSpace(ctx.Char)
+	argStr := strings.TrimSpace(ctx.Char)
+	name := argStr
+	remark := ""
+	// Use strings.Fields to robustly handle multiple spaces between arguments
+	if parts := strings.Fields(argStr); len(parts) > 0 {
+		name = parts[0]
+		if len(parts) > 1 {
+			remark = strings.Join(parts[1:], " ")
+		}
+	}
+
 	ws := ctx.Editor.GetActiveWorkspace()
 	if name == "" {
 		if ws.ActiveSession != "" {
@@ -333,41 +328,26 @@ func CmdMakeSession(ctx wig.Context) {
 	}
 
 	// If the user explicitly provided a name and it already exists, prompt.
-	if ctx.Char != "" {
+	if argStr != "" {
 		if _, err := LoadSession(name); err == nil {
-			popup := &sessionConfirmPopup{
-				e:   ctx.Editor,
-				msg: fmt.Sprintf("Session %q exists. override? (y/n)", name),
-				onYes: func() {
-					if err := saveSession(ctx, name); err != nil {
-						ctx.Editor.EchoMessage("mksession error: " + err.Error())
-					}
-				},
-				onNo: func() {
-					ctx.Editor.EchoMessage("Session save cancelled.")
-				},
-			}
-			km := wig.KeyMap{
-				"y": func(ctx wig.Context) {
-					defer ctx.Editor.PopUi()
-					popup.onYes()
-				},
-				"n": func(ctx wig.Context) {
-					defer ctx.Editor.PopUi()
-					popup.onNo()
-				},
-				"Esc": func(ctx wig.Context) {
-					defer ctx.Editor.PopUi()
-					popup.onNo()
-				},
-			}
-			popup.keymap = wig.NewKeyHandler(wig.ModeKeyMap{wig.MODE_NORMAL: km})
-			ctx.Editor.PushUi(popup)
+			prompt := fmt.Sprintf("Session %q exists. overwrite? (y/n)", name)
+			ui.ConfirmInit(ctx, prompt, func() {
+				// Yes
+				if err := saveSession(ctx, name, remark); err != nil {
+					ctx.Editor.EchoMessage("mksession error: " + err.Error())
+				}
+			}, func() {
+				// No
+				ctx.Editor.EchoMessage("Session save skipped.")
+			}, func() {
+				// Esc/Cancel behaves like No
+				ctx.Editor.EchoMessage("Session save skipped.")
+			})
 			return
 		}
 	}
 
-	if err := saveSession(ctx, name); err != nil {
+	if err := saveSession(ctx, name, remark); err != nil {
 		ctx.Editor.EchoMessage("mksession error: " + err.Error())
 	}
 }
@@ -454,8 +434,12 @@ func CmdSessionList(ctx wig.Context) {
 			if s.UpdatedAt > 0 {
 				ts = time.Unix(s.UpdatedAt, 0).Format("01-02 15:04")
 			}
+			remarkStr := ""
+			if s.Remark != "" {
+				remarkStr = " - " + s.Remark
+			}
 			items = append(items, ui.PickerItem[string]{
-				Name:  fmt.Sprintf("[%s] %s", ts, s.Name),
+				Name:  fmt.Sprintf("[%s] %s (%d files)%s", ts, s.Name, len(s.Files), remarkStr),
 				Value: s.Name,
 			})
 		}
