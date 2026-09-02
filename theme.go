@@ -3,6 +3,7 @@ package wig
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -40,6 +41,13 @@ func ApplyTheme(name string) {
 		if EditorInst != nil {
 			EditorInst.LogError(err)
 		}
+		stylesMutex.Lock()
+		if styles == nil {
+			styles = map[string]tcell.Style{
+				"default": tcell.StyleDefault,
+			}
+		}
+		stylesMutex.Unlock()
 		return
 	}
 	currentTheme = t
@@ -85,7 +93,13 @@ func mergeThemes(base, child Theme) Theme {
 }
 
 func loadColors(name string) (Theme, error) {
-	colorThemeFile := EditorInst.RuntimeDir("themes", fmt.Sprintf("%s.toml", name))
+	var colorThemeFile string
+	if EditorInst != nil {
+		colorThemeFile = EditorInst.RuntimeDir("themes", fmt.Sprintf("%s.toml", name))
+	} else {
+		home, _ := os.UserHomeDir()
+		colorThemeFile = filepath.Join(home, ".config", "wig", "themes", fmt.Sprintf("%s.toml", name))
+	}
 	theme, err := os.ReadFile(colorThemeFile)
 	if err != nil {
 		return Theme{}, fmt.Errorf("failed to read theme file %s: %w", colorThemeFile, err)
@@ -217,11 +231,13 @@ func parsePalette(theme map[string]any) map[string]string {
 
 func Color(color string) tcell.Style {
 	stylesMutex.RLock()
-	s, ok := styles[color]
-	stylesMutex.RUnlock()
-	if ok {
-		return s
+	if styles != nil {
+		if s, ok := styles[color]; ok {
+			stylesMutex.RUnlock()
+			return s
+		}
 	}
+	stylesMutex.RUnlock()
 
 	var r tcell.Style
 	parts := strings.Split(color, ".")
@@ -230,11 +246,20 @@ func Color(color string) tcell.Style {
 		r = Color(ns)
 	} else {
 		stylesMutex.RLock()
-		r = styles["default"]
+		if styles != nil {
+			r = styles["default"]
+		} else {
+			r = tcell.StyleDefault
+		}
 		stylesMutex.RUnlock()
 	}
 
 	stylesMutex.Lock()
+	if styles == nil {
+		styles = map[string]tcell.Style{
+			"default": tcell.StyleDefault,
+		}
+	}
 	if s, ok := styles[color]; ok {
 		stylesMutex.Unlock()
 		return s
@@ -249,12 +274,16 @@ func FindColor(color string) (s tcell.Style, found bool) {
 	stylesMutex.RLock()
 	defer stylesMutex.RUnlock()
 
-	s, ok := styles[color]
-	if ok {
-		return s, true
+	if styles != nil {
+		if s, ok := styles[color]; ok {
+			return s, true
+		}
+		if def, ok := styles["default"]; ok {
+			return def, false
+		}
 	}
 
-	return styles["default"], false
+	return tcell.StyleDefault, false
 }
 
 func getColor(color string) tcell.Style {
