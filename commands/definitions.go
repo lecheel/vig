@@ -241,4 +241,15 @@ func init() {
 
 	wig.AllCommands["CmdDummyNA"] = wig.CmdDefinition{Desc: "Disable key", Fn: wig.CmdDummyNA}
 	wig.AllCommands["nop"] = wig.CmdDefinition{Desc: "NOP", Fn: wig.CmdDummyNA}
+
+	// Session management — :mksession, :session, :sessions
+	wig.AllCommands["CmdMakeSession"] = wig.CmdDefinition{Desc: "Save workspace session", Fn: CmdMakeSession}
+	wig.AllCommands["mksession"] = wig.CmdDefinition{Desc: "Save workspace session", Fn: CmdMakeSession}
+	wig.AllCommands["mks"] = wig.CmdDefinition{Desc: "Save workspace session", Fn: CmdMakeSession}
+	wig.AllCommands["CmdLoadSession"] = wig.CmdDefinition{Desc: "Load workspace session", Fn: CmdLoadSession}
+	wig.AllCommands["session"] = wig.CmdDefinition{Desc: "Load workspace session", Fn: CmdLoadSession}
+	wig.AllCommands["CmdSessionList"] = wig.CmdDefinition{Desc: "Session list", Fn: CmdSessionList}
+	wig.AllCommands["sessions"] = wig.CmdDefinition{Desc: "Session list", Fn: CmdSessionList}
+	wig.AllCommands["sl"] = wig.CmdDefinition{Desc: "Session list", Fn: CmdSessionList}
+	wig.AllCommands["CmdSessionToggle"] = wig.CmdDefinition{Desc: "Toggle session list popup", Fn: CmdSessionToggle}
 }

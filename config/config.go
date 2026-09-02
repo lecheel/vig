@@ -463,6 +463,7 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 				"t": commands.CmdThemeSelect,
 				"i": wig.CmdToggleIndentGuides,
 				"y": commands.CmdClipboardCopy,
+				"S": commands.CmdSessionToggle,
 				"p": wig.KeyMap{
 					"v": commands.CmdClipboardPaste,
 					"p": commands.CmdClipboardPasteAll,

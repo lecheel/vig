@@ -171,6 +171,10 @@ type Workspace struct {
 	// in the same window would only ever remember file3. See
 	// Editor.recordWorkspaceFile.
 	Files []string
+	// ActiveSession is the name of the session currently loaded into
+	// this workspace (if any). :mksession with no argument reuses this
+	// name, falling back to the project root name.
+	ActiveSession string
 }
 
 type Editor struct {
