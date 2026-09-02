@@ -534,6 +534,12 @@ func (e *Editor) EchoMessage(msg string) {
 	e.Message = msg
 }
 
+// ClearYanks empties the yank history (registers). Used when loading a
+// new session to prevent stale yanks referencing closed buffers.
+func (e *Editor) ClearYanks() {
+	e.Yanks = List[yank]{}
+}
+
 func (e *Editor) Redraw() {
 	e.RedrawCh <- 1
 }

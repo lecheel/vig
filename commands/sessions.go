@@ -382,6 +382,24 @@ func loadSessionByName(ctx wig.Context, name string) {
 		return
 	}
 
+	// Properly close existing real file buffers to ensure loading a session gives
+	// a completely fresh state (resetting undo history, releasing memory, and LSP connections).
+	// Special buffers (like [Messages]) are kept.
+	var keepBuffers []*wig.Buffer
+	for _, b := range ctx.Editor.Buffers {
+		if strings.HasPrefix(b.FilePath, "[") {
+			keepBuffers = append(keepBuffers, b)
+		} else {
+			ctx.Editor.Lsp.DidClose(b)
+		}
+	}
+	ctx.Editor.Buffers = keepBuffers
+
+	// Clear global marks and yanks (registers) so they don't point to
+	// dangling buffers or carry over state from the previous session.
+	ctx.Editor.Marks = make(map[rune]wig.Mark)
+	ctx.Editor.ClearYanks()
+
 	// Pre-open every file in the session history so they appear in the
 	// buffer picker even if no window shows them.
 	for _, fp := range session.Files {
