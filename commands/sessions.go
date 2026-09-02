@@ -100,6 +100,29 @@ func ListSessions() ([]*Session, error) {
 	return sessions, nil
 }
 
+// sessionConfirmPopup is a minimal UI component that prompts the user
+// for a yes/no decision directly on the statusline, avoiding the heavy
+// picker popup for a simple confirmation.
+type sessionConfirmPopup struct {
+	e      *wig.Editor
+	keymap *wig.KeyHandler
+	msg    string
+	onYes  func()
+	onNo   func()
+}
+
+func (c *sessionConfirmPopup) Mode() wig.Mode          { return wig.MODE_NORMAL }
+func (c *sessionConfirmPopup) Keymap() *wig.KeyHandler { return c.keymap }
+func (c *sessionConfirmPopup) Plane() wig.RenderPlane  { return wig.PlaneEditor }
+
+func (c *sessionConfirmPopup) Render(view wig.View) {
+	w, h := view.Size()
+	st := wig.Color("ui.statusline")
+	// Clear the statusline and render the confirmation message.
+	view.SetContent(0, h-1, strings.Repeat(" ", w), st)
+	view.SetContent(0, h-1, " "+c.msg, st)
+}
+
 func DeleteSession(name string) error {
 	err := os.Remove(filepath.Join(sessionsDir(), name+".json"))
 	if err != nil {
@@ -241,10 +264,51 @@ func buildSessionTree(
 	return &wig.WinNode{Dir: sn.Dir, Children: children}
 }
 
+// saveSession writes the current workspace state to the given session name
+// and updates the last active session tracker.
+func saveSession(ctx wig.Context, name string) error {
+	ws := ctx.Editor.GetActiveWorkspace()
+	ws.ActiveSession = name
+
+	activeWin := ctx.Editor.ActiveWindow()
+	now := time.Now().Unix()
+	session := &Session{
+		Name:      name,
+		UpdatedAt: now,
+		Layout:    ws.Layout,
+		Files:     append([]string{}, ws.Files...),
+		Root:      captureSessionNode(ws.Root, activeWin),
+	}
+	if existing, err := LoadSession(name); err == nil && existing.CreatedAt > 0 {
+		session.CreatedAt = existing.CreatedAt
+	} else {
+		session.CreatedAt = now
+	}
+
+	if err := session.Save(); err != nil {
+		return err
+	}
+
+	if err := SaveLastActiveSession(name); err != nil {
+		ctx.Editor.LogMessage("Failed to save last session state: " + err.Error())
+	}
+
+	count := 0
+	for _, w := range ws.Windows {
+		if w != nil && w.Buffer() != nil {
+			count++
+		}
+	}
+	ctx.Editor.EchoMessage(fmt.Sprintf("Session %q saved (%d windows, %d files)", name, count, len(session.Files)))
+	return nil
+}
+
 // CmdMakeSession saves the active workspace's layout, open files, and
 // cursor positions to ~/.config/wig/sessions/<name>.json. With no
 // argument the session is named after the workspace's last loaded
 // session, the project root directory, or "default" if neither is known.
+// If a name is provided and a session with that name already exists,
+// a prompt is shown to confirm overwriting.
 func CmdMakeSession(ctx wig.Context) {
 	// Prevent data loss: saving a session doesn't save unsaved buffer
 	// contents to disk. If a buffer is dirty, saving the session would
@@ -267,39 +331,45 @@ func CmdMakeSession(ctx wig.Context) {
 			name = "default"
 		}
 	}
-	ws.ActiveSession = name
 
-	activeWin := ctx.Editor.ActiveWindow()
-	now := time.Now().Unix()
-	session := &Session{
-		Name:      name,
-		UpdatedAt: now,
-		Layout:    ws.Layout,
-		Files:     append([]string{}, ws.Files...),
-		Root:      captureSessionNode(ws.Root, activeWin),
-	}
-	if existing, err := LoadSession(name); err == nil && existing.CreatedAt > 0 {
-		session.CreatedAt = existing.CreatedAt
-	} else {
-		session.CreatedAt = now
-	}
-
-	if err := session.Save(); err != nil {
-		ctx.Editor.EchoMessage("mksession error: " + err.Error())
-		return
-	}
-
-	if err := SaveLastActiveSession(name); err != nil {
-		ctx.Editor.LogMessage("Failed to save last session state: " + err.Error())
-	}
-
-	count := 0
-	for _, w := range ws.Windows {
-		if w != nil && w.Buffer() != nil {
-			count++
+	// If the user explicitly provided a name and it already exists, prompt.
+	if ctx.Char != "" {
+		if _, err := LoadSession(name); err == nil {
+			popup := &sessionConfirmPopup{
+				e:   ctx.Editor,
+				msg: fmt.Sprintf("Session %q exists. override? (y/n)", name),
+				onYes: func() {
+					if err := saveSession(ctx, name); err != nil {
+						ctx.Editor.EchoMessage("mksession error: " + err.Error())
+					}
+				},
+				onNo: func() {
+					ctx.Editor.EchoMessage("Session save cancelled.")
+				},
+			}
+			km := wig.KeyMap{
+				"y": func(ctx wig.Context) {
+					defer ctx.Editor.PopUi()
+					popup.onYes()
+				},
+				"n": func(ctx wig.Context) {
+					defer ctx.Editor.PopUi()
+					popup.onNo()
+				},
+				"Esc": func(ctx wig.Context) {
+					defer ctx.Editor.PopUi()
+					popup.onNo()
+				},
+			}
+			popup.keymap = wig.NewKeyHandler(wig.ModeKeyMap{wig.MODE_NORMAL: km})
+			ctx.Editor.PushUi(popup)
+			return
 		}
 	}
-	ctx.Editor.EchoMessage(fmt.Sprintf("Session %q saved (%d windows, %d files)", name, count, len(session.Files)))
+
+	if err := saveSession(ctx, name); err != nil {
+		ctx.Editor.EchoMessage("mksession error: " + err.Error())
+	}
 }
 
 // CmdLoadSession restores a named session. With no argument, opens the
