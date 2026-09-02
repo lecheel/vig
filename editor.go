@@ -250,6 +250,7 @@ func (e *Editor) OpenFile(path string) (*Buffer, error) {
 	}
 	if fbuf := e.BufferFindByFilePath(path, false); fbuf != nil {
 		e.recordWorkspaceFile(path)
+		e.showInActiveWindowIfEmpty(fbuf)
 		return fbuf, nil
 	}
 
@@ -276,6 +277,14 @@ func (e *Editor) OpenFile(path string) (*Buffer, error) {
 	} else {
 		e.Buffers = append(e.Buffers, buf)
 	}
+	// The block above only reattaches windows editor-wide when the whole
+	// editor happened to have exactly one buffer total (the startup case).
+	// That leaves any window whose own buffer is nil or an unmodified
+	// "[No Name]" placeholder — e.g. a freshly created workspace's window,
+	// or a workspace seeded with its own placeholder buffer — never
+	// getting shown the file it just opened. Fix that per-window instead
+	// of per-editor.
+	e.showInActiveWindowIfEmpty(buf)
 
 	e.Lsp.DidOpen(buf)
 
@@ -309,6 +318,27 @@ func (e *Editor) recordWorkspaceFile(fp string) {
 	}
 	ws.Files = append(ws.Files, fp)
 }
+
+// showInActiveWindowIfEmpty shows buf in the active window of the active
+// workspace when that window currently has no buffer at all, or only an
+// unmodified "[No Name]" placeholder. This keeps opening a file from ever
+// leaving a window with a nil buffer (see the nil-buf guard in
+// HandleInput), without disturbing windows that already show real,
+// unrelated content — e.g. WorkspaceCache.RestoreWorkspace intentionally
+// loads background buffers via OpenFile without wanting them to steal the
+// active window's buffer, which this leaves untouched since that window's
+// buffer is neither nil nor an unmodified "[No Name]" at that point.
+func (e *Editor) showInActiveWindowIfEmpty(buf *Buffer) {
+	win := e.ActiveWindow()
+	if win == nil {
+		return
+	}
+	cur := win.Buffer()
+	if cur == nil || (cur.FilePath == "[No Name]" && !cur.Dirty) {
+		win.ShowBuffer(buf)
+	}
+}
+
 func (e *Editor) NewContext() Context {
 	return Context{
 		Editor: e,

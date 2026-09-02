@@ -763,14 +763,16 @@ func CmdKillBuffer(ctx Context) {
 
 	// Save the cursor position of the buffer being killed to position.toml
 	if buf.FilePath != "" && !strings.HasPrefix(buf.FilePath, "[") {
-		posCache := LoadPositionCache()
-		cur := WindowCursorGet(ctx.Editor.ActiveWindow(), buf)
-		posCache.Files[buf.FilePath] = PositionEntry{
-			Line:      cur.Line,
-			OpenCount: buf.OpenCount,
-			Timestamp: time.Now().Unix(),
+		if aw := ctx.Editor.ActiveWindow(); aw != nil {
+			posCache := LoadPositionCache()
+			cur := WindowCursorGet(aw, buf)
+			posCache.Files[buf.FilePath] = PositionEntry{
+				Line:      cur.Line,
+				OpenCount: buf.OpenCount,
+				Timestamp: time.Now().Unix(),
+			}
+			posCache.Save()
 		}
-		posCache.Save()
 	}
 
 	// Remove any marks associated with the killed buffer
@@ -828,7 +830,7 @@ func CmdKillBuffer(ctx Context) {
 		}
 
 		for _, win := range ws.Windows {
-			if win.Buffer() == buf {
+			if win != nil && win.Buffer() == buf {
 				nctx := ctx.Editor.NewContext()
 				nctx.Buf = wsReplacement
 				nctx.Win = win
@@ -836,8 +838,10 @@ func CmdKillBuffer(ctx Context) {
 			}
 		}
 
-		if i == ctx.Editor.ActiveWorkspace && ctx.Editor.ActiveWindow().Buffer() == buf {
-			ctx.Buf = wsReplacement
+		if i == ctx.Editor.ActiveWorkspace {
+			if aw := ctx.Editor.ActiveWindow(); aw != nil && aw.Buffer() == buf {
+				ctx.Buf = wsReplacement
+			}
 		}
 	}
 
@@ -864,6 +868,9 @@ func CmdKillBuffer(ctx Context) {
 		for i := range ctx.Editor.Workspaces {
 			ws := &ctx.Editor.Workspaces[i]
 			ws.Windows = slices.DeleteFunc(ws.Windows, func(win *Window) bool {
+				if win == nil {
+					return false
+				}
 				if len(ws.Windows) == 1 {
 					return false
 				}
