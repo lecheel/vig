@@ -250,11 +250,32 @@ func saveSession(ctx wig.Context, name string, remark string) error {
 
 	activeWin := ctx.Editor.ActiveWindow()
 	now := time.Now().Unix()
+
+	// Ensure all buffers currently shown in workspace windows are present in Files
+	files := append([]string{}, ws.Files...)
+	for _, w := range ws.Windows {
+		if w != nil && w.Buffer() != nil {
+			fp := w.Buffer().FilePath
+			if fp != "" && !strings.HasPrefix(fp, "[") {
+				found := false
+				for _, f := range files {
+					if f == fp {
+						found = true
+						break
+					}
+				}
+				if !found {
+					files = append(files, fp)
+				}
+			}
+		}
+	}
+
 	session := &Session{
 		Name:      name,
 		UpdatedAt: now,
 		Layout:    ws.Layout,
-		Files:     append([]string{}, ws.Files...),
+		Files:     files,
 		Root:      captureSessionNode(ws.Root, activeWin),
 	}
 	if existing, err := LoadSession(name); err == nil {
@@ -436,7 +457,7 @@ func loadSessionByName(ctx wig.Context, name string) {
 		ctx.Editor.LogMessage("Failed to save last session state: " + err.Error())
 	}
 
-	ctx.Editor.EchoMessage(fmt.Sprintf("Session %q loaded (%d windows)", name, len(newWins)))
+	// ctx.Editor.EchoMessage(fmt.Sprintf("Session %q loaded (%d windows)", name, len(newWins)))
 }
 
 // CmdSessionList opens a popup listing every saved session. Enter
@@ -513,6 +534,9 @@ func CmdSessionList(ctx wig.Context) {
 			return
 		}
 		_ = DeleteSession(item.Value)
+		if ws := ctx.Editor.GetActiveWorkspace(); ws != nil && ws.ActiveSession == item.Value {
+			ws.ActiveSession = ""
+		}
 		picker.SetItems(refreshItems())
 		ctx.Editor.Redraw()
 	})

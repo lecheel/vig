@@ -297,21 +297,6 @@ func main() {
 		}
 	}()
 
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				renderer.Stop()
-				tscreen.Fini()
-				fmt.Fprintf(os.Stderr, "wig: rendering error: %v\n", r)
-				os.Exit(1)
-			}
-		}()
-		for {
-			<-editor.RedrawCh
-			renderer.Render()
-		}
-	}()
-
 	<-editor.ExitCh
 
 	// Auto-save session on exit if enabled, no dirty buffers exist, and
