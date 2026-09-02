@@ -89,7 +89,7 @@ Moves the active window from the current workspace to another:
 - **Filtering**: Ignores scratch/system buffers (e.g., `[Messages]`, `[git]`, `[No Name]`) and deleted files.
 - **Split Preservation**: `Windows` records the exact on-screen window order.
 - **History Preservation**: `ws.Files` contains all files opened during the session, appended chronologically via `recordWorkspaceFile`.
-- **Protection**: Empty/unmodified workspaces from prior sessions are preserved in the cache without being overwritten.
+- **Stale State Cleanup**: `CaptureAll` explicitly clears the existing in-memory cache before capturing. If a workspace was emptied during the session (e.g., all buffers closed), its stale entry is deleted from the cache rather than being preserved, preventing ghost files from reappearing on the next restart.
 
 ### 5.2. Restoring State (`RestoreWorkspace` / `RestoreAll`)
 - **Split Rebuilding**: Recreates `Window` instances and builds the `WinNode` split tree from `entry.Windows`.
@@ -109,6 +109,6 @@ Moves the active window from the current workspace to another:
 
 1. **Multi-Project Isolation**: Workspaces for different repositories or directories do not conflict or overwrite each other.
 2. **Buffer Deduplication**: Global buffers (`editor.BufferFindByFilePath`) are reused across workspaces without re-reading from disk.
-3. **Buffer Destruction on `:q`**: Killing a buffer (`CmdKillBuffer`) safely substitutes a replacement across all workspaces and prunes it from `ws.Files` and `ws.Root`.
+3. **Buffer Destruction on `:q`**: Killing a buffer (`CmdKillBuffer`) determines the replacement buffer *per workspace*. If a workspace has no other files in its history, it safely falls back to a `[No Name]` buffer instead of shifting to a random global buffer (e.g., preventing `ws3` from stealing a file open in `ws1`). The destroyed buffer's file path is pruned from all workspaces' `ws.Files` history and `ws.Root`.
 4. **Legacy Fallback**: If a project-specific workspace cache does not yet exist, `LoadWorkspaceCache` transparently checks legacy global files (`workspaces.json`) for seamless upgrades.
 5. **Manual Save with Disabled Auto-Restore**: `ws1` is a special workspace. If `save_workspaces` is `false` in the config but the user manually saves using `:wssave`, the rest of the workspaces are written to the cache file. However, because auto-restore is disabled, `ws1` will ignore this on the next startup, and running `./wig` will result in an empty state (nothing loaded).
