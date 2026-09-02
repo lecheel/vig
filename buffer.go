@@ -29,7 +29,7 @@ func (m Mode) String() string {
 		return "VIS LINE"
 	}
 	if m == MODE_VISUAL_BLOCK {
-		return "VIS BLOCK"
+		return "COL"
 	}
 	return "VIS"
 }

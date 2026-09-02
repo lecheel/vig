@@ -70,7 +70,6 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 		}
 
 		lines := strings.Split(strings.TrimSpace(string(stdout)), "\n")
-		sort.Strings(lines)
 
 		for _, l := range lines {
 			l = strings.TrimSpace(l)
@@ -103,6 +102,22 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 				FgColor: color,
 			})
 		}
+
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].Value == ".." {
+				return true
+			}
+			if items[j].Value == ".." {
+				return false
+			}
+			isDirI := strings.HasSuffix(items[i].Name, "/")
+			isDirJ := strings.HasSuffix(items[j].Name, "/")
+			if isDirI != isDirJ {
+				return isDirI
+			}
+			return items[i].Name < items[j].Name
+		})
+
 		return items
 	}
 
