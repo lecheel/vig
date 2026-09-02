@@ -18,7 +18,7 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 		return
 	}
 	currentDir := rootDir
-	isTreeView := false
+	isTreeView := ctx.Editor.Config.FilePickerView != "files"
 
 	buildFlatItems := func() []ui.PickerItem[string] {
 		cmd := exec.Command("rg", "--files")
@@ -145,8 +145,21 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 		ctx.Editor.ActiveWindow().VisitBuffer(ctx)
 	}
 
-	picker := ui.PickerInit(ctx.Editor, action, buildFlatItems())
-	picker.SetTitle("Find File (Tab: Tree)")
+	// Initialize picker with the correct initial items based on default view
+	var initialItems []ui.PickerItem[string]
+	if isTreeView {
+		initialItems = buildTreeItems()
+	} else {
+		initialItems = buildFlatItems()
+	}
+
+	picker := ui.PickerInit(ctx.Editor, action, initialItems)
+
+	if isTreeView {
+		picker.SetTitle("Directory Tree (Tab: Files)")
+	} else {
+		picker.SetTitle("Find File (Tab: Tree)")
+	}
 
 	picker.OnKey("Tab", func(ctx wig.Context) {
 		isTreeView = !isTreeView

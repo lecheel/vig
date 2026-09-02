@@ -66,6 +66,7 @@ type EditorSettings struct {
 	WhichKeyFormat      *string `toml:"which_key_format"`
 	SameStatuslineColor *bool   `toml:"same_statusline_color"`
 	StatuslineStyle     *string `toml:"statusline_style"`
+	FilePickerView      *string `toml:"file_picker_view"`
 	NotifyOnSave        *bool   `toml:"notify_on_save"`
 	GitAiCommit         *bool   `toml:"git_ai_commit"`
 	GitAiTool           *string `toml:"git_ai_tool"`
@@ -110,6 +111,7 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		SameStatuslineColor: false,
 		SaveWorkspaces:      false,
 		StatuslineStyle:     "plain",
+		FilePickerView:      "files",
 	}
 	userMap := wig.ModeKeyMap{
 		wig.MODE_NORMAL:       wig.KeyMap{},
@@ -184,6 +186,9 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	}
 	if cfg.Editor.StatuslineStyle != nil {
 		editorCfg.StatuslineStyle = *cfg.Editor.StatuslineStyle
+	}
+	if cfg.Editor.FilePickerView != nil {
+		editorCfg.FilePickerView = *cfg.Editor.FilePickerView
 	}
 	commands.NotifyOnSave = false
 	commands.GitAiCommit = false
