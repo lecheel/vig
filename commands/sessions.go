@@ -335,6 +335,7 @@ func CmdSessionList(ctx wig.Context) {
 
 	action := func(p *ui.UiPicker[string], i *ui.PickerItem[string]) {
 		defer ctx.Editor.PopUi()
+		sessionPopupActive = false
 		if i == nil {
 			// No session selected — save current as a new session named
 			// by the picker's input (skipped if input is empty).
@@ -354,6 +355,16 @@ func CmdSessionList(ctx wig.Context) {
 	picker := ui.PickerInit(ctx.Editor, action, refreshItems())
 	picker.SetTitle("Sessions [Enter: Load/Save] [Delete: Remove] [Esc: Close]")
 
+	// Ensure the active flag is cleared if the user closes the popup
+	// via Esc/q instead of selecting an item.
+	closePopup := func(ctx wig.Context) {
+		sessionPopupActive = false
+		ctx.Editor.PopUi()
+	}
+	picker.OnKey("Esc", closePopup)
+	picker.OnKey("q", closePopup)
+	picker.OnKey("ctrl+c", closePopup)
+
 	picker.OnKey("Delete", func(ctx wig.Context) {
 		item := picker.GetActiveItem()
 		if item == nil {
@@ -363,15 +374,25 @@ func CmdSessionList(ctx wig.Context) {
 		picker.SetItems(refreshItems())
 		ctx.Editor.Redraw()
 	})
+
+	sessionPopupActive = true
 }
 
-// CmdSessionToggle opens the session list popup if no UI component is
-// currently on top, or pops the topmost component otherwise. Bound to
-// a single key (e.g. <leader>S) this gives "toggle" behavior: pressing
-// the key once shows the list, pressing it again hides it.
+// sessionPopupActive tracks whether the session list is currently
+// displayed. We can't rely on UiComponents because <leader> leaves the
+// WhichKey popup on the stack while the command runs, so checking
+// UiComponents would see WhichKey and close it instead of opening the
+// session list.
+var sessionPopupActive = false
+
+// CmdSessionToggle opens the session list popup if it isn't already
+// open, or closes it if it is. Bound to a single key (e.g. <leader>S)
+// this gives "toggle" behavior: pressing the key once shows the list,
+// pressing it again hides it.
 func CmdSessionToggle(ctx wig.Context) {
-	if len(ctx.Editor.UiComponents) > 0 {
+	if sessionPopupActive {
 		ctx.Editor.PopUi()
+		sessionPopupActive = false
 		return
 	}
 	CmdSessionList(ctx)
