@@ -265,10 +265,6 @@ func (e *Editor) OpenFile(path string) (*Buffer, error) {
 		buf = NewBuffer()
 		buf.FilePath = path
 	}
-
-	// Replace the initial empty "[No Name]" buffer if it's unmodified.
-	// This prevents a useless [No Name] buffer from lingering in the
-	// background after the user opens a real file.
 	if len(e.Buffers) == 1 && e.Buffers[0].FilePath == "[No Name]" && !e.Buffers[0].Dirty {
 		e.Buffers[0] = buf
 		// Update any windows that were showing the old [No Name] buffer

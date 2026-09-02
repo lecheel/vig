@@ -69,8 +69,25 @@ func CmdBufferPicker(ctx wig.Context) {
 		if b.Dirty {
 			color = "ui.popup.title"
 		}
+
+		// Find which workspaces currently have this buffer open in a window
+		var wsTags []string
+		for i, ws := range ctx.Editor.Workspaces {
+			for _, win := range ws.Windows {
+				if win.Buffer() == b {
+					wsTags = append(wsTags, fmt.Sprintf("ws%d", i))
+					break // Only add the workspace once, even if it has multiple splits for the same buffer
+				}
+			}
+		}
+
+		name := b.GetName()
+		if len(wsTags) > 0 {
+			name = fmt.Sprintf("[%s] %s", strings.Join(wsTags, ","), name)
+		}
+
 		items = append(items, ui.PickerItem[*wig.Buffer]{
-			Name:    b.GetName(),
+			Name:    name,
 			Value:   b,
 			Active:  b == ctx.Editor.ActiveBuffer(),
 			FgColor: color,
@@ -1220,4 +1237,40 @@ func CmdInfo(ctx wig.Context) {
 	)
 	ui.Notify(msg, ui.NotifyInfo)
 	ctx.Editor.EchoMessage(msg)
+}
+
+func CmdWorkspacesInfo(ctx wig.Context) {
+	buf := ctx.Editor.BufferFindByFilePath("[Workspaces]", true)
+	buf.ResetLines()
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Active Workspace: %d\n\n", ctx.Editor.ActiveWorkspace))
+	for i, ws := range ctx.Editor.Workspaces {
+		if len(ws.Windows) == 0 && len(ws.Files) == 0 && i != ctx.Editor.ActiveWorkspace {
+			continue
+		}
+		sb.WriteString(fmt.Sprintf("Workspace %d:\n", i))
+		activeFile := "None"
+		if ws.ActiveWindow != nil && ws.ActiveWindow.Buffer() != nil {
+			activeFile = ws.ActiveWindow.Buffer().GetName()
+		}
+		sb.WriteString(fmt.Sprintf("  Active File: %s\n", activeFile))
+		layoutStr := "Horizontal"
+		if ws.Layout == wig.LayoutVertical {
+			layoutStr = "Vertical"
+		}
+		sb.WriteString(fmt.Sprintf("  Layout: %s\n", layoutStr))
+		sb.WriteString("  Files:\n")
+		if len(ws.Files) == 0 {
+			sb.WriteString("    (none)\n")
+		} else {
+			for _, f := range ws.Files {
+				sb.WriteString(fmt.Sprintf("    - %s\n", f))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	buf.Append(sb.String())
+	ctx.Editor.ActiveWindow().ShowBuffer(buf)
 }

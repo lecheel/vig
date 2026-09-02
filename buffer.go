@@ -72,10 +72,9 @@ type Buffer struct {
 	BlameLines        map[int]BlameInfo
 	BlameWidth        int
 	VisualBlockInsert *VisualBlockInsertState
-
-	OpenCount int
-	rootDir   string
-	Dirty     bool
+	OpenCount         int
+	rootDir           string
+	Dirty             bool
 }
 
 func NewBuffer() *Buffer {
