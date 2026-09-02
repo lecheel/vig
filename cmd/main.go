@@ -184,15 +184,7 @@ func main() {
 		}
 	} else {
 		wig.CmdNewBuffer(editor.NewContext())
-
-		if editor.Config.SaveWorkspaces {
-			wsCache := wig.LoadWorkspaceCache(editor.Projects.GetRoot())
-			if len(wsCache.Workspaces) > 0 {
-				wsCache.RestoreAll(editor)
-			}
-		}
 	}
-
 	if openGitStatus {
 		commands.CmdGitView(editor.NewContext())
 	} else if openGitFiles {
@@ -300,14 +292,6 @@ func main() {
 			Timestamp: time.Now().Unix(),
 		}
 		posCache.Save()
-	}
-
-	// Save workspace state (files per workspace) for session persistence
-	if editor.Config.SaveWorkspaces {
-		root := editor.Projects.GetRoot()
-		wsCache := wig.LoadWorkspaceCache(root)
-		wsCache.CaptureAll(editor)
-		wsCache.Save(root)
 	}
 
 	// Stop the renderer before finalizing the screen to prevent

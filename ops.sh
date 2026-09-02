@@ -15,8 +15,6 @@ if [ -n "$(git status --porcelain -uno 2>/dev/null)" ]; then
     DIRTY="true"
 fi
 
-# go test -v -run "TestCmdKillBufferWorkspaceIsolation|TestWorkspaceCacheStaleCleanup|TestWorkspaceCacheCaptureAndRestore"
-
 LDFLAGS="-X github.com/firstrow/wig/version.Version=${GIT_VERSION} -X github.com/firstrow/wig/version.CommitHash=${COMMIT_HASH} -X github.com/firstrow/wig/version.Dirty=${DIRTY}"
 
 echo "  commit: ${COMMIT_HASH} version: ${GIT_VERSION:-none} (dirty=${DIRTY})"

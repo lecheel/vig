@@ -12,24 +12,22 @@ import (
 // StatuslineData aggregates all buffer, editor, and workspace information
 // needed to render any statusline style in a single pass.
 type StatuslineData struct {
-	Mode        wig.Mode
-	ModeName    string
-	BufName     string
-	IsDirty     bool
-	Macro       string
-	Message     string
-	Line        int
-	Char        int
-	Scope       string
-	WsIndicator string
-	WsNum       int
-	Filetype    string
-	BufIdx      int
-	BufTotal    int
-	KeyCount    int
-	GitBranch   string
-	HasBranch   bool
-	IsActive    bool
+	Mode      wig.Mode
+	ModeName  string
+	BufName   string
+	IsDirty   bool
+	Macro     string
+	Message   string
+	Line      int
+	Char      int
+	Scope     string
+	Filetype  string
+	BufIdx    int
+	BufTotal  int
+	KeyCount  int
+	GitBranch string
+	HasBranch bool
+	IsActive  bool
 }
 
 func extractStatuslineData(e *wig.Editor, win *wig.Window) *StatuslineData {
@@ -40,11 +38,6 @@ func extractStatuslineData(e *wig.Editor, win *wig.Window) *StatuslineData {
 
 	active := win == e.ActiveWindow()
 	cur := wig.CursorGet(e, buf)
-
-	wsIndicator := "🔒"
-	if e.Config.SaveWorkspaces {
-		wsIndicator = "💾"
-	}
 
 	funcName := ""
 	if ts, ok := buf.Highlighter.(*wig.TreeSitterHighlighter); ok && ts != nil {
@@ -68,24 +61,22 @@ func extractStatuslineData(e *wig.Editor, win *wig.Window) *StatuslineData {
 	}
 
 	return &StatuslineData{
-		Mode:        buf.Mode(),
-		ModeName:    strings.ToUpper(buf.Mode().String()),
-		BufName:     buf.GetName(),
-		IsDirty:     buf.Dirty,
-		Macro:       macro,
-		Message:     msg,
-		Line:        cur.Line + 1,
-		Char:        cur.Char + 1,
-		Scope:       trimScope(funcName),
-		WsIndicator: wsIndicator,
-		WsNum:       e.ActiveWorkspace,
-		Filetype:    detectFiletypeLabel(buf.GetName()),
-		BufIdx:      bufferIndex(e, buf),
-		BufTotal:    len(e.Buffers),
-		KeyCount:    e.Keys.GetCount(),
-		GitBranch:   branch,
-		HasBranch:   hasBranch,
-		IsActive:    active,
+		Mode:      buf.Mode(),
+		ModeName:  strings.ToUpper(buf.Mode().String()),
+		BufName:   buf.GetName(),
+		IsDirty:   buf.Dirty,
+		Macro:     macro,
+		Message:   msg,
+		Line:      cur.Line + 1,
+		Char:      cur.Char + 1,
+		Scope:     trimScope(funcName),
+		Filetype:  detectFiletypeLabel(buf.GetName()),
+		BufIdx:    bufferIndex(e, buf),
+		BufTotal:  len(e.Buffers),
+		KeyCount:  e.Keys.GetCount(),
+		GitBranch: branch,
+		HasBranch: hasBranch,
+		IsActive:  active,
 	}
 }
 
@@ -146,7 +137,7 @@ func renderPlain(
 	}
 	view.SetContent(2, h, leftSide, st)
 
-	rightSide := fmt.Sprintf("%s[ws:%d] %d:%d", d.WsIndicator, d.WsNum, d.Line, d.Char)
+	rightSide := fmt.Sprintf("%d:%d", d.Line, d.Char)
 	if d.Scope != "" {
 		scope := d.Scope
 		if len(scope) > 30 {
@@ -345,12 +336,6 @@ func renderPowerline(
 			fg:   bufFg, bg: bufBg,
 		})
 	}
-
-	wsBg, wsFg := plColor("ui.statusline.powerline.ws", tcell.NewRGBColor(38, 79, 120), tcell.NewRGBColor(210, 210, 230))
-	rightSegs = append(rightSegs, segment{
-		text: fmt.Sprintf(" %s [ws:%d] ", d.WsIndicator, d.WsNum),
-		fg:   wsFg, bg: wsBg,
-	})
 
 	if d.KeyCount > 1 {
 		rightSegs = append(rightSegs, segment{

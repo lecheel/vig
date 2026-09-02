@@ -70,21 +70,7 @@ func CmdBufferPicker(ctx wig.Context) {
 			color = "ui.popup.title"
 		}
 
-		// Find which workspaces currently have this buffer open in a window
-		var wsTags []string
-		for i, ws := range ctx.Editor.Workspaces {
-			for _, win := range ws.Windows {
-				if win.Buffer() == b {
-					wsTags = append(wsTags, fmt.Sprintf("ws%d", i))
-					break // Only add the workspace once, even if it has multiple splits for the same buffer
-				}
-			}
-		}
-
 		name := b.GetName()
-		if len(wsTags) > 0 {
-			name = fmt.Sprintf("[%s] %s", strings.Join(wsTags, ","), name)
-		}
 
 		items = append(items, ui.PickerItem[*wig.Buffer]{
 			Name:    name,
@@ -1031,87 +1017,6 @@ func CmdViewDefinitionOtherWindow(ctx wig.Context) {
 	ctx.Editor.SetActiveWindow(curWin)
 }
 
-// CmdWorkspaceListPicker opens a fuzzy picker listing every workspace
-// alongside the files it contains. Selecting a workspace captures the
-// current workspace state into the persistence cache, switches to the
-// target workspace, and restores its files from cache if it is empty.
-//
-// The picker also supports pressing Delete to clear a workspace's
-// cached entry.
-func CmdWorkspaceListPicker(ctx wig.Context) {
-	cache := wig.LoadWorkspaceCache()
-	cache.CaptureAll(ctx.Editor)
-
-	buildItems := func() []ui.PickerItem[int] {
-		items := make([]ui.PickerItem[int], 0, len(ctx.Editor.Workspaces))
-		for i := 0; i < len(ctx.Editor.Workspaces); i++ {
-			label := fmt.Sprintf("ws%d", i)
-
-			entry := cache.Workspaces[i]
-			var filesStr string
-			if len(entry.Files) == 0 {
-				filesStr = "(empty)"
-			} else {
-				names := make([]string, 0, len(entry.Files))
-				for _, f := range entry.Files {
-					names = append(names, filepath.Base(f))
-				}
-				filesStr = strings.Join(names, " ")
-			}
-
-			items = append(items, ui.PickerItem[int]{
-				Name:   fmt.Sprintf("%s: %s", label, filesStr),
-				Value:  i,
-				Active: i == ctx.Editor.ActiveWorkspace,
-			})
-		}
-		return items
-	}
-
-	action := func(p *ui.UiPicker[int], i *ui.PickerItem[int]) {
-		defer ctx.Editor.PopUi()
-		if i == nil {
-			return
-		}
-
-		target := i.Value
-		if target == ctx.Editor.ActiveWorkspace {
-			return
-		}
-
-		// Capture current workspace before switching
-		cache.CaptureWorkspace(ctx.Editor.ActiveWorkspace, ctx.Editor.GetActiveWorkspace())
-		cache.Save()
-
-		// Ensure target workspace has at least one window
-		ws := ctx.Editor.GetWorkspace(target)
-		if len(ws.Windows) == 0 {
-			win := wig.CreateWindow(nil)
-			ws.Windows = []*wig.Window{win}
-			ws.Num = target
-			ws.ActiveWindow = win
-			ws.Root = wig.LeafNode(win)
-		}
-
-		ctx.Editor.ActiveWorkspace = target
-
-		// Restore files from cache if workspace is empty
-		cache.RestoreWorkspace(ctx.Editor, target)
-		ctx.Editor.Redraw()
-	}
-
-	picker := ui.PickerInit(ctx.Editor, action, buildItems())
-	picker.SetTitle("Workspaces [Enter: Switch]")
-}
-
-// CmdWorkspaceSave captures and saves all workspaces to disk manually.
-func CmdWorkspaceSave(ctx wig.Context) {
-	wsCache := wig.LoadWorkspaceCache()
-	wsCache.CaptureAll(ctx.Editor)
-	wsCache.Save()
-	ctx.Editor.EchoMessage("Workspaces saved")
-}
-
 func CmdLspShowSignature(ctx wig.Context) {
 	cur := wig.ContextCursorGet(ctx)
 	sign := ctx.Editor.Lsp.Signature(ctx.Buf, *cur)
@@ -1237,40 +1142,4 @@ func CmdInfo(ctx wig.Context) {
 	)
 	ui.Notify(msg, ui.NotifyInfo)
 	ctx.Editor.EchoMessage(msg)
-}
-
-func CmdWorkspacesInfo(ctx wig.Context) {
-	buf := ctx.Editor.BufferFindByFilePath("[Workspaces]", true)
-	buf.ResetLines()
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Active Workspace: %d\n\n", ctx.Editor.ActiveWorkspace))
-	for i, ws := range ctx.Editor.Workspaces {
-		if len(ws.Windows) == 0 && len(ws.Files) == 0 && i != ctx.Editor.ActiveWorkspace {
-			continue
-		}
-		sb.WriteString(fmt.Sprintf("Workspace %d:\n", i))
-		activeFile := "None"
-		if ws.ActiveWindow != nil && ws.ActiveWindow.Buffer() != nil {
-			activeFile = ws.ActiveWindow.Buffer().GetName()
-		}
-		sb.WriteString(fmt.Sprintf("  Active File: %s\n", activeFile))
-		layoutStr := "Horizontal"
-		if ws.Layout == wig.LayoutVertical {
-			layoutStr = "Vertical"
-		}
-		sb.WriteString(fmt.Sprintf("  Layout: %s\n", layoutStr))
-		sb.WriteString("  Files:\n")
-		if len(ws.Files) == 0 {
-			sb.WriteString("    (none)\n")
-		} else {
-			for _, f := range ws.Files {
-				sb.WriteString(fmt.Sprintf("    - %s\n", f))
-			}
-		}
-		sb.WriteString("\n")
-	}
-
-	buf.Append(sb.String())
-	ctx.Editor.ActiveWindow().ShowBuffer(buf)
 }
