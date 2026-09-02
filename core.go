@@ -787,37 +787,58 @@ func CmdKillBuffer(ctx Context) {
 	// Jump back in history
 	CmdJumpBack(ctx)
 
-	// Replace the killed buffer in all windows across all workspaces
-	var replacement *Buffer
-	if len(ctx.Editor.Buffers) > 1 {
-		for _, b := range ctx.Editor.Buffers {
-			if b != buf {
-				replacement = b
-				break
-			}
-		}
-	} else {
-		// No other buffers left, create a new empty one
-		CmdNewBuffer(ctx)
-		replacement = ctx.Editor.Buffers[0]
-	}
-
+	// Determine the replacement buffer PER WORKSPACE so empty workspaces become [No Name]
+	// instead of shifting to a random global buffer.
 	for i := range ctx.Editor.Workspaces {
 		ws := &ctx.Editor.Workspaces[i]
 		ws.Files = slices.DeleteFunc(ws.Files, func(f string) bool {
 			return f == buf.FilePath
 		})
+
+		var wsReplacement *Buffer
+		if len(ws.Files) > 0 {
+			// Find the last file in this workspace's history that isn't the killed buffer
+			for j := len(ws.Files) - 1; j >= 0; j-- {
+				for _, b := range ctx.Editor.Buffers {
+					if b.FilePath == ws.Files[j] && b != buf {
+						wsReplacement = b
+						break
+					}
+				}
+				if wsReplacement != nil {
+					break
+				}
+			}
+		}
+
+		if wsReplacement == nil {
+			// No suitable buffer found, use or create a [No Name] buffer
+			for _, b := range ctx.Editor.Buffers {
+				if b.FilePath == "[No Name]" && !b.Dirty {
+					wsReplacement = b
+					break
+				}
+			}
+			if wsReplacement == nil {
+				nb := NewBuffer()
+				nb.FilePath = "[No Name]"
+				ctx.Editor.Buffers = append(ctx.Editor.Buffers, nb)
+				wsReplacement = nb
+			}
+		}
+
 		for _, win := range ws.Windows {
 			if win.Buffer() == buf {
 				nctx := ctx.Editor.NewContext()
-				nctx.Buf = replacement
+				nctx.Buf = wsReplacement
 				nctx.Win = win
 				win.VisitBuffer(nctx)
 			}
 		}
-	}
-	if ctx.Editor.ActiveWindow().Buffer() == buf {
-		ctx.Buf = replacement
+
+		if i == ctx.Editor.ActiveWorkspace && ctx.Editor.ActiveWindow().Buffer() == buf {
+			ctx.Buf = wsReplacement
+		}
 	}
 
 	ctx.Editor.Buffers = slices.DeleteFunc(ctx.Editor.Buffers, func(b *Buffer) bool {

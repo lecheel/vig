@@ -100,10 +100,12 @@ func (c *WorkspaceCache) Save(rootDir ...string) {
 // like [Messages] or [git] are skipped. Duplicate paths are deduplicated.
 func (c *WorkspaceCache) CaptureWorkspace(num int, ws *Workspace) {
 	if ws == nil {
+		delete(c.Workspaces, num)
 		return
 	}
 	if EditorInst != nil && num != EditorInst.ActiveWorkspace && len(ws.Files) == 0 {
 		if len(ws.Windows) <= 1 && (len(ws.Windows) == 0 || ws.Windows[0] == nil || ws.Windows[0].Buffer() == nil || (ws.Windows[0].Buffer().FilePath == "[No Name]" && !ws.Windows[0].Buffer().Dirty)) {
+			delete(c.Workspaces, num) // Clear stale cache for empty workspaces
 			return
 		}
 	}
@@ -157,6 +159,10 @@ func (c *WorkspaceCache) CaptureWorkspace(num int, ws *Workspace) {
 // skipped so that their cached entries from a previous session are
 // preserved.
 func (c *WorkspaceCache) CaptureAll(editor *Editor) {
+	// Clear existing cache to remove stale entries for workspaces that are now empty
+	for k := range c.Workspaces {
+		delete(c.Workspaces, k)
+	}
 	for i := range editor.Workspaces {
 		ws := &editor.Workspaces[i]
 		if len(ws.Windows) == 0 {
