@@ -382,7 +382,7 @@ func renderPowerline(
 		}
 		sessionIcon := "✔"
 		if d.AutoSession {
-			sessionIcon = "⚡"
+			sessionIcon = ""
 		}
 		rightSegs = append(rightSegs, segment{
 			text: fmt.Sprintf(" %s %s ", sessionIcon, d.SessionName),
