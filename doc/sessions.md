@@ -54,9 +54,13 @@ To prevent losing unsaved buffer contents:
 
 ### Statusline Integration
 The active session name is displayed on the right side of the statusline, following the powerline design pattern.
-- The `StatuslineData` struct includes a `SessionName` field.
-- `extractStatuslineData` populates this from `e.GetActiveWorkspace().ActiveSession`.
+- The `StatuslineData` struct includes `SessionName` and `AutoSession` fields.
+- `extractStatuslineData` populates these from `e.GetActiveWorkspace().ActiveSession` and `e.Config.AutoSession`.
 - `renderPlain` and `renderPowerline` render it appropriately on the right side.
+- An icon is displayed next to the session name to indicate the save behavior:
+  - `` indicates `auto_session = true` (the session will automatically save on exit).
+  - `✔` indicates `auto_session = false` (the session requires a manual `:mks` to save).
+- `global_statusline = true` can be set in `config.toml` to render a single statusline at the bottom of the screen instead of one per split window.
 
 ### Overwrite Prompt & Remarks
 When executing `:mksession <name> [remark]` and `<name>` already exists, the editor uses `ui.ConfirmInit` to display a minimal `y/n` prompt on the statusline, avoiding the heavier picker popup for a simple yes/no decision. If overwriting and no new remark is provided, the existing session's remark is preserved.
@@ -65,7 +69,8 @@ When executing `:mksession <name> [remark]` and `<name>` already exists, the edi
 - `cmd/main.go`: Auto-load on startup and auto-save on exit.
 - `commands/sessions.go`: Core session logic, JSON serialization, tree capture/restoration, dirty checks.
 - `commands/definitions.go`: Registration of `:mksession`, `:session`, etc.
-- `config/config.go`: Added `auto_session` to `EditorSettings`.
-- `editor.go`: Added `AutoSession` to `EditorConfig` and `ActiveSession` to `Workspace`.
-- `ui/config_popup.go`: Added `auto_session` toggle to the config popup.
-- `ui/statusline.go`: Added session name rendering.
+- `config/config.go`: Added `auto_session` and `global_statusline` to `EditorSettings`.
+- `editor.go`: Added `AutoSession` and `GlobalStatusline` to `EditorConfig`, and `ActiveSession` to `Workspace`.
+- `render/render.go`: Added support for `global_statusline` rendering.
+- `ui/config_popup.go`: Added `auto_session` and `global_statusline` toggles to the config popup.
+- `ui/statusline.go`: Added session name rendering, `AutoSession` icons, and `GlobalStatusline` support.
