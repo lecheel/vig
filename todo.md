@@ -53,9 +53,14 @@
   - Window cycling (`ctrl+w w`, `CmdWindowNext`)
   - Window closing (`:close`, `:only`, close & kill buffer)
   - Layout toggling between horizontal and vertical layouts
-  - **Workspace sessions**: Up to 10 workspaces (`wslist`), move windows between them
-  - **Workspace persistence**: Save/restore layouts and file history across sessions (`SaveWorkspaces` config)
-  - **Persistence status indicator** (💾/🔒) in the statusline
+  - **Named Sessions System (`:mksession`, `:session`, `:sessions`, `<Leader>S`)**:
+    - Snapshot and restore split layouts, open buffers, cursor lines/columns, and scroll offsets
+    - Interactive session picker popup (`:sl`, `:sessions`, `<Leader>S`) with load, create, and delete actions
+    - Remarks and descriptions on sessions (e.g. `:mks auth-bug fixing token refresh`)
+    - Overwrite confirmation prompt `(y/n)` for existing session names
+    - **Auto-session (`auto_session = true`)**: Restore last active session on launch and auto-save on exit
+    - **Statusline session segment** (plain and powerline)
+  - **Persistence status indicator** in the statusline
 
 - **Git Integration**
   - Git status panel (`gs`/`CmdGitView`): staging (`s`), diff inspection (`d`), refresh (`r`)
@@ -166,7 +171,7 @@
 - [v] **Quickfix List**: `:copen` opens LSP diagnostics in a split buffer (navigate with `:cn`/`:cp` or Enter)
 
 ### Medium Priority (Quality of Life)
-- [-] **Sessions**: Save & restore workspace sessions (`:mksession`, layout, open buffers, cursor locations)
+- [v] **Sessions**: Save & restore workspace sessions (`:mksession`, layout, open buffers, cursor locations)
 - [x] **Folding**: `zc`, `zo`, `za` with syntax/indent based folding
 - [x] **Tabs**: Vim-style tabs (`:tabnew`, `gt`, `gT`)
 - [x] **Jumplist**: `Ctrl-o` (jump back), `Ctrl-i` (jump forward) across all jumps *(basic search‑based jump list exists)*
@@ -174,7 +179,7 @@
 - [v] **System Clipboard Integration**: Copy/paste via `<Leader>y`, `<Leader>pv`, `<Leader>pp` and bracketed paste
 - [v] **Named & System Registers** (complete with popup, yank history, system clipboard, etc.)
 - [x] **Word Motions**: `e` (end of word), `ge` (end of word backward), `W`, `B`, `E` (WORD motions)
-- [x] **Multi-cursor**: `Ctrl-n`/`Ctrl-v` multi-edit
+- [x] **Multi-cursor**: `Ctrl-d`/`Ctrl-v` multi-edit
 
 ### Low Priority (Advanced / Plugins)
 - [x] **Terminal Emulator**: Built-in terminal (`:term`)
