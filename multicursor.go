@@ -15,15 +15,17 @@ type CursorInstance struct {
 }
 
 type MultiCursor struct {
-	buf     *Buffer
-	Cursors []CursorInstance
-	Pattern string
+	buf          *Buffer
+	Cursors      []CursorInstance
+	Pattern      string
+	PrimaryIndex int
 }
 
 func NewMultiCursor(buf *Buffer) *MultiCursor {
 	return &MultiCursor{
-		buf:     buf,
-		Cursors: make([]CursorInstance, 0),
+		buf:          buf,
+		Cursors:      make([]CursorInstance, 0),
+		PrimaryIndex: 0,
 	}
 }
 
@@ -38,6 +40,7 @@ func (m *MultiCursor) Count() int {
 func (m *MultiCursor) Clear() {
 	m.Cursors = m.Cursors[:0]
 	m.Pattern = ""
+	m.PrimaryIndex = 0
 	if m.buf != nil {
 		m.buf.Selection = nil
 	}
@@ -62,12 +65,28 @@ func (m *MultiCursor) HasSelectionAt(line, char int) bool {
 }
 
 func (m *MultiCursor) Sort() {
+	if len(m.Cursors) <= 1 {
+		return
+	}
+	var primCur Cursor
+	hasPrim := m.PrimaryIndex >= 0 && m.PrimaryIndex < len(m.Cursors)
+	if hasPrim {
+		primCur = m.Cursors[m.PrimaryIndex].Cursor
+	}
 	sort.Slice(m.Cursors, func(i, j int) bool {
 		if m.Cursors[i].Cursor.Line != m.Cursors[j].Cursor.Line {
 			return m.Cursors[i].Cursor.Line < m.Cursors[j].Cursor.Line
 		}
 		return m.Cursors[i].Cursor.Char < m.Cursors[j].Cursor.Char
 	})
+	if hasPrim {
+		for i, c := range m.Cursors {
+			if c.Cursor.Line == primCur.Line && c.Cursor.Char == primCur.Char {
+				m.PrimaryIndex = i
+				break
+			}
+		}
+	}
 }
 
 func (m *MultiCursor) MoveLeft(count uint32) {
@@ -106,20 +125,24 @@ func (m *MultiCursor) MoveRight(count uint32) {
 func (m *MultiCursor) CollapseToInsert(atEnd bool) {
 	for idx := range m.Cursors {
 		ci := &m.Cursors[idx]
-		if ci.Selection == nil {
-			continue
-		}
-		sel := SelectionNormalize(ci.Selection)
 		cur := &ci.Cursor
-		if atEnd {
-			cur.Line = sel.End.Line
-			cur.Char = sel.End.Char + 1
-		} else {
-			cur.Line = sel.Start.Line
-			cur.Char = sel.Start.Char
+		if ci.Selection != nil {
+			sel := SelectionNormalize(ci.Selection)
+			if atEnd {
+				cur.Line = sel.End.Line
+				cur.Char = sel.End.Char + 1
+			} else {
+				cur.Line = sel.Start.Line
+				cur.Char = sel.Start.Char
+			}
+			ci.Selection = nil
+		} else if atEnd {
+			line := CursorLine(m.buf, cur)
+			if line != nil && cur.Char < len(line.Value)-1 {
+				cur.Char++
+			}
 		}
 		cur.PreserveCharPosition = cur.Char
-		ci.Selection = nil
 	}
 	m.buf.Selection = nil
 }
@@ -183,6 +206,7 @@ func (m *MultiCursor) MatchNextOccurrence(ctx Context) {
 				Cursor:    curCopy,
 				Selection: &sel,
 			})
+			m.PrimaryIndex = 0
 		} else {
 			line := CursorLine(ctx.Buf, cur)
 			if line == nil || len(line.Value) == 0 {
@@ -211,6 +235,7 @@ func (m *MultiCursor) MatchNextOccurrence(ctx Context) {
 			})
 			ctx.Buf.Selection = &sel
 			*cur = curCopy
+			m.PrimaryIndex = 0
 			setBufferMode(ctx, MODE_VISUAL)
 		}
 	}
@@ -245,7 +270,17 @@ func (m *MultiCursor) SkipNext(ctx Context) {
 		fromLine = skipped.Selection.End.Line
 		fromChar = skipped.Selection.End.Char + 1
 	}
+	prevCount := len(m.Cursors)
 	m.searchAndAdd(ctx, fromLine, fromChar)
+	if len(m.Cursors) == prevCount && prevCount > 0 {
+		if m.PrimaryIndex >= len(m.Cursors) {
+			m.PrimaryIndex = len(m.Cursors) - 1
+		}
+		last := m.Cursors[m.PrimaryIndex]
+		ctx.Buf.Selection = last.Selection
+		cur := ContextCursorGet(ctx)
+		*cur = last.Cursor
+	}
 }
 
 // searchAndAdd finds the pattern's next occurrence starting from fromLine/fromChar
@@ -309,6 +344,7 @@ func (m *MultiCursor) searchAndAdd(ctx Context, fromLine, fromChar int) {
 		Cursor:    newCur,
 		Selection: &newSel,
 	})
+	m.PrimaryIndex = len(m.Cursors) - 1
 	ctx.Buf.Selection = &newSel
 	*cur = newCur
 	setBufferMode(ctx, MODE_VISUAL)
@@ -348,8 +384,11 @@ func (m *MultiCursor) DeleteSelections(ctx Context) {
 
 	ctx.Buf.Selection = nil
 	if len(m.Cursors) > 0 {
+		if m.PrimaryIndex >= len(m.Cursors) || m.PrimaryIndex < 0 {
+			m.PrimaryIndex = len(m.Cursors) - 1
+		}
 		cur := ContextCursorGet(ctx)
-		*cur = m.Cursors[0].Cursor
+		*cur = m.Cursors[m.PrimaryIndex].Cursor
 	}
 }
 
@@ -357,13 +396,11 @@ func (m *MultiCursor) HandleInsertKey(ctx Context, ev *tcell.EventKey) bool {
 	if ctx.Buf.Mode() != MODE_INSERT {
 		return false
 	}
-	if ev.Modifiers()&tcell.ModCtrl != 0 || ev.Modifiers()&tcell.ModAlt != 0 || ev.Modifiers()&tcell.ModMeta != 0 {
-		return false
-	}
-
 	ch := ev.Rune()
 	if ev.Key() == tcell.KeyCtrlJ || ev.Key() == tcell.KeyEnter {
 		ch = '\n'
+	} else if ev.Modifiers()&tcell.ModCtrl != 0 || ev.Modifiers()&tcell.ModAlt != 0 || ev.Modifiers()&tcell.ModMeta != 0 {
+		return false
 	}
 
 	if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
@@ -391,8 +428,11 @@ func (m *MultiCursor) HandleInsertKey(ctx Context, ev *tcell.EventKey) bool {
 		}
 
 		if len(m.Cursors) > 0 {
+			if m.PrimaryIndex >= len(m.Cursors) || m.PrimaryIndex < 0 {
+				m.PrimaryIndex = len(m.Cursors) - 1
+			}
 			winCur := ContextCursorGet(ctx)
-			*winCur = m.Cursors[len(m.Cursors)-1].Cursor
+			*winCur = m.Cursors[m.PrimaryIndex].Cursor
 		}
 		return true
 	}
@@ -445,11 +485,42 @@ func (m *MultiCursor) HandleInsertKey(ctx Context, ev *tcell.EventKey) bool {
 	}
 
 	if len(m.Cursors) > 0 {
+		if m.PrimaryIndex >= len(m.Cursors) || m.PrimaryIndex < 0 {
+			m.PrimaryIndex = len(m.Cursors) - 1
+		}
 		winCur := ContextCursorGet(ctx)
-		*winCur = m.Cursors[len(m.Cursors)-1].Cursor
+		*winCur = m.Cursors[m.PrimaryIndex].Cursor
 		CmdEnsureCursorVisible(ctx)
 	}
 	return true
+}
+
+func (m *MultiCursor) RotateForward(ctx Context) {
+	if len(m.Cursors) <= 1 {
+		return
+	}
+	m.PrimaryIndex = (m.PrimaryIndex + 1) % len(m.Cursors)
+	cur := ContextCursorGet(ctx)
+	*cur = m.Cursors[m.PrimaryIndex].Cursor
+	if m.Cursors[m.PrimaryIndex].Selection != nil {
+		ctx.Buf.Selection = m.Cursors[m.PrimaryIndex].Selection
+	}
+	CmdCursorCenter(ctx)
+	ctx.Editor.EchoMessage(fmt.Sprintf("%d/%d selections", m.PrimaryIndex+1, len(m.Cursors)))
+}
+
+func (m *MultiCursor) RotateBackward(ctx Context) {
+	if len(m.Cursors) <= 1 {
+		return
+	}
+	m.PrimaryIndex = (m.PrimaryIndex - 1 + len(m.Cursors)) % len(m.Cursors)
+	cur := ContextCursorGet(ctx)
+	*cur = m.Cursors[m.PrimaryIndex].Cursor
+	if m.Cursors[m.PrimaryIndex].Selection != nil {
+		ctx.Buf.Selection = m.Cursors[m.PrimaryIndex].Selection
+	}
+	CmdCursorCenter(ctx)
+	ctx.Editor.EchoMessage(fmt.Sprintf("%d/%d selections", m.PrimaryIndex+1, len(m.Cursors)))
 }
 
 func indexOfRunes(runes, pat []rune) int {

@@ -12,24 +12,26 @@ import (
 // StatuslineData aggregates all buffer, editor, and workspace information
 // needed to render any statusline style in a single pass.
 type StatuslineData struct {
-	Mode        wig.Mode
-	ModeName    string
-	BufName     string
-	IsDirty     bool
-	Macro       string
-	Message     string
-	Line        int
-	Char        int
-	Scope       string
-	Filetype    string
-	BufIdx      int
-	BufTotal    int
-	KeyCount    int
-	GitBranch   string
-	HasBranch   bool
-	IsActive    bool
-	SessionName string
-	AutoSession bool
+	Mode             wig.Mode
+	ModeName         string
+	BufName          string
+	IsDirty          bool
+	Macro            string
+	Message          string
+	Line             int
+	Char             int
+	Scope            string
+	Filetype         string
+	BufIdx           int
+	BufTotal         int
+	KeyCount         int
+	GitBranch        string
+	HasBranch        bool
+	IsActive         bool
+	SessionName      string
+	AutoSession      bool
+	MultiCursorCount int
+	MultiCursorIdx   int
 }
 
 func extractStatuslineData(e *wig.Editor, win *wig.Window) *StatuslineData {
@@ -67,25 +69,34 @@ func extractStatuslineData(e *wig.Editor, win *wig.Window) *StatuslineData {
 		sessionName = ws.ActiveSession
 	}
 
+	mcCount := 0
+	mcIdx := 0
+	if buf.MultiCursor != nil && buf.MultiCursor.Active() {
+		mcCount = buf.MultiCursor.Count()
+		mcIdx = buf.MultiCursor.PrimaryIndex + 1
+	}
+
 	return &StatuslineData{
-		Mode:        buf.Mode(),
-		ModeName:    strings.ToUpper(buf.Mode().String()),
-		BufName:     buf.GetName(),
-		IsDirty:     buf.Dirty,
-		Macro:       macro,
-		Message:     msg,
-		Line:        cur.Line + 1,
-		Char:        cur.Char + 1,
-		Scope:       trimScope(funcName),
-		Filetype:    detectFiletypeLabel(buf.GetName()),
-		BufIdx:      bufferIndex(e, buf),
-		BufTotal:    len(e.Buffers),
-		KeyCount:    e.Keys.GetCount(),
-		GitBranch:   branch,
-		HasBranch:   hasBranch,
-		IsActive:    active,
-		SessionName: sessionName,
-		AutoSession: e.Config.AutoSession,
+		Mode:             buf.Mode(),
+		ModeName:         strings.ToUpper(buf.Mode().String()),
+		BufName:          buf.GetName(),
+		IsDirty:          buf.Dirty,
+		Macro:            macro,
+		Message:          msg,
+		Line:             cur.Line + 1,
+		Char:             cur.Char + 1,
+		Scope:            trimScope(funcName),
+		Filetype:         detectFiletypeLabel(buf.GetName()),
+		BufIdx:           bufferIndex(e, buf),
+		BufTotal:         len(e.Buffers),
+		KeyCount:         e.Keys.GetCount(),
+		GitBranch:        branch,
+		HasBranch:        hasBranch,
+		IsActive:         active,
+		SessionName:      sessionName,
+		AutoSession:      e.Config.AutoSession,
+		MultiCursorCount: mcCount,
+		MultiCursorIdx:   mcIdx,
 	}
 }
 
@@ -146,6 +157,9 @@ func renderPlain(
 	macroStr := ""
 	if d.Macro != "" {
 		macroStr = " " + d.Macro
+	}
+	if d.MultiCursorCount > 0 {
+		macroStr += fmt.Sprintf(" [%d/%d cursors]", d.MultiCursorIdx, d.MultiCursorCount)
 	}
 	leftSide := fmt.Sprintf("%s %s%s ", d.ModeName, d.BufName, macroStr)
 	if d.HasBranch {
@@ -334,6 +348,13 @@ func renderPowerline(
 	if d.Macro != "" {
 		leftSegs = append(leftSegs, segment{
 			text: fmt.Sprintf(" REC @%s ", strings.TrimPrefix(d.Macro, "recording @")),
+			fg:   tcell.ColorWhite, bg: bgFill,
+		})
+	}
+
+	if d.MultiCursorCount > 0 {
+		leftSegs = append(leftSegs, segment{
+			text: fmt.Sprintf(" [%d/%d] ", d.MultiCursorIdx, d.MultiCursorCount),
 			fg:   tcell.ColorWhite, bg: bgFill,
 		})
 	}

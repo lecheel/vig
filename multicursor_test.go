@@ -197,3 +197,35 @@ func TestMultiCursorInsertAtEachCursor(t *testing.T) {
 	expected := "Xfoo bar Xfoo\nbaz Xfoo\n"
 	assert.Equal(t, expected, buf.String())
 }
+
+func TestMultiCursorRotation(t *testing.T) {
+	e := NewEditor(testutils.Viewport, nil)
+	buf := NewBuffer()
+	buf.ResetLines()
+	buf.Append("foo bar foo\nbaz foo")
+	e.ActiveWindow().ShowBuffer(buf)
+	ctx := Context{
+		Editor: e,
+		Buf:    buf,
+		Win:    e.ActiveWindow(),
+	}
+	cur := ContextCursorGet(ctx)
+	cur.Line = 0
+	cur.Char = 1
+
+	CmdMultiCursorMatchNext(ctx)
+	CmdMultiCursorMatchNext(ctx)
+	require.Equal(t, 3, buf.MultiCursor.Count())
+	require.Equal(t, 2, buf.MultiCursor.PrimaryIndex)
+
+	// Rotate forward wraps to 0
+	CmdMultiCursorRotateForward(ctx)
+	require.Equal(t, 0, buf.MultiCursor.PrimaryIndex)
+	require.Equal(t, 0, cur.Line)
+	require.Equal(t, 2, cur.Char)
+
+	// Rotate backward wraps back to 2
+	CmdMultiCursorRotateBackward(ctx)
+	require.Equal(t, 2, buf.MultiCursor.PrimaryIndex)
+	require.Equal(t, 1, cur.Line)
+}

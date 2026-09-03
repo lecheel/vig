@@ -458,7 +458,11 @@ func CmdDeleteBefore(ctx Context) func(Context) {
 func CmdSelectionChange(ctx Context) {
 	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
 		ctx.Buf.MultiCursor.DeleteSelections(ctx)
-		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		idx := ctx.Buf.MultiCursor.PrimaryIndex
+		if idx >= len(ctx.Buf.MultiCursor.Cursors) || idx < 0 {
+			idx = len(ctx.Buf.MultiCursor.Cursors) - 1
+		}
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[idx].Cursor
 		ctx.Buf.TxStart()
 		setBufferMode(ctx, MODE_INSERT)
 		return
@@ -1594,7 +1598,11 @@ func CmdRedo(ctx Context) {
 func CmdEnterInsertMode(ctx Context) {
 	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
 		ctx.Buf.MultiCursor.CollapseToInsert(false)
-		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		idx := ctx.Buf.MultiCursor.PrimaryIndex
+		if idx >= len(ctx.Buf.MultiCursor.Cursors) || idx < 0 {
+			idx = len(ctx.Buf.MultiCursor.Cursors) - 1
+		}
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[idx].Cursor
 		ctx.Buf.TxStart()
 		setBufferMode(ctx, MODE_INSERT)
 		return
@@ -1611,7 +1619,11 @@ func CmdEnterInsertMode(ctx Context) {
 func CmdEnterInsertModeAppend(ctx Context) {
 	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
 		ctx.Buf.MultiCursor.CollapseToInsert(true)
-		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		idx := ctx.Buf.MultiCursor.PrimaryIndex
+		if idx >= len(ctx.Buf.MultiCursor.Cursors) || idx < 0 {
+			idx = len(ctx.Buf.MultiCursor.Cursors) - 1
+		}
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[idx].Cursor
 		ctx.Buf.TxStart()
 		setBufferMode(ctx, MODE_INSERT)
 		return
@@ -1673,7 +1685,11 @@ func CmdNormalMode(ctx Context) {
 				}
 				ctx.Buf.MultiCursor.Cursors[idx].Selection = nil
 			}
-			*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+			idx := ctx.Buf.MultiCursor.PrimaryIndex
+			if idx >= len(ctx.Buf.MultiCursor.Cursors) || idx < 0 {
+				idx = len(ctx.Buf.MultiCursor.Cursors) - 1
+			}
+			*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[idx].Cursor
 		} else {
 			ctx.Buf.MultiCursor.Clear()
 		}
@@ -1868,6 +1884,20 @@ func CmdMultiCursorSkipNext(ctx Context) {
 		return
 	}
 	ctx.Buf.MultiCursor.SkipNext(ctx)
+}
+
+func CmdMultiCursorRotateForward(ctx Context) {
+	if ctx.Buf.MultiCursor == nil {
+		return
+	}
+	ctx.Buf.MultiCursor.RotateForward(ctx)
+}
+
+func CmdMultiCursorRotateBackward(ctx Context) {
+	if ctx.Buf.MultiCursor == nil {
+		return
+	}
+	ctx.Buf.MultiCursor.RotateBackward(ctx)
 }
 
 // CmdDummyNA is a no-op command used to disable or override keybindings in config.toml
