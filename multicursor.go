@@ -349,6 +349,7 @@ func (m *MultiCursor) searchAndAdd(ctx Context, fromLine, fromChar int) {
 	*cur = newCur
 	setBufferMode(ctx, MODE_VISUAL)
 	CmdEnsureCursorVisible(ctx)
+	m.Cursors[m.PrimaryIndex].Cursor.ScrollOffset = cur.ScrollOffset
 	ctx.Editor.EchoMessage(fmt.Sprintf("%d selections", len(m.Cursors)))
 }
 
@@ -388,7 +389,10 @@ func (m *MultiCursor) DeleteSelections(ctx Context) {
 			m.PrimaryIndex = len(m.Cursors) - 1
 		}
 		cur := ContextCursorGet(ctx)
+		savedOffset := cur.ScrollOffset
 		*cur = m.Cursors[m.PrimaryIndex].Cursor
+		cur.ScrollOffset = savedOffset
+		CmdEnsureCursorVisible(ctx)
 	}
 }
 
@@ -432,7 +436,10 @@ func (m *MultiCursor) HandleInsertKey(ctx Context, ev *tcell.EventKey) bool {
 				m.PrimaryIndex = len(m.Cursors) - 1
 			}
 			winCur := ContextCursorGet(ctx)
+			savedOffset := winCur.ScrollOffset
 			*winCur = m.Cursors[m.PrimaryIndex].Cursor
+			winCur.ScrollOffset = savedOffset
+			CmdEnsureCursorVisible(ctx)
 		}
 		return true
 	}
@@ -489,7 +496,9 @@ func (m *MultiCursor) HandleInsertKey(ctx Context, ev *tcell.EventKey) bool {
 			m.PrimaryIndex = len(m.Cursors) - 1
 		}
 		winCur := ContextCursorGet(ctx)
+		savedOffset := winCur.ScrollOffset
 		*winCur = m.Cursors[m.PrimaryIndex].Cursor
+		winCur.ScrollOffset = savedOffset
 		CmdEnsureCursorVisible(ctx)
 	}
 	return true
@@ -506,6 +515,7 @@ func (m *MultiCursor) RotateForward(ctx Context) {
 		ctx.Buf.Selection = m.Cursors[m.PrimaryIndex].Selection
 	}
 	CmdCursorCenter(ctx)
+	m.Cursors[m.PrimaryIndex].Cursor.ScrollOffset = cur.ScrollOffset
 	ctx.Editor.EchoMessage(fmt.Sprintf("%d/%d selections", m.PrimaryIndex+1, len(m.Cursors)))
 }
 
@@ -520,6 +530,7 @@ func (m *MultiCursor) RotateBackward(ctx Context) {
 		ctx.Buf.Selection = m.Cursors[m.PrimaryIndex].Selection
 	}
 	CmdCursorCenter(ctx)
+	m.Cursors[m.PrimaryIndex].Cursor.ScrollOffset = cur.ScrollOffset
 	ctx.Editor.EchoMessage(fmt.Sprintf("%d/%d selections", m.PrimaryIndex+1, len(m.Cursors)))
 }
 

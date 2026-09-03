@@ -229,3 +229,39 @@ func TestMultiCursorRotation(t *testing.T) {
 	require.Equal(t, 2, buf.MultiCursor.PrimaryIndex)
 	require.Equal(t, 1, cur.Line)
 }
+
+func TestMultiCursorInsertPreservesViewport(t *testing.T) {
+	e := NewEditor(testutils.Viewport, nil)
+	buf := NewBuffer()
+	buf.ResetLines()
+	for i := 0; i < 220; i++ {
+		if i == 10 || i == 200 {
+			buf.Append("foo bar\n")
+		} else {
+			buf.Append("line\n")
+		}
+	}
+	e.ActiveWindow().ShowBuffer(buf)
+	ctx := Context{
+		Editor: e,
+		Buf:    buf,
+		Win:    e.ActiveWindow(),
+	}
+
+	cur := ContextCursorGet(ctx)
+	cur.Line = 10
+	cur.Char = 0
+
+	CmdMultiCursorMatchNext(ctx)
+	require.Equal(t, 2, buf.MultiCursor.Count())
+	require.Equal(t, 1, buf.MultiCursor.PrimaryIndex)
+	require.Equal(t, 200, cur.Line)
+
+	savedOffset := cur.ScrollOffset
+
+	// Pressing 'a' must remain on line 200 and not reset ScrollOffset to 0
+	CmdEnterInsertModeAppend(ctx)
+	require.Equal(t, MODE_INSERT, buf.Mode())
+	require.Equal(t, 200, cur.Line)
+	require.Equal(t, savedOffset, cur.ScrollOffset)
+}

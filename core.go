@@ -457,12 +457,16 @@ func CmdDeleteBefore(ctx Context) func(Context) {
 
 func CmdSelectionChange(ctx Context) {
 	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		cur := ContextCursorGet(ctx)
+		savedOffset := cur.ScrollOffset
 		ctx.Buf.MultiCursor.DeleteSelections(ctx)
 		idx := ctx.Buf.MultiCursor.PrimaryIndex
 		if idx >= len(ctx.Buf.MultiCursor.Cursors) || idx < 0 {
 			idx = len(ctx.Buf.MultiCursor.Cursors) - 1
 		}
-		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[idx].Cursor
+		*cur = ctx.Buf.MultiCursor.Cursors[idx].Cursor
+		cur.ScrollOffset = savedOffset
+		CmdEnsureCursorVisible(ctx)
 		ctx.Buf.TxStart()
 		setBufferMode(ctx, MODE_INSERT)
 		return
@@ -1602,7 +1606,11 @@ func CmdEnterInsertMode(ctx Context) {
 		if idx >= len(ctx.Buf.MultiCursor.Cursors) || idx < 0 {
 			idx = len(ctx.Buf.MultiCursor.Cursors) - 1
 		}
-		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[idx].Cursor
+		cur := ContextCursorGet(ctx)
+		savedOffset := cur.ScrollOffset
+		*cur = ctx.Buf.MultiCursor.Cursors[idx].Cursor
+		cur.ScrollOffset = savedOffset
+		CmdEnsureCursorVisible(ctx)
 		ctx.Buf.TxStart()
 		setBufferMode(ctx, MODE_INSERT)
 		return
@@ -1623,7 +1631,11 @@ func CmdEnterInsertModeAppend(ctx Context) {
 		if idx >= len(ctx.Buf.MultiCursor.Cursors) || idx < 0 {
 			idx = len(ctx.Buf.MultiCursor.Cursors) - 1
 		}
-		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[idx].Cursor
+		cur := ContextCursorGet(ctx)
+		savedOffset := cur.ScrollOffset
+		*cur = ctx.Buf.MultiCursor.Cursors[idx].Cursor
+		cur.ScrollOffset = savedOffset
+		CmdEnsureCursorVisible(ctx)
 		ctx.Buf.TxStart()
 		setBufferMode(ctx, MODE_INSERT)
 		return
@@ -1689,7 +1701,11 @@ func CmdNormalMode(ctx Context) {
 			if idx >= len(ctx.Buf.MultiCursor.Cursors) || idx < 0 {
 				idx = len(ctx.Buf.MultiCursor.Cursors) - 1
 			}
-			*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[idx].Cursor
+			cur := ContextCursorGet(ctx)
+			savedOffset := cur.ScrollOffset
+			*cur = ctx.Buf.MultiCursor.Cursors[idx].Cursor
+			cur.ScrollOffset = savedOffset
+			CmdEnsureCursorVisible(ctx)
 		} else {
 			ctx.Buf.MultiCursor.Clear()
 		}
