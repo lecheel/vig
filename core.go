@@ -863,6 +863,7 @@ func CmdKillBuffer(ctx Context) {
 			buf.UndoRedo = nil
 			buf.Tx = nil
 			buf.KeyHandler = nil
+			buf.MultiCursor = nil
 		}
 
 		for i := range ctx.Editor.Workspaces {
@@ -1584,6 +1585,13 @@ func CmdRedo(ctx Context) {
 }
 
 func CmdEnterInsertMode(ctx Context) {
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.CollapseToInsert(false)
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		ctx.Buf.TxStart()
+		setBufferMode(ctx, MODE_INSERT)
+		return
+	}
 	cur := ContextCursorGet(ctx)
 	line := CursorLine(ctx.Buf, cur)
 	if line == nil {
@@ -1594,6 +1602,13 @@ func CmdEnterInsertMode(ctx Context) {
 }
 
 func CmdEnterInsertModeAppend(ctx Context) {
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.CollapseToInsert(true)
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		ctx.Buf.TxStart()
+		setBufferMode(ctx, MODE_INSERT)
+		return
+	}
 	CmdCursorRight(ctx)
 	CmdEnterInsertMode(ctx)
 }
@@ -1637,6 +1652,26 @@ func CmdExitInsertMode(ctx Context) {
 }
 
 func CmdNormalMode(ctx Context) {
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		if ctx.Buf.Mode() == MODE_INSERT {
+			for idx := range ctx.Buf.MultiCursor.Cursors {
+				cur := &ctx.Buf.MultiCursor.Cursors[idx].Cursor
+				line := CursorLine(ctx.Buf, cur)
+				if cur.Char > 0 {
+					cur.Char--
+					cur.PreserveCharPosition = cur.Char
+				}
+				if line != nil && cur.Char >= len(line.Value) {
+					cur.Char = max(len(line.Value)-1, 0)
+				}
+				ctx.Buf.MultiCursor.Cursors[idx].Selection = nil
+			}
+			*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		} else {
+			ctx.Buf.MultiCursor.Clear()
+		}
+	}
+
 	if ctx.Buf.Mode() == MODE_INSERT {
 		cur := ContextCursorGet(ctx)
 		line := CursorLine(ctx.Buf, cur)
@@ -1812,6 +1847,20 @@ func CmdGotoMark(ctx Context) {
 	if MarksPopupFactory != nil {
 		MarksPopupFactory(ctx, ctx.Editor.Marks)
 	}
+}
+
+func CmdMultiCursorMatchNext(ctx Context) {
+	if ctx.Buf.MultiCursor == nil {
+		ctx.Buf.MultiCursor = NewMultiCursor(ctx.Buf)
+	}
+	ctx.Buf.MultiCursor.MatchNextOccurrence(ctx)
+}
+
+func CmdMultiCursorSkipNext(ctx Context) {
+	if ctx.Buf.MultiCursor == nil {
+		return
+	}
+	ctx.Buf.MultiCursor.SkipNext(ctx)
 }
 
 // CmdDummyNA is a no-op command used to disable or override keybindings in config.toml

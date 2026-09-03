@@ -67,6 +67,7 @@ type Buffer struct {
 	UndoRedo          *UndoRedo
 	Highlighter       Highlighter
 	KeyHandler        *KeyHandler
+	MultiCursor       *MultiCursor
 	GitSigns          map[int]rune
 	BlameEnabled      bool
 	BlameLines        map[int]BlameInfo
@@ -89,6 +90,7 @@ func NewBuffer() *Buffer {
 		Highlighter: nil,
 		OpenCount:   1,
 	}
+	b.MultiCursor = NewMultiCursor(b)
 	b.UndoRedo = NewUndoRedo(b)
 	return b
 }

@@ -122,6 +122,15 @@ func CmdScrollDownLine(ctx Context) {
 
 func CmdCursorLeft(ctx Context) {
 	count := max(ctx.Count, 1)
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.MoveLeft(count)
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		if ctx.Buf.Mode() == MODE_VISUAL {
+			ctx.Buf.Selection = nil
+			setBufferMode(ctx, MODE_NORMAL)
+		}
+		return
+	}
 	cur := ContextCursorGet(ctx)
 	line := CursorLine(ctx.Buf, cur)
 	for i := uint32(0); i < count; i++ {
@@ -134,9 +143,18 @@ func CmdCursorLeft(ctx Context) {
 	}
 }
 func CmdCursorRight(ctx Context) {
+	count := max(ctx.Count, 1)
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.MoveRight(count)
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		if ctx.Buf.Mode() == MODE_VISUAL {
+			ctx.Buf.Selection = nil
+			setBufferMode(ctx, MODE_NORMAL)
+		}
+		return
+	}
 	cur := ContextCursorGet(ctx)
 	line := CursorLine(ctx.Buf, cur)
-	count := max(ctx.Count, 1)
 	for i := uint32(0); i < count; i++ {
 		if cur.Char < len(line.Value)-1 {
 			cur.Char++
@@ -146,6 +164,16 @@ func CmdCursorRight(ctx Context) {
 }
 func CmdCursorLineUp(ctx Context) {
 	count := max(ctx.Count, 1)
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.MoveUp(count)
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		if ctx.Buf.Mode() == MODE_VISUAL {
+			ctx.Buf.Selection = nil
+			setBufferMode(ctx, MODE_NORMAL)
+		}
+		CmdEnsureCursorVisible(ctx)
+		return
+	}
 	cur := ContextCursorGet(ctx)
 	cur.Line = max(
 		cur.Line-int(count),
@@ -156,8 +184,18 @@ func CmdCursorLineUp(ctx Context) {
 }
 
 func CmdCursorLineDown(ctx Context) {
-	cur := ContextCursorGet(ctx)
 	count := max(ctx.Count, 1)
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.MoveDown(count)
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		if ctx.Buf.Mode() == MODE_VISUAL {
+			ctx.Buf.Selection = nil
+			setBufferMode(ctx, MODE_NORMAL)
+		}
+		CmdEnsureCursorVisible(ctx)
+		return
+	}
+	cur := ContextCursorGet(ctx)
 	cur.Line = min(
 		cur.Line+int(count),
 		ctx.Buf.Lines.Len-1,
@@ -168,6 +206,11 @@ func CmdCursorLineDown(ctx Context) {
 }
 
 func CmdCursorBeginningOfTheLine(ctx Context) {
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.MoveHome()
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		return
+	}
 	cur := ContextCursorGet(ctx)
 	cur.Char = 0
 	cur.PreserveCharPosition = 0
@@ -338,6 +381,11 @@ func CmdGotoLineEndOfFile(ctx Context) {
 }
 
 func CmdGotoLineEnd(ctx Context) {
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.MoveEnd()
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		return
+	}
 	cur := ContextCursorGet(ctx)
 	line := CursorLine(ctx.Buf, cur)
 	cur.Char = len(line.Value) - 1

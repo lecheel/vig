@@ -1,0 +1,472 @@
+package wig
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/gdamore/tcell/v2"
+)
+
+type CursorInstance struct {
+	Cursor    Cursor
+	Selection *Selection
+}
+
+type MultiCursor struct {
+	buf     *Buffer
+	Cursors []CursorInstance
+	Pattern string
+}
+
+func NewMultiCursor(buf *Buffer) *MultiCursor {
+	return &MultiCursor{
+		buf:     buf,
+		Cursors: make([]CursorInstance, 0),
+	}
+}
+
+func (m *MultiCursor) Active() bool {
+	return len(m.Cursors) > 1 || (len(m.Cursors) == 1 && m.Pattern != "")
+}
+
+func (m *MultiCursor) Count() int {
+	return len(m.Cursors)
+}
+
+func (m *MultiCursor) Clear() {
+	m.Cursors = m.Cursors[:0]
+	m.Pattern = ""
+	if m.buf != nil {
+		m.buf.Selection = nil
+	}
+}
+
+func (m *MultiCursor) HasCursorAt(line, char int) bool {
+	for _, c := range m.Cursors {
+		if c.Cursor.Line == line && c.Cursor.Char == char {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *MultiCursor) HasSelectionAt(line, char int) bool {
+	for _, c := range m.Cursors {
+		if c.Selection != nil && SelectionCursorInRange(c.Selection, Cursor{Line: line, Char: char}) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *MultiCursor) Sort() {
+	sort.Slice(m.Cursors, func(i, j int) bool {
+		if m.Cursors[i].Cursor.Line != m.Cursors[j].Cursor.Line {
+			return m.Cursors[i].Cursor.Line < m.Cursors[j].Cursor.Line
+		}
+		return m.Cursors[i].Cursor.Char < m.Cursors[j].Cursor.Char
+	})
+}
+
+func (m *MultiCursor) MoveLeft(count uint32) {
+	for idx := range m.Cursors {
+		cur := &m.Cursors[idx].Cursor
+		for i := uint32(0); i < count; i++ {
+			if cur.Char > 0 {
+				cur.Char--
+				cur.PreserveCharPosition = cur.Char
+			}
+		}
+		m.Cursors[idx].Selection = nil
+	}
+}
+
+func (m *MultiCursor) MoveRight(count uint32) {
+	for idx := range m.Cursors {
+		cur := &m.Cursors[idx].Cursor
+		line := CursorLine(m.buf, cur)
+		if line == nil {
+			continue
+		}
+		for i := uint32(0); i < count; i++ {
+			if cur.Char < len(line.Value)-1 {
+				cur.Char++
+				cur.PreserveCharPosition = cur.Char
+			}
+		}
+		m.Cursors[idx].Selection = nil
+	}
+}
+
+// CollapseToInsert turns each cursor's selection into a plain insertion
+// point — at the selection start (atEnd=false, "i") or just past its end
+// (atEnd=true, "a") — without deleting any text.
+func (m *MultiCursor) CollapseToInsert(atEnd bool) {
+	for idx := range m.Cursors {
+		ci := &m.Cursors[idx]
+		if ci.Selection == nil {
+			continue
+		}
+		sel := SelectionNormalize(ci.Selection)
+		cur := &ci.Cursor
+		if atEnd {
+			cur.Line = sel.End.Line
+			cur.Char = sel.End.Char + 1
+		} else {
+			cur.Line = sel.Start.Line
+			cur.Char = sel.Start.Char
+		}
+		cur.PreserveCharPosition = cur.Char
+		ci.Selection = nil
+	}
+	m.buf.Selection = nil
+}
+
+func (m *MultiCursor) MoveUp(count uint32) {
+	for idx := range m.Cursors {
+		cur := &m.Cursors[idx].Cursor
+		cur.Line = max(cur.Line-int(count), 0)
+		restoreCharPosition(m.buf, cur)
+		m.Cursors[idx].Selection = nil
+	}
+}
+
+func (m *MultiCursor) MoveDown(count uint32) {
+	for idx := range m.Cursors {
+		cur := &m.Cursors[idx].Cursor
+		cur.Line = min(cur.Line+int(count), m.buf.Lines.Len-1)
+		restoreCharPosition(m.buf, cur)
+		m.Cursors[idx].Selection = nil
+	}
+}
+
+func (m *MultiCursor) MoveHome() {
+	for idx := range m.Cursors {
+		cur := &m.Cursors[idx].Cursor
+		cur.Char = 0
+		cur.PreserveCharPosition = 0
+		m.Cursors[idx].Selection = nil
+	}
+}
+
+func (m *MultiCursor) MoveEnd() {
+	for idx := range m.Cursors {
+		cur := &m.Cursors[idx].Cursor
+		line := CursorLine(m.buf, cur)
+		if line == nil {
+			continue
+		}
+		cur.Char = len(line.Value) - 1
+		cur.PreserveCharPosition = cur.Char
+		m.Cursors[idx].Selection = nil
+	}
+}
+
+func (m *MultiCursor) MatchNextOccurrence(ctx Context) {
+	cur := ContextCursorGet(ctx)
+	if cur == nil || ctx.Buf == nil {
+		return
+	}
+
+	if len(m.Cursors) == 0 || m.Pattern == "" {
+		if ctx.Buf.Selection != nil {
+			sel := SelectionNormalize(ctx.Buf.Selection)
+			text := SelectionToString(ctx.Buf, &sel)
+			if text == "" {
+				return
+			}
+			m.Pattern = text
+			curCopy := *cur
+			m.Cursors = append(m.Cursors, CursorInstance{
+				Cursor:    curCopy,
+				Selection: &sel,
+			})
+		} else {
+			line := CursorLine(ctx.Buf, cur)
+			if line == nil || len(line.Value) == 0 {
+				return
+			}
+			start, end := TextObjectWord(ctx, true)
+			if start > end || start >= len(line.Value) {
+				return
+			}
+			word := string(line.Value.Range(start, end+1))
+			word = strings.TrimSpace(word)
+			if word == "" {
+				return
+			}
+			m.Pattern = word
+			sel := Selection{
+				Start: Cursor{Line: cur.Line, Char: start},
+				End:   Cursor{Line: cur.Line, Char: end},
+			}
+			curCopy := *cur
+			curCopy.Char = end
+			curCopy.PreserveCharPosition = end
+			m.Cursors = append(m.Cursors, CursorInstance{
+				Cursor:    curCopy,
+				Selection: &sel,
+			})
+			ctx.Buf.Selection = &sel
+			*cur = curCopy
+			setBufferMode(ctx, MODE_VISUAL)
+		}
+	}
+
+	last := m.Cursors[len(m.Cursors)-1]
+	fromLine := last.Cursor.Line
+	fromChar := last.Cursor.Char + 1
+	if last.Selection != nil {
+		fromLine = last.Selection.End.Line
+		fromChar = last.Selection.End.Char + 1
+	}
+	m.searchAndAdd(ctx, fromLine, fromChar)
+}
+
+// SkipNext removes the most recently added cursor/selection and adds the
+// next occurrence after it, effectively skipping the current match.
+func (m *MultiCursor) SkipNext(ctx Context) {
+	if len(m.Cursors) == 0 || m.Pattern == "" {
+		return
+	}
+	skipped := m.Cursors[len(m.Cursors)-1]
+	m.Cursors = m.Cursors[:len(m.Cursors)-1]
+	if len(m.Cursors) == 0 {
+		m.Clear()
+		ctx.Buf.Selection = nil
+		setBufferMode(ctx, MODE_NORMAL)
+		return
+	}
+	fromLine := skipped.Cursor.Line
+	fromChar := skipped.Cursor.Char + 1
+	if skipped.Selection != nil {
+		fromLine = skipped.Selection.End.Line
+		fromChar = skipped.Selection.End.Char + 1
+	}
+	m.searchAndAdd(ctx, fromLine, fromChar)
+}
+
+// searchAndAdd finds the pattern's next occurrence starting from fromLine/fromChar
+// (wrapping around the buffer) and appends it as a new cursor/selection.
+func (m *MultiCursor) searchAndAdd(ctx Context, fromLine, fromChar int) {
+	cur := ContextCursorGet(ctx)
+	patRunes := []rune(m.Pattern)
+	if len(patRunes) == 0 {
+		return
+	}
+	totalLines := ctx.Buf.Lines.Len
+	foundLine := -1
+	foundChar := -1
+	for l := 0; l < totalLines; l++ {
+		lineIdx := (fromLine + l) % totalLines
+		lineElem := CursorLineByNum(ctx.Buf, lineIdx)
+		if lineElem == nil {
+			continue
+		}
+		startC := 0
+		if l == 0 {
+			startC = fromChar
+		}
+		if startC >= len(lineElem.Value) {
+			continue
+		}
+		idx := indexOfRunes(lineElem.Value[startC:], patRunes)
+		if idx >= 0 {
+			candidateLine := lineIdx
+			candidateChar := startC + idx
+			alreadyExists := false
+			for _, c := range m.Cursors {
+				if c.Selection != nil && c.Selection.Start.Line == candidateLine && c.Selection.Start.Char == candidateChar {
+					alreadyExists = true
+					break
+				}
+			}
+			if alreadyExists {
+				ctx.Editor.EchoMessage("no more matches")
+				return
+			}
+			foundLine = candidateLine
+			foundChar = candidateChar
+			break
+		}
+	}
+	if foundLine == -1 {
+		ctx.Editor.EchoMessage("no more matches")
+		return
+	}
+	newSel := Selection{
+		Start: Cursor{Line: foundLine, Char: foundChar},
+		End:   Cursor{Line: foundLine, Char: foundChar + len(patRunes) - 1},
+	}
+	newCur := Cursor{
+		Line:                 foundLine,
+		Char:                 foundChar + len(patRunes) - 1,
+		PreserveCharPosition: foundChar + len(patRunes) - 1,
+	}
+	m.Cursors = append(m.Cursors, CursorInstance{
+		Cursor:    newCur,
+		Selection: &newSel,
+	})
+	ctx.Buf.Selection = &newSel
+	*cur = newCur
+	setBufferMode(ctx, MODE_VISUAL)
+	CmdEnsureCursorVisible(ctx)
+	ctx.Editor.EchoMessage(fmt.Sprintf("%d selections", len(m.Cursors)))
+}
+
+func (m *MultiCursor) DeleteSelections(ctx Context) {
+	if len(m.Cursors) == 0 {
+		return
+	}
+	m.Sort()
+
+	if ctx.Buf.TxStart() {
+		defer ctx.Buf.TxEnd()
+	}
+
+	for i := len(m.Cursors) - 1; i >= 0; i-- {
+		ci := &m.Cursors[i]
+		if ci.Selection == nil {
+			continue
+		}
+		sel := SelectionNormalize(ci.Selection)
+		sel.End.Char++
+		deletedLen := sel.End.Char - sel.Start.Char
+		TextDelete(ctx.Buf, &sel)
+		ci.Cursor = sel.Start
+		ci.Selection = nil
+
+		for k := i + 1; k < len(m.Cursors); k++ {
+			if m.Cursors[k].Cursor.Line == sel.Start.Line {
+				m.Cursors[k].Cursor.Char = max(0, m.Cursors[k].Cursor.Char-deletedLen)
+				m.Cursors[k].Cursor.PreserveCharPosition = m.Cursors[k].Cursor.Char
+			}
+		}
+	}
+
+	ctx.Buf.Selection = nil
+	if len(m.Cursors) > 0 {
+		cur := ContextCursorGet(ctx)
+		*cur = m.Cursors[0].Cursor
+	}
+}
+
+func (m *MultiCursor) HandleInsertKey(ctx Context, ev *tcell.EventKey) bool {
+	if ctx.Buf.Mode() != MODE_INSERT {
+		return false
+	}
+	if ev.Modifiers()&tcell.ModCtrl != 0 || ev.Modifiers()&tcell.ModAlt != 0 || ev.Modifiers()&tcell.ModMeta != 0 {
+		return false
+	}
+
+	ch := ev.Rune()
+	if ev.Key() == tcell.KeyCtrlJ || ev.Key() == tcell.KeyEnter {
+		ch = '\n'
+	}
+
+	if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
+		m.Sort()
+		for i := len(m.Cursors) - 1; i >= 0; i-- {
+			cur := &m.Cursors[i].Cursor
+			if cur.Char <= 0 {
+				continue
+			}
+			start := *cur
+			start.Char--
+			TextDelete(m.buf, &Selection{
+				Start: start,
+				End:   *cur,
+			})
+			cur.Char--
+			cur.PreserveCharPosition = cur.Char
+
+			for k := i + 1; k < len(m.Cursors); k++ {
+				if m.Cursors[k].Cursor.Line == cur.Line && m.Cursors[k].Cursor.Char > 0 {
+					m.Cursors[k].Cursor.Char--
+					m.Cursors[k].Cursor.PreserveCharPosition = m.Cursors[k].Cursor.Char
+				}
+			}
+		}
+
+		if len(m.Cursors) > 0 {
+			winCur := ContextCursorGet(ctx)
+			*winCur = m.Cursors[len(m.Cursors)-1].Cursor
+		}
+		return true
+	}
+
+	if ch == 0 && ev.Key() != tcell.KeyEnter {
+		return false
+	}
+
+	strToInsert := string(ch)
+	if ch == '\t' {
+		strToInsert = "\t"
+	}
+
+	m.Sort()
+	for i := len(m.Cursors) - 1; i >= 0; i-- {
+		cur := &m.Cursors[i].Cursor
+		line := CursorLine(m.buf, cur)
+		if line == nil {
+			continue
+		}
+
+		pos := cur.Char
+		if pos < 0 {
+			pos = 0
+		}
+		if pos > len(line.Value) {
+			pos = len(line.Value)
+		}
+
+		TextInsert(m.buf, line, pos, strToInsert)
+
+		if ch == '\n' {
+			cur.Line++
+			cur.Char = 0
+			cur.PreserveCharPosition = 0
+			for k := i + 1; k < len(m.Cursors); k++ {
+				m.Cursors[k].Cursor.Line++
+			}
+		} else {
+			rlen := utf8.RuneCountInString(strToInsert)
+			cur.Char += rlen
+			cur.PreserveCharPosition = cur.Char
+			for k := i + 1; k < len(m.Cursors); k++ {
+				if m.Cursors[k].Cursor.Line == cur.Line {
+					m.Cursors[k].Cursor.Char += rlen
+					m.Cursors[k].Cursor.PreserveCharPosition = m.Cursors[k].Cursor.Char
+				}
+			}
+		}
+	}
+
+	if len(m.Cursors) > 0 {
+		winCur := ContextCursorGet(ctx)
+		*winCur = m.Cursors[len(m.Cursors)-1].Cursor
+		CmdEnsureCursorVisible(ctx)
+	}
+	return true
+}
+
+func indexOfRunes(runes, pat []rune) int {
+	if len(pat) == 0 || len(runes) < len(pat) {
+		return -1
+	}
+	for i := 0; i <= len(runes)-len(pat); i++ {
+		match := true
+		for j := 0; j < len(pat); j++ {
+			if runes[i+j] != pat[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return i
+		}
+	}
+	return -1
+}

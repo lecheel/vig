@@ -248,6 +248,10 @@ func WithSelection(fn func(Context)) func(Context) {
 	return func(ctx Context) {
 		fn(ctx)
 		buf := ctx.Buf
+		if buf.MultiCursor != nil && buf.MultiCursor.Active() {
+			// multicursor moves manage their own per-cursor selection state
+			return
+		}
 		if buf.Selection == nil {
 			// TODO: this is workaround for when selection was deleted but did
 			// not exited VIS_LINE_MODE
@@ -260,6 +264,10 @@ func WithSelection(fn func(Context)) func(Context) {
 }
 
 func SelectionDelete(ctx Context) {
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.DeleteSelections(ctx)
+		return
+	}
 	if ctx.Buf.Selection == nil {
 		return
 	}
