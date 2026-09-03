@@ -29,6 +29,7 @@ type StatuslineData struct {
 	HasBranch   bool
 	IsActive    bool
 	SessionName string
+	AutoSession bool
 }
 
 func extractStatuslineData(e *wig.Editor, win *wig.Window) *StatuslineData {
@@ -84,6 +85,7 @@ func extractStatuslineData(e *wig.Editor, win *wig.Window) *StatuslineData {
 		HasBranch:   hasBranch,
 		IsActive:    active,
 		SessionName: sessionName,
+		AutoSession: e.Config.AutoSession,
 	}
 }
 
@@ -153,7 +155,11 @@ func renderPlain(
 
 	rightSide := fmt.Sprintf("%d:%d", d.Line, d.Char)
 	if d.SessionName != "" {
-		rightSide = fmt.Sprintf("[%s]  %s", d.SessionName, rightSide)
+		sessionIcon := "✔"
+		if d.AutoSession {
+			sessionIcon = "⚡"
+		}
+		rightSide = fmt.Sprintf("%s[%s]  %s", sessionIcon, d.SessionName, rightSide)
 	}
 	if d.Scope != "" {
 		scope := d.Scope
@@ -374,8 +380,12 @@ func renderPowerline(
 		if !d.IsActive {
 			sesBg = bgFill
 		}
+		sessionIcon := "✔"
+		if d.AutoSession {
+			sessionIcon = "⚡"
+		}
 		rightSegs = append(rightSegs, segment{
-			text: fmt.Sprintf(" %s  ", d.SessionName),
+			text: fmt.Sprintf(" %s %s ", sessionIcon, d.SessionName),
 			fg:   sesFg, bg: sesBg,
 		})
 	}
