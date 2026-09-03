@@ -208,7 +208,11 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 				}
 
 				// selection
-				if buf.Selection != nil {
+				if buf.MultiCursor != nil && buf.MultiCursor.Active() {
+					if buf.MultiCursor.HasSelectionAt(lineNum, i) {
+						textStyle = wig.ApplyBg("ui.selection.primary", textStyle)
+					}
+				} else if buf.Selection != nil {
 					if isVisualBlock {
 						// Tabs are excluded here and handled per-column
 						// below — a tab is one rune spanning 4 columns,
@@ -290,7 +294,13 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 
 				// render cursor
 				if isActiveWin {
-					if lineNum == cur.Line && i == cur.Char {
+					isCursor := false
+					if buf.MultiCursor != nil && buf.MultiCursor.Active() {
+						isCursor = buf.MultiCursor.HasCursorAt(lineNum, i)
+					} else {
+						isCursor = (lineNum == cur.Line && i == cur.Char)
+					}
+					if isCursor {
 						baseCursor := wig.Color("default")
 						if c, found := wig.FindColor("ui.selection"); found {
 							baseCursor = c
@@ -336,9 +346,19 @@ func WindowRender(e *wig.Editor, view wig.View, win *wig.Window) {
 				}
 			}
 
-			if lineNum == cur.Line && cur.Char >= len(currentLine.Value) && isActiveWin {
-				if x >= 0 && x < termWidth && y >= 0 && y < termHeight {
-					view.SetContent(x, y, " ", wig.Color("ui.cursor"))
+			if isActiveWin {
+				if buf.MultiCursor != nil && buf.MultiCursor.Active() {
+					for _, c := range buf.MultiCursor.Cursors {
+						if c.Cursor.Line == lineNum && c.Cursor.Char >= len(currentLine.Value) {
+							if x >= 0 && x < termWidth && y >= 0 && y < termHeight {
+								view.SetContent(x, y, " ", wig.Color("ui.cursor"))
+							}
+						}
+					}
+				} else if lineNum == cur.Line && cur.Char >= len(currentLine.Value) {
+					if x >= 0 && x < termWidth && y >= 0 && y < termHeight {
+						view.SetContent(x, y, " ", wig.Color("ui.cursor"))
+					}
 				}
 			}
 			y++

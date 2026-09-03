@@ -7,6 +7,12 @@ import (
 )
 
 func HandleInsertKey(ctx Context, ev *tcell.EventKey) {
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		if ctx.Buf.MultiCursor.HandleInsertKey(ctx, ev) {
+			return
+		}
+	}
+
 	cur := ContextCursorGet(ctx)
 	line := CursorLine(ctx.Buf, cur)
 	ch := ev.Rune()

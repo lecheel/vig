@@ -456,6 +456,13 @@ func CmdDeleteBefore(ctx Context) func(Context) {
 }
 
 func CmdSelectionChange(ctx Context) {
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.DeleteSelections(ctx)
+		*ContextCursorGet(ctx) = ctx.Buf.MultiCursor.Cursors[len(ctx.Buf.MultiCursor.Cursors)-1].Cursor
+		ctx.Buf.TxStart()
+		setBufferMode(ctx, MODE_INSERT)
+		return
+	}
 	CmdEnterInsertMode(ctx)
 	yankSave(ctx)
 	SelectionDelete(ctx)
