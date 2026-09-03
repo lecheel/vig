@@ -75,8 +75,16 @@ func (r *Renderer) Render() {
 	}
 
 	r.screen.Fill(' ', wig.Color("ui.background"))
-
 	w, h := r.screen.Size()
+
+	// Reserve 1 line at the bottom if we are using a global statusline
+	renderH := h
+	if r.e.Config.GlobalStatusline {
+		renderH = h - 1
+		if renderH < 0 {
+			renderH = 0
+		}
+	}
 
 	ws := r.e.GetActiveWorkspace()
 	var root *wig.WinNode
@@ -88,13 +96,10 @@ func (r *Renderer) Render() {
 			root = wig.LeafNode(aw)
 		}
 	}
-
 	var activeWinView *mview
 	if root != nil {
-		activeWinView = r.renderNode(root, 0, 0, w, h)
+		activeWinView = r.renderNode(root, 0, 0, w, renderH)
 	}
-
-	// widgets: pickers, etc...
 	mainView := NewMView(r.screen, 0, 0, w, h)
 	for _, c := range r.e.UiComponents {
 		switch c.Plane() {
@@ -105,6 +110,13 @@ func (r *Renderer) Render() {
 		}
 	}
 
+	// Render the global statusline at the very bottom of the screen
+	if r.e.Config.GlobalStatusline {
+		aw := r.e.ActiveWindow()
+		if aw != nil {
+			ui.StatuslineRender(r.e, mainView, aw)
+		}
+	}
 	r.screen.Show()
 }
 
@@ -121,7 +133,10 @@ func (r *Renderer) renderNode(node *wig.WinNode, x, y, w, h int) *mview {
 		if r.e.Config.IndentGuides {
 			r.RenderIndentGuides(node.Win, view)
 		}
-		ui.StatuslineRender(r.e, view, node.Win)
+		// Only render the statusline per-window if global statusline is disabled
+		if !r.e.Config.GlobalStatusline {
+			ui.StatuslineRender(r.e, view, node.Win)
+		}
 		if node.Win == r.e.ActiveWindow() {
 			return view
 		}

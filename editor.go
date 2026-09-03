@@ -27,6 +27,7 @@ type EditorConfig struct {
 	StatuslineStyle     string `toml:"statusline_style"`
 	FilePickerView      string `toml:"file_picker_view"` // "tree" (default) or "files"
 	AutoSession         bool   `toml:"auto_session"`     // Automatically save/restore the last session on startup/quit
+	GlobalStatusline    bool   `toml:"global_statusline"`
 }
 
 type View interface {

@@ -49,6 +49,7 @@ func ConfigPopupInit(ctx wig.Context) {
 			{Name: "quickfix_view", Value: &cfg.QuickfixView, Options: []string{"split", "popup"}},
 			{Name: "file_picker_view", Value: &cfg.FilePickerView, Options: []string{"tree", "files"}},
 			{Name: "auto_session", Value: &cfg.AutoSession},
+			{Name: "global_statusline", Value: &cfg.GlobalStatusline},
 		},
 	}
 
@@ -139,6 +140,7 @@ func (u *ConfigPopupWidget) saveConfig() {
 		"comment_style":         fmt.Sprintf("%q", cfg.CommentStyle),
 		"file_picker_view":      fmt.Sprintf("%q", cfg.FilePickerView),
 		"auto_session":          fmt.Sprintf("%v", cfg.AutoSession),
+		"global_statusline":     fmt.Sprintf("%v", cfg.GlobalStatusline),
 	}
 
 	err = updateConfigFile(configPath, values)

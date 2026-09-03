@@ -71,6 +71,7 @@ type EditorSettings struct {
 	GitAiCommit         *bool   `toml:"git_ai_commit"`
 	GitAiTool           *string `toml:"git_ai_tool"`
 	AutoSession         *bool   `toml:"auto_session"`
+	GlobalStatusline    *bool   `toml:"global_statusline"`
 }
 
 type UserKeysConfig struct {
@@ -110,6 +111,7 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		StatuslineStyle:     "plain",
 		FilePickerView:      "files",
 		AutoSession:         false,
+		GlobalStatusline:    false,
 	}
 	userMap := wig.ModeKeyMap{
 		wig.MODE_NORMAL:       wig.KeyMap{},
@@ -190,6 +192,9 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	}
 	if cfg.Editor.AutoSession != nil {
 		editorCfg.AutoSession = *cfg.Editor.AutoSession
+	}
+	if cfg.Editor.GlobalStatusline != nil {
+		editorCfg.GlobalStatusline = *cfg.Editor.GlobalStatusline
 	}
 	commands.NotifyOnSave = false
 	commands.GitAiCommit = false
