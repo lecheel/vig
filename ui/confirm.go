@@ -86,16 +86,21 @@ func ConfirmInit(ctx wig.Context, prompt string, onYes func(), onNo func(), onCa
 
 func (u *ConfirmWidget) Render(view wig.View) {
 	vw, vh := view.Size()
-	y := vh - 1
+	y := vh - 2
+	if y < 0 {
+		return
+	}
 
-	// Use the statusline style to blend in with the bottom bar
-	st := wig.Color("ui.statusline")
+	st := wig.Color("default")
+	if s, ok := wig.FindColor("ui.message"); ok {
+		st = s
+	}
 
-	// Fill the entire bottom line with the background color
+	// Fill the message line with the default background
 	bg := strings.Repeat(" ", vw)
-	view.SetContent(0, y, bg, st)
+	view.SetContent(0, y, bg, wig.Color("default"))
 
-	// Render the prompt text
+	// Render the prompt text starting at x = 0
 	view.SetContent(0, y, u.prompt, st)
 
 	// Render a cursor block at the end of the prompt

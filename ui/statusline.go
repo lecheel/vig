@@ -114,6 +114,16 @@ func StatuslineRender(
 		}
 	}
 
+	// Render EchoMessage 1 line above the statusbar so full statusline info stays visible
+	if d.IsActive && d.Message != "" && h-1 >= 0 {
+		msgStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow)
+		if s, ok := wig.FindColor("ui.message"); ok {
+			msgStyle = s
+		}
+		view.SetContent(0, h-1, strings.Repeat(" ", w), tcell.StyleDefault)
+		view.SetContent(0, h-1, d.Message, msgStyle)
+	}
+
 	if e.Config.StatuslineStyle == "powerline" {
 		renderPowerline(e, view, d, w, h)
 	} else {
@@ -138,9 +148,6 @@ func renderPlain(
 	leftSide := fmt.Sprintf("%s %s%s ", d.ModeName, d.BufName, macroStr)
 	if d.HasBranch {
 		leftSide += fmt.Sprintf("  %s ", d.GitBranch)
-	}
-	if d.Message != "" {
-		leftSide = d.Message
 	}
 	view.SetContent(2, h, leftSide, st)
 
@@ -323,10 +330,6 @@ func renderPowerline(
 			text: fmt.Sprintf(" REC @%s ", strings.TrimPrefix(d.Macro, "recording @")),
 			fg:   tcell.ColorWhite, bg: bgFill,
 		})
-	}
-
-	if d.Message != "" {
-		leftSegs = []segment{{text: fmt.Sprintf(" %s ", d.Message), fg: tcell.ColorWhite, bg: bgFill}}
 	}
 
 	var rightSegs []segment

@@ -826,6 +826,10 @@ func (u *uiCommandLine) Keymap() *wig.KeyHandler {
 
 func (u *uiCommandLine) Render(view wig.View) {
 	vw, vh := view.Size()
+	y := vh - 2
+	if y < 0 {
+		return
+	}
 	promptPrefix := ":"
 
 	beforeCursor := string(u.chBuf[:u.cursorPos])
@@ -841,25 +845,25 @@ func (u *uiCommandLine) Render(view wig.View) {
 	bgStyle := wig.Color("default")
 
 	// Clear line
-	view.SetContent(0, vh-1, strings.Repeat(" ", vw), bgStyle)
+	view.SetContent(0, y, strings.Repeat(" ", vw), bgStyle)
 
-	// Draw prefix and text before cursor
-	view.SetContent(0, vh-1, promptPrefix+beforeCursor, bgStyle)
+	// Draw prefix and text before cursor starting at x = 0
+	view.SetContent(0, y, promptPrefix+beforeCursor, bgStyle)
 
 	// Draw cursor character (reversed) or the '^' for Ctrl-r mode
 	cursorStyle := bgStyle.Reverse(true)
 	if u.ctrlRMode {
-		view.SetContent(len(beforeCursor)+1, vh-1, "^", cursorStyle)
+		view.SetContent(len(beforeCursor)+1, y, "^", cursorStyle)
 	} else {
-		view.SetContent(len(beforeCursor)+1, vh-1, atCursorRune, cursorStyle)
+		view.SetContent(len(beforeCursor)+1, y, atCursorRune, cursorStyle)
 	}
 
 	// Draw text after cursor
 	if len(afterCursor) > 0 {
-		view.SetContent(len(beforeCursor)+2, vh-1, afterCursor, bgStyle)
+		view.SetContent(len(beforeCursor)+2, y, afterCursor, bgStyle)
 	}
 
-	// Show candidates visually on the line above the prompt (like Vim)
+	// Show candidates visually on the lines above the prompt (like Vim)
 	if len(u.candidates) > 1 {
 		maxLen := 0
 		for _, c := range u.candidates {
@@ -883,18 +887,18 @@ func (u *uiCommandLine) Render(view wig.View) {
 
 		rows := (len(u.candidates) + cols - 1) / cols
 		for r := 0; r < rows; r++ {
-			y := vh - 2 - r
-			if y < 0 {
+			candY := y - 1 - r
+			if candY < 0 {
 				break
 			}
-			view.SetContent(0, y, strings.Repeat(" ", vw), bgStyle)
+			view.SetContent(0, candY, strings.Repeat(" ", vw), bgStyle)
 		}
 
 		for i, c := range u.candidates {
 			r := i / cols
 			col := i % cols
-			y := vh - 2 - r
-			if y < 0 {
+			candY := y - 1 - r
+			if candY < 0 {
 				break
 			}
 			x := col * colWidth
@@ -907,9 +911,9 @@ func (u *uiCommandLine) Render(view wig.View) {
 				cWidth = vw - x
 			}
 			cStr := truncate(c, cWidth)
-			view.SetContent(x, y, cStr, itemStyle)
+			view.SetContent(x, candY, cStr, itemStyle)
 			if pad := cWidth - len([]rune(cStr)); pad > 0 {
-				view.SetContent(x+len([]rune(cStr)), y, strings.Repeat(" ", pad), itemStyle)
+				view.SetContent(x+len([]rune(cStr)), candY, strings.Repeat(" ", pad), itemStyle)
 			}
 		}
 	}
