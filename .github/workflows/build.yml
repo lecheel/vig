@@ -2,14 +2,14 @@ name: Build
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "test-*" ] # Allows testing on any test-* branch
     tags: [ "v*", "*.*.*" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual trigger from the Actions tab
 
 permissions:
-  contents: write # Needed to publish releases
+  contents: write
 
 jobs:
   build:
@@ -30,6 +30,13 @@ jobs:
             goarch: arm64
             cc: aarch64-linux-gnu-gcc
             cxx: aarch64-linux-gnu-g++
+
+          # Windows AMD64 (Cross-compiled with MinGW)
+          - os: ubuntu-latest
+            goos: windows
+            goarch: amd64
+            cc: x86_64-w64-mingw32-gcc
+            cxx: x86_64-w64-mingw32-g++
 
           - os: macos-latest
             goos: darwin
@@ -55,13 +62,18 @@ jobs:
           go-version: '1.25'
           cache: true
 
-      - name: Install cross-compiler (Linux ARM64)
-        if: matrix.goos == 'linux' && matrix.goarch == 'arm64'
+      - name: Install cross-compilers
+        if: matrix.os == 'ubuntu-latest' && (matrix.goarch == 'arm64' || matrix.goos == 'windows')
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          if [ "${{ matrix.goarch }}" = "arm64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          fi
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            sudo apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 zip
+          fi
 
-      - name: Build and package (.tar.gz)
+      - name: Build and package
         env:
           CGO_ENABLED: 1
           GOOS: ${{ matrix.goos }}
@@ -81,15 +93,26 @@ jobs:
             -X github.com/firstrow/wig/version.CommitHash=${COMMIT_HASH} \
             -X github.com/firstrow/wig/version.Dirty=${DIRTY}"
 
-          # 1. Compile the binary named 'vig'
-          go build -ldflags "${LDFLAGS}" -o vig ./cmd
-          chmod +x vig
+          # 1. Determine executable extension
+          EXE_NAME="vig"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            EXE_NAME="vig.exe"
+          fi
 
-          # 2. Package into .tar.gz
-          ARCHIVE_NAME="vig-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
-          tar -czvf "${ARCHIVE_NAME}" vig
+          echo "Building ${EXE_NAME} for ${{ matrix.goos }}/${{ matrix.goarch }}..."
+          go build -ldflags "${LDFLAGS}" -o "${EXE_NAME}" ./cmd
 
-          # 3. Generate SHA256 checksum file
+          # 2. Package: .zip for Windows, .tar.gz for Linux/macOS
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            ARCHIVE_NAME="vig-${{ matrix.goos }}-${{ matrix.goarch }}.zip"
+            zip -9 "${ARCHIVE_NAME}" "${EXE_NAME}"
+          else
+            chmod +x "${EXE_NAME}"
+            ARCHIVE_NAME="vig-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
+            tar -czvf "${ARCHIVE_NAME}" "${EXE_NAME}"
+          fi
+
+          # 3. Generate SHA256 checksum
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
           else
@@ -101,8 +124,7 @@ jobs:
         with:
           name: vig-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            vig-*.tar.gz
-            vig-*.tar.gz.sha256
+            vig-*.*
           if-no-files-found: error
 
       - name: Upload to Release
@@ -110,5 +132,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            vig-*.zip
             vig-*.tar.gz
-            vig-*.tar.gz.sha256
+            vig-*.sha256
