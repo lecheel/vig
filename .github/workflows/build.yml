@@ -3,13 +3,13 @@ name: Build
 on:
   push:
     branches: [ "main", "master" ]
-    tags: [ "v*" ]
+    tags: [ "v*", "*.*.*" ]
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
 permissions:
-  contents: write # Needed for uploading assets to GitHub Releases
+  contents: write # Needed to publish releases
 
 jobs:
   build:
@@ -47,7 +47,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Full history needed for git describe and git rev-parse
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -61,14 +61,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-      - name: Build binary
+      - name: Build and package (.tar.gz)
         env:
           CGO_ENABLED: 1
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
-          BINARY_NAME: vig-${{ matrix.goos }}-${{ matrix.goarch }}
         run: |
           COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
           GIT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
@@ -82,19 +81,34 @@ jobs:
             -X github.com/firstrow/wig/version.CommitHash=${COMMIT_HASH} \
             -X github.com/firstrow/wig/version.Dirty=${DIRTY}"
 
-          echo "Building ${BINARY_NAME} (commit: ${COMMIT_HASH}, version: ${GIT_VERSION:-none})"
-          go build -ldflags "${LDFLAGS}" -o "${BINARY_NAME}" ./cmd
-          chmod +x "${BINARY_NAME}"
+          # 1. Compile the binary named 'vig'
+          go build -ldflags "${LDFLAGS}" -o vig ./cmd
+          chmod +x vig
+
+          # 2. Package into .tar.gz
+          ARCHIVE_NAME="vig-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
+          tar -czvf "${ARCHIVE_NAME}" vig
+
+          # 3. Generate SHA256 checksum file
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
+          else
+            shasum -a 256 "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: vig-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: vig-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            vig-*.tar.gz
+            vig-*.tar.gz.sha256
           if-no-files-found: error
 
-      - name: Upload binary to Release
+      - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: vig-${{ matrix.goos }}-${{ matrix.goarch }}
+          files: |
+            vig-*.tar.gz
+            vig-*.tar.gz.sha256
