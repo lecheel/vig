@@ -135,16 +135,37 @@ dropping multi-cursor mode:
         start of its deletion).
       - Enters MODE_INSERT.
 
+3.5 CmdMultiCursorAddDown (C)
+
+  - Duplicates cursor / selection onto the line below at the same column.
+  - Initial Call (no active multi-cursor):
+      - In Normal Mode: adds current cursor position and adds a second cursor on
+        the line below at the same column.
+      - In Visual Mode (single line): duplicates the selection onto the next
+        line.
+      - Multi-line Selection: converts each selected line into an independent
+        cursor.
+  - Subsequent Calls:
+      - Appends another cursor on the line below the lowest active cursor.
+
+3.6 CmdAppendEndOfLines (A)
+
+  - Moves all active multi-cursors (or each line in a multi-line visual
+    selection) to the end of their respective lines.
+  - Clears selections and transitions immediately to MODE_INSERT for
+    simultaneous end-of-lines editing.
+
 3.5 Deletion (d, x)
 
   - Calls SelectionDelete(ctx), which delegates to m.DeleteSelections(ctx).
   - Deletions are processed in reverse document order (bottom-to-top,
     right-to-left) to prevent coordinate shifting from invalidating preceding
-    ranges.
+    ranges. If a cursor has no selection, deletes the character under the cursor.
   - Subsequent cursor columns on the same line are shifted left by the deleted
     character count.
   - Synchronizes ContextCursorGet(ctx) to m.Cursors[m.PrimaryIndex].Cursor.
-  - Clears selections and resets mode to MODE_NORMAL.
+  - Clears selections and resets mode to MODE_NORMAL while keeping all active
+    cursors for subsequent edits or motions.
 
 3.6 Escape (Esc)
 

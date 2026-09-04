@@ -218,6 +218,11 @@ func CmdDeleteCharForward(ctx Context) {
 		defer ctx.Buf.TxEnd()
 	}
 
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.DeleteSelections(ctx)
+		return
+	}
+
 	cur := ContextCursorGet(ctx)
 	line := CursorLine(ctx.Buf, cur)
 	if len(line.Value) <= 1 {
@@ -258,6 +263,70 @@ func CmdDeleteCharBackward(ctx Context) {
 }
 
 func CmdAppendLine(ctx Context) {
+	CmdAppendEndOfLines(ctx)
+}
+
+func CmdAppendEndOfLines(ctx Context) {
+	if ctx.Buf == nil {
+		return
+	}
+
+	// If multi-cursor is active:
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		ctx.Buf.MultiCursor.MoveEnd()
+		ctx.Buf.Selection = nil
+		idx := ctx.Buf.MultiCursor.PrimaryIndex
+		if idx >= len(ctx.Buf.MultiCursor.Cursors) || idx < 0 {
+			idx = len(ctx.Buf.MultiCursor.Cursors) - 1
+		}
+		cur := ContextCursorGet(ctx)
+		savedOffset := cur.ScrollOffset
+		*cur = ctx.Buf.MultiCursor.Cursors[idx].Cursor
+		cur.ScrollOffset = savedOffset
+		CmdEnsureCursorVisible(ctx)
+		ctx.Buf.TxStart()
+		setBufferMode(ctx, MODE_INSERT)
+		return
+	}
+
+	// If there is an active selection spanning multiple lines or in visual line/block mode,
+	// convert the selection into multi-cursors at the end of each line and enter insert mode.
+	if ctx.Buf.Selection != nil {
+		sel := SelectionNormalize(ctx.Buf.Selection)
+		if sel.Start.Line != sel.End.Line || ctx.Buf.Mode() == MODE_VISUAL_LINE || ctx.Buf.Mode() == MODE_VISUAL_BLOCK {
+			if ctx.Buf.MultiCursor == nil {
+				ctx.Buf.MultiCursor = NewMultiCursor(ctx.Buf)
+			}
+			m := ctx.Buf.MultiCursor
+			m.Clear()
+			for lineNum := sel.Start.Line; lineNum <= sel.End.Line; lineNum++ {
+				line := CursorLineByNum(ctx.Buf, lineNum)
+				charPos := 0
+				if line != nil && len(line.Value) > 0 {
+					charPos = len(line.Value) - 1
+				}
+				c := Cursor{
+					Line:                 lineNum,
+					Char:                 charPos,
+					PreserveCharPosition: charPos,
+				}
+				m.Cursors = append(m.Cursors, CursorInstance{Cursor: c, Selection: nil})
+			}
+			m.PrimaryIndex = len(m.Cursors) - 1
+			ctx.Buf.Selection = nil
+			cur := ContextCursorGet(ctx)
+			savedOffset := cur.ScrollOffset
+			*cur = m.Cursors[m.PrimaryIndex].Cursor
+			cur.ScrollOffset = savedOffset
+			CmdEnsureCursorVisible(ctx)
+			ctx.Buf.TxStart()
+			setBufferMode(ctx, MODE_INSERT)
+			return
+		}
+	}
+
+	// Single cursor normal / visual mode:
+	ctx.Buf.Selection = nil
 	CmdGotoLineEnd(ctx)
 	CmdEnterInsertModeAppend(ctx)
 }
@@ -721,12 +790,18 @@ func CmdCommentAround(_ Context) func(Context) {
 	}
 }
 func CmdSelectionDelete(ctx Context) {
-	defer CmdNormalMode(ctx)
 	if ctx.Buf.TxStart() {
 		defer ctx.Buf.TxEnd()
 	}
 	yankSave(ctx)
 	SelectionDelete(ctx)
+
+	if ctx.Buf.MultiCursor != nil && ctx.Buf.MultiCursor.Active() {
+		setBufferMode(ctx, MODE_NORMAL)
+		ctx.Buf.Selection = nil
+	} else {
+		CmdNormalMode(ctx)
+	}
 
 	ctx.Editor.LastRepeatableFn = CmdSelectionDelete
 }
@@ -1914,6 +1989,13 @@ func CmdMultiCursorRotateBackward(ctx Context) {
 		return
 	}
 	ctx.Buf.MultiCursor.RotateBackward(ctx)
+}
+
+func CmdMultiCursorAddDown(ctx Context) {
+	if ctx.Buf.MultiCursor == nil {
+		ctx.Buf.MultiCursor = NewMultiCursor(ctx.Buf)
+	}
+	ctx.Buf.MultiCursor.AddCursorDown(ctx)
 }
 
 // CmdDummyNA is a no-op command used to disable or override keybindings in config.toml

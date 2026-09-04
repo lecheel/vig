@@ -167,13 +167,24 @@ func main() {
 	args := fileArgs
 	if len(args) > 0 {
 		targetLine := -1
+		targetCol := 0
 		var openedFile string
-
-		// Open all files provided as arguments, skipping line number args like +10
 		for _, arg := range args {
 			if strings.HasPrefix(arg, "+") {
-				if num, err := strconv.Atoi(arg[1:]); err == nil {
-					targetLine = num - 1
+				posStr := arg[1:]
+				if idx := strings.Index(posStr, ":"); idx != -1 {
+					lineStr := posStr[:idx]
+					colStr := posStr[idx+1:]
+					if num, err := strconv.Atoi(lineStr); err == nil {
+						targetLine = num - 1
+					}
+					if col, err := strconv.Atoi(colStr); err == nil {
+						targetCol = col
+					}
+				} else {
+					if num, err := strconv.Atoi(posStr); err == nil {
+						targetLine = num - 1
+					}
 				}
 				continue
 			}
@@ -182,30 +193,28 @@ func main() {
 				openedFile, _ = filepath.Abs(arg)
 			}
 		}
-
-		// If at least one file opened successfully, show the first one
 		if len(editor.Buffers) > 0 {
 			ctx := wig.EditorInst.NewContext()
 			ctx.Buf = editor.Buffers[0]
-
 			if targetLine < 0 && openedFile != "" {
 				if entry, ok := posCache.Files[openedFile]; ok {
 					targetLine = entry.Line
 					ctx.Buf.OpenCount = entry.OpenCount + 1
 				}
 			}
-
 			if targetLine >= 0 {
 				if targetLine >= ctx.Buf.Lines.Len {
 					targetLine = ctx.Buf.Lines.Len - 1
 				}
-				editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: targetLine, Char: 0})
+				if targetCol < 0 {
+					targetCol = 0
+				}
+				editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: targetLine, Char: targetCol})
 				wig.CmdCursorCenter(ctx)
 			} else {
 				editor.ActiveWindow().VisitBuffer(ctx)
 			}
 		} else {
-			// All files failed to open, fallback to new empty buffer
 			wig.CmdNewBuffer(editor.NewContext())
 		}
 	} else {

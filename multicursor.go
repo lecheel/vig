@@ -365,14 +365,38 @@ func (m *MultiCursor) DeleteSelections(ctx Context) {
 
 	for i := len(m.Cursors) - 1; i >= 0; i-- {
 		ci := &m.Cursors[i]
-		if ci.Selection == nil {
-			continue
+		var sel Selection
+		var deletedLen int
+
+		if ci.Selection != nil {
+			norm := SelectionNormalize(ci.Selection)
+			norm.End.Char++
+			deletedLen = norm.End.Char - norm.Start.Char
+			sel = norm
+		} else {
+			line := CursorLineByNum(ctx.Buf, ci.Cursor.Line)
+			if line == nil || len(line.Value) <= 1 {
+				continue
+			}
+			count := max(int(ctx.Count), 1)
+			delChar := ci.Cursor.Char
+			if delChar >= len(line.Value)-1 {
+				delChar = max(0, len(line.Value)-2)
+			}
+			endChar := min(delChar+count, len(line.Value)-1)
+			deletedLen = endChar - delChar
+			if deletedLen <= 0 {
+				continue
+			}
+			sel = Selection{
+				Start: Cursor{Line: ci.Cursor.Line, Char: delChar},
+				End:   Cursor{Line: ci.Cursor.Line, Char: endChar},
+			}
 		}
-		sel := SelectionNormalize(ci.Selection)
-		sel.End.Char++
-		deletedLen := sel.End.Char - sel.Start.Char
+
 		TextDelete(ctx.Buf, &sel)
 		ci.Cursor = sel.Start
+		ci.Cursor.PreserveCharPosition = sel.Start.Char
 		ci.Selection = nil
 
 		for k := i + 1; k < len(m.Cursors); k++ {
@@ -517,6 +541,146 @@ func (m *MultiCursor) RotateForward(ctx Context) {
 	CmdCursorCenter(ctx)
 	m.Cursors[m.PrimaryIndex].Cursor.ScrollOffset = cur.ScrollOffset
 	ctx.Editor.EchoMessage(fmt.Sprintf("%d/%d selections", m.PrimaryIndex+1, len(m.Cursors)))
+}
+
+func (m *MultiCursor) AddCursorDown(ctx Context) {
+	cur := ContextCursorGet(ctx)
+	if cur == nil || ctx.Buf == nil {
+		return
+	}
+
+	count := max(int(ctx.Count), 1)
+
+	// If a multi-line selection exists, convert it into multi-cursors across the selected lines.
+	if ctx.Buf.Selection != nil {
+		sel := SelectionNormalize(ctx.Buf.Selection)
+		if sel.Start.Line != sel.End.Line {
+			m.Clear()
+			for lineNum := sel.Start.Line; lineNum <= sel.End.Line; lineNum++ {
+				lineElem := CursorLineByNum(ctx.Buf, lineNum)
+				maxCh := 0
+				if lineElem != nil && len(lineElem.Value) > 0 {
+					maxCh = max(len(lineElem.Value)-1, 0)
+				}
+				targetCh := min(cur.Char, maxCh)
+				newCur := Cursor{
+					Line:                 lineNum,
+					Char:                 targetCh,
+					PreserveCharPosition: cur.Char,
+				}
+				newSel := &Selection{
+					Start: Cursor{Line: lineNum, Char: targetCh},
+					End:   Cursor{Line: lineNum, Char: targetCh},
+				}
+				m.Cursors = append(m.Cursors, CursorInstance{Cursor: newCur, Selection: newSel})
+			}
+			m.PrimaryIndex = len(m.Cursors) - 1
+			last := m.Cursors[m.PrimaryIndex]
+			ctx.Buf.Selection = last.Selection
+			setBufferMode(ctx, MODE_VISUAL)
+			*cur = last.Cursor
+			CmdEnsureCursorVisible(ctx)
+			ctx.Editor.EchoMessage(fmt.Sprintf("%d selections", len(m.Cursors)))
+			return
+		}
+	}
+
+	// If multi-cursor is not yet active, add the current cursor as the base instance.
+	if len(m.Cursors) == 0 {
+		if ctx.Buf.Selection != nil {
+			sel := SelectionNormalize(ctx.Buf.Selection)
+			curCopy := *cur
+			m.Cursors = append(m.Cursors, CursorInstance{
+				Cursor:    curCopy,
+				Selection: &sel,
+			})
+		} else {
+			lineElem := CursorLine(ctx.Buf, cur)
+			maxCh := 0
+			if lineElem != nil && len(lineElem.Value) > 0 {
+				maxCh = max(len(lineElem.Value)-1, 0)
+			}
+			charPos := min(cur.Char, maxCh)
+			curCopy := *cur
+			curCopy.Char = charPos
+			curCopy.PreserveCharPosition = cur.Char
+			sel := Selection{
+				Start: Cursor{Line: cur.Line, Char: charPos},
+				End:   Cursor{Line: cur.Line, Char: charPos},
+			}
+			m.Cursors = append(m.Cursors, CursorInstance{
+				Cursor:    curCopy,
+				Selection: &sel,
+			})
+		}
+		m.PrimaryIndex = 0
+	}
+
+	for c := 0; c < count; c++ {
+		maxLine := -1
+		var baseCursor CursorInstance
+		for _, ci := range m.Cursors {
+			if ci.Cursor.Line > maxLine {
+				maxLine = ci.Cursor.Line
+				baseCursor = ci
+			}
+		}
+
+		nextLine := maxLine + 1
+		if nextLine >= ctx.Buf.Lines.Len {
+			ctx.Editor.EchoMessage("no more lines")
+			break
+		}
+
+		lineElem := CursorLineByNum(ctx.Buf, nextLine)
+		maxCh := 0
+		if lineElem != nil && len(lineElem.Value) > 0 {
+			maxCh = max(len(lineElem.Value)-1, 0)
+		}
+
+		targetCh := baseCursor.Cursor.PreserveCharPosition
+		if targetCh == 0 && baseCursor.Cursor.Char > 0 {
+			targetCh = baseCursor.Cursor.Char
+		}
+		newCh := min(targetCh, maxCh)
+
+		var newSel *Selection
+		if baseCursor.Selection != nil {
+			sel := SelectionNormalize(baseCursor.Selection)
+			startCh := min(sel.Start.Char, maxCh)
+			endCh := min(sel.End.Char, maxCh)
+			newSel = &Selection{
+				Start: Cursor{Line: nextLine, Char: startCh},
+				End:   Cursor{Line: nextLine, Char: endCh},
+			}
+			newCh = min(baseCursor.Cursor.Char, maxCh)
+		} else {
+			newSel = &Selection{
+				Start: Cursor{Line: nextLine, Char: newCh},
+				End:   Cursor{Line: nextLine, Char: newCh},
+			}
+		}
+
+		newCur := Cursor{
+			Line:                 nextLine,
+			Char:                 newCh,
+			PreserveCharPosition: targetCh,
+		}
+		m.Cursors = append(m.Cursors, CursorInstance{
+			Cursor:    newCur,
+			Selection: newSel,
+		})
+	}
+
+	m.PrimaryIndex = len(m.Cursors) - 1
+	last := m.Cursors[m.PrimaryIndex]
+	if last.Selection != nil {
+		ctx.Buf.Selection = last.Selection
+		setBufferMode(ctx, MODE_VISUAL)
+	}
+	*cur = last.Cursor
+	CmdEnsureCursorVisible(ctx)
+	ctx.Editor.EchoMessage(fmt.Sprintf("%d selections", len(m.Cursors)))
 }
 
 func (m *MultiCursor) RotateBackward(ctx Context) {
