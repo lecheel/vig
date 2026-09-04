@@ -2,13 +2,11 @@ package commands
 
 import (
 	"fmt"
-
 	"github.com/firstrow/wig"
 	"github.com/firstrow/wig/drivers/pipe"
 	"github.com/firstrow/wig/ui"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -550,29 +548,25 @@ func CmdCurrentBufferDirFilePicker(ctx wig.Context) {
 	ctx.Editor.EchoMessage("listing dir: " + rootDir)
 
 	getItems := func(dir string) []ui.PickerItem[string] {
-		cmd := exec.Command("ls", "-ap")
-		cmd.Dir = dir
-		stdout, err := cmd.Output()
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			ctx.Editor.LogMessage(string(stdout))
 			ctx.Editor.LogError(err)
 			return nil
 		}
 
-		items := []ui.PickerItem[string]{}
+		items := []ui.PickerItem[string]{
+			{Name: "../", Value: "../"},
+		}
 
-		for row := range strings.SplitSeq(string(stdout), "\n") {
-			row = strings.TrimSpace(row)
-			if len(row) == 0 {
-				continue
-			}
-			if row == "./" {
-				continue
+		for _, entry := range entries {
+			name := entry.Name()
+			if entry.IsDir() {
+				name += "/"
 			}
 
 			items = append(items, ui.PickerItem[string]{
-				Name:  row,
-				Value: row,
+				Name:  name,
+				Value: name,
 			})
 		}
 		return items
@@ -581,7 +575,7 @@ func CmdCurrentBufferDirFilePicker(ctx wig.Context) {
 	action := func(p *ui.UiPicker[string], i *ui.PickerItem[string]) {
 		// create new file
 		if i == nil {
-			fp := path.Join(rootDir, p.GetInput())
+			fp := filepath.Join(rootDir, p.GetInput())
 			buf, err := ctx.Editor.OpenFile(fp)
 			if err != nil {
 				buf = wig.EditorInst.BufferFindByFilePath(fp, true)
@@ -594,7 +588,7 @@ func CmdCurrentBufferDirFilePicker(ctx wig.Context) {
 
 		// list directory
 		if strings.HasSuffix(i.Name, "/") {
-			fp := path.Join(rootDir, i.Value)
+			fp := filepath.Join(rootDir, i.Value)
 			ctx.Editor.EchoMessage("listing dir: " + fp)
 			rootDir = fp
 			p.SetItems(getItems(rootDir))
@@ -602,7 +596,7 @@ func CmdCurrentBufferDirFilePicker(ctx wig.Context) {
 			return
 		}
 
-		buf, err := ctx.Editor.OpenFile(rootDir + "/" + i.Value)
+		buf, err := ctx.Editor.OpenFile(filepath.Join(rootDir, i.Value))
 		if err != nil {
 			return
 		}
