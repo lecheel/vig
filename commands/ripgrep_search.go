@@ -2,14 +2,14 @@ package commands
 
 import (
 	"fmt"
+	"github.com/firstrow/wig"
+	"github.com/firstrow/wig/rgcollect"
+	"github.com/firstrow/wig/ui"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/firstrow/wig"
-	"github.com/firstrow/wig/rgcollect"
-	"github.com/firstrow/wig/ui"
 )
 
 func CmdFindProjectFilePicker(ctx wig.Context) {
@@ -60,29 +60,21 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 				FgColor: "ui.text.directory",
 			})
 		}
-
-		cmd := exec.Command("ls", "-ap")
-		cmd.Dir = currentDir
-		stdout, err := cmd.Output()
+		entries, err := os.ReadDir(currentDir)
 		if err != nil {
 			ctx.Editor.LogError(err)
 			return items
 		}
-
-		lines := strings.Split(strings.TrimSpace(string(stdout)), "\n")
-
-		for _, l := range lines {
-			l = strings.TrimSpace(l)
-			if l == "" || l == "./" || l == "../" {
-				continue
-			}
-
-			isDir := strings.HasSuffix(l, "/")
-			value := l
+		for _, entry := range entries {
+			name := entry.Name()
+			isDir := entry.IsDir()
 			if isDir {
-				value = strings.TrimSuffix(l, "/")
+				name += "/"
 			}
-
+			value := name
+			if isDir {
+				value = strings.TrimSuffix(name, "/")
+			}
 			color := ""
 			if isDir {
 				color = "ui.text.directory"
@@ -95,14 +87,12 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 					}
 				}
 			}
-
 			items = append(items, ui.PickerItem[string]{
-				Name:    l,
+				Name:    name,
 				Value:   value,
 				FgColor: color,
 			})
 		}
-
 		sort.SliceStable(items, func(i, j int) bool {
 			if items[i].Value == ".." {
 				return true
@@ -117,10 +107,8 @@ func CmdFindProjectFilePicker(ctx wig.Context) {
 			}
 			return items[i].Name < items[j].Name
 		})
-
 		return items
 	}
-
 	action := func(p *ui.UiPicker[string], i *ui.PickerItem[string]) {
 		if i == nil {
 			return

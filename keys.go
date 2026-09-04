@@ -212,8 +212,10 @@ func (k *KeyHandler) GetFallback() KeyFallbackFn {
 
 func (k *KeyHandler) normalizeKeyName(ev *tcell.EventKey) string {
 	m := []string{}
-
-	if ev.Modifiers()&tcell.ModShift != 0 {
+	// For KeyRune, the Shift modifier is already represented by the rune itself
+	// (e.g. 'A' vs 'a', ':' vs ';'). Including "shift+" breaks keymap lookups on
+	// Windows where the console API explicitly reports the Shift state.
+	if ev.Key() != tcell.KeyRune && ev.Modifiers()&tcell.ModShift != 0 {
 		m = append(m, "shift")
 	}
 	if ev.Modifiers()&tcell.ModAlt != 0 {
@@ -225,7 +227,6 @@ func (k *KeyHandler) normalizeKeyName(ev *tcell.EventKey) string {
 	if ev.Modifiers()&tcell.ModCtrl != 0 {
 		m = append(m, "ctrl")
 	}
-
 	s := ""
 	ok := false
 	if s, ok = tcell.KeyNames[ev.Key()]; !ok {
@@ -241,10 +242,8 @@ func (k *KeyHandler) normalizeKeyName(ev *tcell.EventKey) string {
 		}
 		return fmt.Sprintf("%s+%s", strings.Join(m, "+"), s)
 	}
-
 	return s
 }
-
 func (k *KeyHandler) resetState() {
 	k.times = k.times[:0]
 	k.waitingForInput = nil
