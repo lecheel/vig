@@ -3,7 +3,6 @@ package wig
 import (
 	"github.com/gdamore/tcell/v2"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -522,10 +521,26 @@ func (e *Editor) LogMessage(msg ...string) {
 	}
 }
 
+// GetConfigDir returns the configuration and runtime directory path.
+// It checks ~/.config/wig first (supporting Linux, macOS, and Windows dotfiles).
+// If not found, on Windows it falls back to %APPDATA%\wig via os.UserConfigDir().
+func GetConfigDir() string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		dotConfig := filepath.Join(home, ".config", "wig")
+		if info, err := os.Stat(dotConfig); err == nil && info.IsDir() {
+			return dotConfig
+		}
+	}
+	if dir, err := os.UserConfigDir(); err == nil && dir != "" {
+		return filepath.Join(dir, "wig")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "wig")
+}
+
 func (e *Editor) RuntimeDir(elems ...string) string {
-	p := []string{os.Getenv("HOME"), ".config", "wig"}
-	elems = append(p, elems...)
-	return path.Join(elems...)
+	parts := append([]string{GetConfigDir()}, elems...)
+	return filepath.Join(parts...)
 }
 
 func (e *Editor) EchoMessage(msg string) {

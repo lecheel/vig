@@ -821,14 +821,9 @@ func CmdToggleBool(ctx wig.Context) {
 	ctx.Editor.Redraw()
 }
 
-// CmdOpenConfig opens ~/.config/wig/config.toml for editing, creating it if it doesn't exist.
+// CmdOpenConfig opens config.toml for editing, creating it if it doesn't exist.
 func CmdOpenConfig(ctx wig.Context) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		ctx.Editor.EchoMessage("Cannot find home directory: " + err.Error())
-		return
-	}
-	configDir := filepath.Join(home, ".config", "wig")
+	configDir := wig.GetConfigDir()
 	os.MkdirAll(configDir, 0755)
 	configPath := filepath.Join(configDir, "config.toml")
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {

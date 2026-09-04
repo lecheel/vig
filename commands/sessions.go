@@ -41,8 +41,7 @@ type Session struct {
 }
 
 func sessionsDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "wig", "sessions")
+	return filepath.Join(wig.GetConfigDir(), "sessions")
 }
 
 func (s *Session) Save() error {

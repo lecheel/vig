@@ -91,7 +91,23 @@ func normalizeLeader(leader string) string {
 	}
 }
 
-// LoadUserConfig reads ~/.config/wig/config.toml for editor settings and keymaps
+// GetConfigDir returns the configuration directory for the current OS.
+// It checks ~/.config/wig first for compatibility, then falls back to os.UserConfigDir() (%APPDATA%\wig on Windows).
+func GetConfigDir() string {
+	if home, err := os.UserHomeDir(); err == nil {
+		dotConfig := filepath.Join(home, ".config", "wig")
+		if info, err := os.Stat(dotConfig); err == nil && info.IsDir() {
+			return dotConfig
+		}
+	}
+	if dir, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(dir, "wig")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "wig")
+}
+
+// LoadUserConfig reads config.toml for editor settings and keymaps
 func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 	editorCfg := wig.EditorConfig{
 		Leader:              "Space",
@@ -121,8 +137,8 @@ func LoadUserConfig() (wig.EditorConfig, wig.ModeKeyMap) {
 		wig.MODE_VISUAL_BLOCK: wig.KeyMap{},
 	}
 
-	home, _ := os.UserHomeDir()
-	configPath := filepath.Join(home, ".config", "wig", "config.toml")
+	configDir := GetConfigDir()
+	configPath := filepath.Join(configDir, "config.toml")
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {

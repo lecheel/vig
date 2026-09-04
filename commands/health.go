@@ -170,8 +170,7 @@ func checkPath(label string, path string, required bool) healthItem {
 func collectHealthSections() []healthSection {
 	sections := []healthSection{}
 
-	home, _ := os.UserHomeDir()
-	configDir := filepath.Join(home, ".config", "wig")
+	configDir := wig.GetConfigDir()
 	queriesDir := filepath.Join(configDir, "queries")
 
 	// 1. Environment & Terminal

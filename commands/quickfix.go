@@ -55,24 +55,22 @@ var quickfixState struct {
 }
 
 // saveQuickfixResults serializes quickfix entries to
-// ~/.config/wig/quickfix.json for persistence across sessions.
+// quickfix.json for persistence across sessions.
 func saveQuickfixResults(entries []QuickfixEntry) error {
 	data, err := json.Marshal(entries)
 	if err != nil {
 		return err
 	}
-	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, ".config", "wig")
+	dir := wig.GetConfigDir()
 	os.MkdirAll(dir, 0755)
 	path := filepath.Join(dir, "quickfix.json")
 	return os.WriteFile(path, data, 0644)
 }
 
 // loadQuickfixResults reads saved quickfix entries from
-// ~/.config/wig/quickfix.json.
+// quickfix.json.
 func loadQuickfixResults() []QuickfixEntry {
-	home, _ := os.UserHomeDir()
-	path := filepath.Join(home, ".config", "wig", "quickfix.json")
+	path := filepath.Join(wig.GetConfigDir(), "quickfix.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
