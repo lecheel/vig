@@ -559,14 +559,16 @@ func (m *MultiCursor) AddCursorDown(ctx Context) {
 			for lineNum := sel.Start.Line; lineNum <= sel.End.Line; lineNum++ {
 				lineElem := CursorLineByNum(ctx.Buf, lineNum)
 				maxCh := 0
+				var lineRunes []rune
 				if lineElem != nil && len(lineElem.Value) > 0 {
+					lineRunes = lineElem.Value
 					maxCh = max(len(lineElem.Value)-1, 0)
 				}
-				targetCh := min(cur.Char, maxCh)
+				targetCh := min(RuneIndexFromVisualCol(lineRunes, cur.PreserveCharPosition), maxCh)
 				newCur := Cursor{
 					Line:                 lineNum,
 					Char:                 targetCh,
-					PreserveCharPosition: cur.Char,
+					PreserveCharPosition: cur.PreserveCharPosition,
 				}
 				newSel := &Selection{
 					Start: Cursor{Line: lineNum, Char: targetCh},
@@ -597,13 +599,15 @@ func (m *MultiCursor) AddCursorDown(ctx Context) {
 		} else {
 			lineElem := CursorLine(ctx.Buf, cur)
 			maxCh := 0
+			var lineRunes []rune
 			if lineElem != nil && len(lineElem.Value) > 0 {
+				lineRunes = lineElem.Value
 				maxCh = max(len(lineElem.Value)-1, 0)
 			}
 			charPos := min(cur.Char, maxCh)
 			curCopy := *cur
 			curCopy.Char = charPos
-			curCopy.PreserveCharPosition = cur.Char
+			curCopy.PreserveCharPosition = VisualCol(lineRunes, cur.Char)
 			sel := Selection{
 				Start: Cursor{Line: cur.Line, Char: charPos},
 				End:   Cursor{Line: cur.Line, Char: charPos},
@@ -634,26 +638,38 @@ func (m *MultiCursor) AddCursorDown(ctx Context) {
 
 		lineElem := CursorLineByNum(ctx.Buf, nextLine)
 		maxCh := 0
+		var nextRunes []rune
 		if lineElem != nil && len(lineElem.Value) > 0 {
+			nextRunes = lineElem.Value
 			maxCh = max(len(lineElem.Value)-1, 0)
 		}
 
-		targetCh := baseCursor.Cursor.PreserveCharPosition
-		if targetCh == 0 && baseCursor.Cursor.Char > 0 {
-			targetCh = baseCursor.Cursor.Char
+		visTarget := baseCursor.Cursor.PreserveCharPosition
+		if visTarget == 0 && baseCursor.Cursor.Char > 0 {
+			baseLineElem := CursorLineByNum(ctx.Buf, baseCursor.Cursor.Line)
+			if baseLineElem != nil {
+				visTarget = VisualCol(baseLineElem.Value, baseCursor.Cursor.Char)
+			}
 		}
-		newCh := min(targetCh, maxCh)
+		newCh := min(RuneIndexFromVisualCol(nextRunes, visTarget), maxCh)
 
 		var newSel *Selection
 		if baseCursor.Selection != nil {
 			sel := SelectionNormalize(baseCursor.Selection)
-			startCh := min(sel.Start.Char, maxCh)
-			endCh := min(sel.End.Char, maxCh)
+			baseLineElem := CursorLineByNum(ctx.Buf, baseCursor.Cursor.Line)
+			var baseRunes []rune
+			if baseLineElem != nil {
+				baseRunes = baseLineElem.Value
+			}
+			startVis := VisualCol(baseRunes, sel.Start.Char)
+			endVis := VisualCol(baseRunes, sel.End.Char)
+			startCh := min(RuneIndexFromVisualCol(nextRunes, startVis), maxCh)
+			endCh := min(RuneIndexFromVisualCol(nextRunes, endVis), maxCh)
 			newSel = &Selection{
 				Start: Cursor{Line: nextLine, Char: startCh},
 				End:   Cursor{Line: nextLine, Char: endCh},
 			}
-			newCh = min(baseCursor.Cursor.Char, maxCh)
+			newCh = min(RuneIndexFromVisualCol(nextRunes, VisualCol(baseRunes, baseCursor.Cursor.Char)), maxCh)
 		} else {
 			newSel = &Selection{
 				Start: Cursor{Line: nextLine, Char: newCh},
@@ -664,7 +680,7 @@ func (m *MultiCursor) AddCursorDown(ctx Context) {
 		newCur := Cursor{
 			Line:                 nextLine,
 			Char:                 newCh,
-			PreserveCharPosition: targetCh,
+			PreserveCharPosition: visTarget,
 		}
 		m.Cursors = append(m.Cursors, CursorInstance{
 			Cursor:    newCur,
