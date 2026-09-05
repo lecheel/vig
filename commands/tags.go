@@ -101,6 +101,7 @@ func jumpToTag(ctx wig.Context, e TagEntry, rootDir string) {
 	if !filepath.IsAbs(filePath) {
 		filePath = filepath.Join(rootDir, filePath)
 	}
+	ctx.Editor.LogMessage(fmt.Sprintf("tags: raw location %s line:%d addr:%s", filePath, e.Line, e.Addr))
 	nbuf, err := ctx.Editor.OpenFile(filePath)
 	if err != nil {
 		ctx.Editor.EchoMessage("tag: cannot open: " + err.Error())
@@ -114,6 +115,7 @@ func jumpToTag(ctx wig.Context, e TagEntry, rootDir string) {
 	if cursor.Line < 0 {
 		cursor.Line = 0
 	}
+	ctx.Editor.LogMessage(fmt.Sprintf("tags: adjusted cursor line:%d", cursor.Line))
 	ctx.Buf = nbuf
 	ctx.Editor.ActiveWindow().VisitBuffer(ctx, cursor)
 	wig.CmdCursorCenter(ctx.Editor.NewContext())
@@ -153,15 +155,42 @@ func findLineByPattern(buf *wig.Buffer, addr string) int {
 	return 1
 }
 
+// lspJumpToDefinition asks the LSP for the definition at the current cursor
+// and jumps there if found. Returns false so callers can fall through to the
+// next source in the lsp > ctagd > tags chain.
+func lspJumpToDefinition(ctx wig.Context) bool {
+	cur := wig.ContextCursorGet(ctx)
+	if cur == nil {
+		return false
+	}
+	filePath, defCur := ctx.Editor.Lsp.Definition(ctx.Buf, *cur)
+	if filePath == "" {
+		return false
+	}
+	nbuf, err := ctx.Editor.OpenFile(filePath)
+	if err != nil {
+		return false
+	}
+	ctx.Buf = nbuf
+	ctx.Editor.ActiveWindow().VisitBuffer(ctx, defCur)
+	wig.CmdCursorCenter(ctx.Editor.NewContext())
+	return true
+}
+
 func CmdTagJump(ctx wig.Context) {
 	word, ok := wig.WordOrSelectionUnderCursor(ctx)
 	if !ok || word == "" {
 		ctx.Editor.EchoMessage("tag: no word under cursor")
 		return
 	}
-	// Try the ctagd daemon first (instant SQLite-backed lookup), then fall
-	// back to the local tags file if the daemon is unavailable.
-	if ctagdGotoAndJump(ctx, word) {
+	// Follow lsp > ctagd > tags. ctagd is queried with file/line/column
+	// context (ctagdDefinitionAndJump) rather than by name alone, since a
+	// name-only lookup can resolve to the wrong occurrence of a common
+	// identifier.
+	if lspJumpToDefinition(ctx) {
+		return
+	}
+	if ctagdDefinitionAndJump(ctx, false) {
 		return
 	}
 	jumpToTagName(ctx, word)
@@ -170,15 +199,32 @@ func CmdTagJump(ctx wig.Context) {
 func CmdTag(ctx wig.Context) {
 	word := strings.TrimSpace(ctx.Char)
 	if word == "" {
-		rootDir := findTagRoot(ctx)
-		if err := updateTagsFile(rootDir); err != nil {
-			ctx.Editor.EchoMessage("tag update: " + err.Error())
+		w, ok := wig.WordOrSelectionUnderCursor(ctx)
+		if ok && w != "" {
+			word = w
+		} else {
+			rootDir := findTagRoot(ctx)
+			if err := updateTagsFile(rootDir); err != nil {
+				ctx.Editor.EchoMessage("tag update: " + err.Error())
+				return
+			}
+			tagsCache.tags = nil
+			ctx.Editor.EchoMessage("tags updated")
 			return
 		}
-		tagsCache.tags = nil
-		ctx.Editor.EchoMessage("tags updated")
+		// Word came from the cursor position, so we have positional context:
+		// follow lsp > ctagd(definition) > tags.
+		if lspJumpToDefinition(ctx) {
+			return
+		}
+		if ctagdDefinitionAndJump(ctx, false) {
+			return
+		}
+		jumpToTagName(ctx, word)
 		return
 	}
+	// Word was typed explicitly (e.g. :tag SomeFunc) with no cursor context,
+	// so ctagd can only be queried by name.
 	if ctagdGotoAndJump(ctx, word) {
 		return
 	}
@@ -204,7 +250,12 @@ func jumpToTagName(ctx wig.Context, word string) {
 		ctx.Editor.EchoMessage(fmt.Sprintf("tag: tag not found: %s", word))
 		return
 	}
+	ctx.Editor.LogMessage(fmt.Sprintf("tags: %d candidate(s) for %q in %s", len(entries), word, rootDir))
+	for i, e := range entries {
+		ctx.Editor.LogMessage(fmt.Sprintf("tags:   [%d] kind=%s file=%s line=%d addr=%q", i, e.Kind, e.File, e.Line, e.Addr))
+	}
 	if len(entries) == 1 {
+		ctx.Editor.LogMessage("tags: single match, jumping directly (no picker)")
 		jumpToTag(ctx, entries[0], rootDir)
 		return
 	}

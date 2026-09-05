@@ -317,9 +317,11 @@ func (l *LspManager) Definition(buf *Buffer, cursor Cursor) (filePath string, cu
 	client, ok := l.conns[root]
 	l.rw.Unlock()
 	if ignore {
+		l.e.LogMessage("lsp: definition ignored root: " + root)
 		return
 	}
 	if !ok {
+		l.e.LogMessage("lsp: definition no client for root: " + root)
 		return
 	}
 	currentCur := CursorGet(EditorInst, buf)
@@ -353,15 +355,15 @@ func (l *LspManager) Definition(buf *Buffer, cursor Cursor) (filePath string, cu
 		_, err2 := client.rpcConn.Call(ctx, protocol.MethodTextDocumentDefinition, definitionReq, &definitionResp2)
 		if err2 != nil {
 			l.e.EchoMessage("gd failed: " + err2.Error())
+			l.e.LogMessage("lsp: definition failed: " + err2.Error())
 		} else {
 			definitionResp = append(definitionResp, definitionResp2)
 		}
 	}
-
 	if len(definitionResp) == 0 {
+		l.e.LogMessage("lsp: definition empty response")
 		return
 	}
-
 	filePath = string(definitionResp[0].URI[7:])
 	line := int(definitionResp[0].Range.Start.Line)
 	ch := int(definitionResp[0].Range.Start.Character)

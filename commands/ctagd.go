@@ -155,11 +155,15 @@ func ctagdJumpToLocation(ctx wig.Context, repoRoot string, loc ctagdLocation) {
 	if !filepath.IsAbs(absPath) {
 		absPath = filepath.Join(repoRoot, loc.File)
 	}
+	ctx.Editor.LogMessage(fmt.Sprintf("ctagd: raw location %s line:%d col:%d", absPath, loc.Line, loc.Column))
 	nbuf, err := ctx.Editor.OpenFile(absPath)
 	if err != nil {
 		ctx.Editor.EchoMessage("ctagd: cannot open " + absPath + ": " + err.Error())
 		return
 	}
+	// Unlike the local ctags "tags" file (which is 1-based), ctagd is
+	// LSP-backed and reports 0-based line/column numbers already matching
+	// wig.Cursor's convention directly — no "-1" conversion here.
 	line := loc.Line
 	if line < 0 {
 		line = 0
@@ -168,6 +172,7 @@ func ctagdJumpToLocation(ctx wig.Context, repoRoot string, loc ctagdLocation) {
 	if col < 0 {
 		col = 0
 	}
+	ctx.Editor.LogMessage(fmt.Sprintf("ctagd: adjusted cursor line:%d col:%d", line, col))
 	cursor := wig.Cursor{Line: line, Char: col}
 	ctx.Buf = nbuf
 	ctx.Editor.ActiveWindow().VisitBuffer(ctx, cursor)
@@ -203,22 +208,30 @@ func CmdCtagdSaved(ctx wig.Context) {
 	}()
 }
 
-// CmdCtagdGotoDefinition queries the daemon for the definition of the symbol
-// under the cursor (spec §3.2). The `symbol` field provides an instant
-// SQLite fallback when the LSP server is cold.
-func CmdCtagdGotoDefinition(ctx wig.Context) {
+// ctagdDefinitionAndJump queries the daemon for the definition of the symbol
+// under the cursor, using file/line/column context to disambiguate between
+// multiple symbols sharing the same name (spec §3.2). This is the
+// context-aware counterpart to ctagdGotoAndJump, which only matches by name
+// and can therefore land on the wrong occurrence of a common identifier.
+// When echo is true, failures are reported via EchoMessage; otherwise it
+// fails silently so callers can fall back to another source.
+func ctagdDefinitionAndJump(ctx wig.Context, echo bool) bool {
 	if ctx.Buf == nil || ctx.Buf.FilePath == "" || strings.HasPrefix(ctx.Buf.FilePath, "[") {
-		ctx.Editor.EchoMessage("ctagd: no file")
-		return
+		if echo {
+			ctx.Editor.EchoMessage("ctagd: no file")
+		}
+		return false
 	}
 	repoRoot := findTagRoot(ctx)
 	if repoRoot == "" {
-		ctx.Editor.EchoMessage("ctagd: no repo root")
-		return
+		if echo {
+			ctx.Editor.EchoMessage("ctagd: no repo root")
+		}
+		return false
 	}
 	rel, err := filepath.Rel(repoRoot, ctx.Buf.FilePath)
 	if err != nil {
-		return
+		return false
 	}
 	cur := wig.ContextCursorGet(ctx)
 	symbol, _ := wig.WordOrSelectionUnderCursor(ctx)
@@ -231,41 +244,73 @@ func CmdCtagdGotoDefinition(ctx wig.Context) {
 		Symbol:   symbol,
 	}, true)
 	if err != nil {
-		ctx.Editor.EchoMessage("ctagd: " + err.Error())
-		return
+		if echo {
+			ctx.Editor.EchoMessage("ctagd: " + err.Error())
+		}
+		return false
 	}
 	if ctagdIsNullResult(resp) {
-		ctx.Editor.EchoMessage("ctagd: no definition found")
-		return
+		if echo {
+			ctx.Editor.EchoMessage("ctagd: no definition found")
+		}
+		return false
 	}
 	var loc ctagdLocation
 	if err := json.Unmarshal(resp.Result, &loc); err != nil || loc.File == "" {
-		ctx.Editor.EchoMessage("ctagd: no definition found")
-		return
+		if echo {
+			ctx.Editor.EchoMessage("ctagd: no definition found")
+		}
+		return false
 	}
 	ctagdJumpToLocation(ctx, repoRoot, loc)
+	return true
+}
+
+// CmdCtagdGotoDefinition queries the daemon for the definition of the symbol
+// under the cursor (spec §3.2). The `symbol` field provides an instant
+// SQLite fallback when the LSP server is cold.
+func CmdCtagdGotoDefinition(ctx wig.Context) {
+	ctagdDefinitionAndJump(ctx, true)
 }
 
 // ctagdGotoAndJump sends a `goto` request (spec §3.3) and jumps to the first
 // matched location. Returns false when no location is found, allowing callers
 // to fall back to the local tags file silently.
+//
+// NOTE: this is a name-only lookup with no file/line/column context, so if
+// the daemon's index has multiple symbols named `word` (e.g. across files,
+// or a common name like "New" / "Run" / "Init"), the daemon's own ranking
+// decides which one comes back — wig has no say in it here. The debug logs
+// below are to help diagnose "goes to wrong place" reports: check
+// :messages for the exact query sent and the raw location received.
 func ctagdGotoAndJump(ctx wig.Context, word string) bool {
 	repoRoot := findTagRoot(ctx)
 	if repoRoot == "" {
+		ctx.Editor.LogMessage("ctagd goto: no repo root, word=" + word)
 		return false
 	}
+	ctx.Editor.LogMessage(fmt.Sprintf("ctagd goto: query=%q repoRoot=%s", word, repoRoot))
 	resp, err := ctagdSend(ctagdRequest{
 		Method:   "goto",
 		RepoRoot: repoRoot,
 		Query:    word,
 	}, true)
-	if err != nil || ctagdIsNullResult(resp) {
+	if err != nil {
+		ctx.Editor.LogMessage("ctagd goto: request error: " + err.Error())
 		return false
 	}
+	if ctagdIsNullResult(resp) {
+		ctx.Editor.LogMessage("ctagd goto: null result for query=" + word)
+		return false
+	}
+	ctx.Editor.LogMessage("ctagd goto: raw result=" + string(resp.Result))
 	var loc ctagdLocation
 	if err := json.Unmarshal(resp.Result, &loc); err != nil || loc.File == "" {
+		ctx.Editor.LogMessage(fmt.Sprintf("ctagd goto: unmarshal/empty file, err=%v", err))
 		return false
 	}
+	ctx.Editor.LogMessage(fmt.Sprintf("ctagd goto: matched file=%s line=%d col=%d display=%q",
+		loc.File, loc.Line, loc.Column, loc.Display))
 	ctagdJumpToLocation(ctx, repoRoot, loc)
 	return true
 }

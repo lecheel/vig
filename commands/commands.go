@@ -965,14 +965,14 @@ func CmdSearchLine(ctx wig.Context) {
 
 func CmdGotoDefinition(ctx wig.Context) {
 	cur := wig.ContextCursorGet(ctx)
-	ctx.Editor.EchoMessage(fmt.Sprintf("gd: calling LSP definition at %d:%d", cur.Line, cur.Char))
+	ctx.Editor.LogMessage(fmt.Sprintf("gd: calling LSP definition at %d:%d", cur.Line, cur.Char))
 	filePath, cursor := ctx.Editor.Lsp.Definition(ctx.Buf, *cur)
 	if filePath == "" {
-		ctx.Editor.EchoMessage("gd: LSP returned no definition (not started, no result, or error)")
+		ctx.Editor.LogMessage("gd: LSP returned no definition, falling back to tags")
+		CmdTagJump(ctx)
 		return
 	}
-
-	ctx.Editor.EchoMessage(fmt.Sprintf("gd: jumping to %s:%d:%d", filePath, cursor.Line, cursor.Char))
+	ctx.Editor.LogMessage(fmt.Sprintf("gd: LSP jumping to %s:%d:%d", filePath, cursor.Line, cursor.Char))
 
 	nbuf, err := ctx.Editor.OpenFile(filePath)
 	if err != nil {
