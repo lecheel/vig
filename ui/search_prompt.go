@@ -126,17 +126,17 @@ func (u *uiSearchPrompt) Keymap() *wig.KeyHandler {
 }
 
 func (u *uiSearchPrompt) Render(view wig.View) {
-	st := wig.Color("ui.statusline")
+	st := wig.Color("ui.statusline.powerline.normal")
 	w, h := view.Size()
-	h -= 1
-
+	h -= 2
+	if h < 0 {
+		return
+	}
 	bg := strings.Repeat(" ", w)
 	view.SetContent(0, h, bg, st)
-
 	msg := fmt.Sprintf("/%s%s", string(u.chBuf), string(tcell.RuneBlock))
 	view.SetContent(0, h, msg, st)
 }
-
 func (u *uiSearchPrompt) Mode() wig.Mode {
 	return wig.MODE_INSERT
 }
