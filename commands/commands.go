@@ -1132,3 +1132,53 @@ func CmdInfo(ctx wig.Context) {
 	ui.Notify(msg, ui.NotifyInfo)
 	ctx.Editor.EchoMessage(msg)
 }
+
+func CmdExportConfig(ctx wig.Context) {
+	var sb strings.Builder
+	sb.WriteString("# Vig Manual\n\n")
+	sb.WriteString("## Commands\n\n")
+	sb.WriteString("| Command | Description | Repeatable |\n")
+	sb.WriteString("|---------|-------------|------------|\n")
+
+	var keys []string
+	for k := range wig.AllCommands {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		cmd := wig.AllCommands[k]
+		rep := "No"
+		if cmd.Repeatable {
+			rep = "Yes"
+		}
+		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s |\n", k, cmd.Desc, rep))
+	}
+
+	sb.WriteString("\n## Keybindings\n\n")
+	for mode, keymap := range ctx.Editor.Keys.GetKeymap() {
+		sb.WriteString(fmt.Sprintf("### Mode %d\n\n", mode))
+		var kKeys []string
+		for kk := range keymap {
+			kKeys = append(kKeys, kk)
+		}
+		sort.Strings(kKeys)
+		for _, kk := range kKeys {
+			action := keymap[kk]
+			switch action.(type) {
+			case wig.KeyMap:
+				sb.WriteString(fmt.Sprintf("- `%s`: ...\n", kk))
+			default:
+				sb.WriteString(fmt.Sprintf("- `%s`: action\n", kk))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	err := os.WriteFile("vig_manual.md", []byte(sb.String()), 0644)
+	if err != nil {
+		ctx.Editor.EchoMessage("Failed to export config: " + err.Error())
+		return
+	}
+	ctx.Editor.EchoMessage("Exported config to vig_manual.md")
+}

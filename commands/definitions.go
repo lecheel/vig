@@ -252,4 +252,6 @@ func init() {
 	wig.AllCommands["sessions"] = wig.CmdDefinition{Desc: "Session list", Fn: CmdSessionList}
 	wig.AllCommands["sl"] = wig.CmdDefinition{Desc: "Session list", Fn: CmdSessionList}
 	wig.AllCommands["CmdSessionToggle"] = wig.CmdDefinition{Desc: "Toggle session list popup", Fn: CmdSessionToggle}
+	wig.AllCommands["CmdExportConfig"] = wig.CmdDefinition{Desc: "Export config to vig_manual.md", Fn: CmdExportConfig}
+	wig.AllCommands["export_config"] = wig.CmdDefinition{Desc: "Export config to vig_manual.md", Fn: CmdExportConfig}
 }

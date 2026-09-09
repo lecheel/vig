@@ -153,6 +153,10 @@ func (k *KeyHandler) Map(mode Mode, newMappings KeyMap) {
 	mergeKeyMaps(k.keymap[mode], newMappings)
 }
 
+func (k *KeyHandler) GetKeymap() ModeKeyMap {
+	return k.keymap
+}
+
 func mergeKeyMaps(k1 KeyMap, k2 KeyMap) {
 	for rkey := range k2 {
 		if currentVal, ok := k1[rkey]; ok {
