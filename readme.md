@@ -24,7 +24,7 @@ Vig implements a wide range of Vim‑style editing capabilities, many inherited 
 - **Syntax Highlighting** – Tree‑sitter for Go, Rust, Odin, C, Python, Bash, JSON, TOML, and custom query support.
 - **UI & Interaction** – Statusline, notifications, Which‑Key, command line, popups, and autocomplete navigation.
 - **Registers & Macros** – Named registers, clipboard, macro recording/playback, and dot repeat.
-- **Configuration** – TOML configuration for themes, line numbers, format-on-save, LSP, leader key, and more.
+- **Configuration** – TOML configuration for themes, line numbers, format-on-save, LSP, leader key, and more. Includes an `export_config` command to generate a `vig_manual.md` reference of all commands and keybindings.
 - **Visual Block** – Rectangle selection, block insert, yank, and delete.
 - **System Integration** – System clipboard, bracketed paste, position cache, and CLI flags.
 
@@ -73,7 +73,7 @@ Most common Vim keybindings are implemented. Here are some highlights:
 | `<Leader>i`        | Toggle indent guides                |
 | `gd`               | Go to definition                    |
 
-For a complete list, see `config/config.go` or use the built‑in **Which‑Key** helper (press `<Leader>` to trigger).
+For a complete list, see `config/config.go` or use the built‑in **Which‑Key** helper (press `<Leader>` to trigger). You can also export a full reference of commands and keybindings to `vig_manual.md` by running the `:export_config` command.
 
 ---
 
