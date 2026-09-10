@@ -261,20 +261,33 @@ func main() {
 				if ev.End() {
 					pasteStarted = false
 					if pastedText != "" {
-						ctx := editor.NewContext()
-						if ctx.Buf != nil {
-							cur := wig.ContextCursorGet(ctx)
-							line := wig.CursorLine(ctx.Buf, cur)
-							if ctx.Buf.TxStart() {
-								wig.TextInsert(ctx.Buf, line, cur.Char, pastedText)
-								ctx.Buf.TxEnd()
-							} else {
-								wig.TextInsert(ctx.Buf, line, cur.Char, pastedText)
-							}
-							for range pastedText {
-								wig.CursorInc(ctx.Buf, cur)
+						if len(editor.UiComponents) > 0 {
+							// Active UI component ('/',':', picker, ...) owns input.
+							// Replay paste as rune key events so it lands in the
+							// component's own buffer, not the file buffer.
+							for _, r := range pastedText {
+								if r == '\n' || r == '\r' {
+									continue
+								}
+								editor.HandleInput(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 							}
 							editor.Redraw()
+						} else {
+							ctx := editor.NewContext()
+							if ctx.Buf != nil {
+								cur := wig.ContextCursorGet(ctx)
+								line := wig.CursorLine(ctx.Buf, cur)
+								if ctx.Buf.TxStart() {
+									wig.TextInsert(ctx.Buf, line, cur.Char, pastedText)
+									ctx.Buf.TxEnd()
+								} else {
+									wig.TextInsert(ctx.Buf, line, cur.Char, pastedText)
+								}
+								for range pastedText {
+									wig.CursorInc(ctx.Buf, cur)
+								}
+								editor.Redraw()
+							}
 						}
 					}
 				}

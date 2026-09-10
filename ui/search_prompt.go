@@ -2,10 +2,10 @@ package ui
 
 import (
 	"fmt"
-	"strings"
-
+	"github.com/atotto/clipboard"
 	"github.com/firstrow/wig"
 	"github.com/gdamore/tcell/v2"
+	"strings"
 )
 
 type uiSearchPrompt struct {
@@ -108,6 +108,19 @@ func (u *uiSearchPrompt) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 		return
 	}
 	if ev.Modifiers()&tcell.ModMeta != 0 {
+		return
+	}
+	if ev.Key() == tcell.KeyInsert && ev.Modifiers()&tcell.ModShift != 0 {
+		if text, err := clipboard.ReadAll(); err == nil && text != "" {
+			runes := []rune(text)
+			newBuf := make([]rune, len(u.chBuf)+len(runes))
+			copy(newBuf, u.chBuf[:u.cursorPos])
+			copy(newBuf[u.cursorPos:], runes)
+			copy(newBuf[u.cursorPos+len(runes):], u.chBuf[u.cursorPos:])
+			u.chBuf = newBuf
+			u.cursorPos += len(runes)
+			u.updateLiveSearch(ctx)
+		}
 		return
 	}
 	switch ev.Key() {

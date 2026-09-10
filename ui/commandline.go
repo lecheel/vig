@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"github.com/atotto/clipboard"
 	"github.com/firstrow/wig"
 	"github.com/gdamore/tcell/v2"
 	"os"
@@ -378,6 +379,22 @@ func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 		return
 	case tcell.KeyEnd:
 		u.cursorPos = len(u.chBuf)
+		return
+	case tcell.KeyInsert:
+		if ev.Modifiers()&tcell.ModShift != 0 {
+			if text, err := clipboard.ReadAll(); err == nil && text != "" {
+				runes := []rune(text)
+				newBuf := make([]rune, len(u.chBuf)+len(runes))
+				copy(newBuf, u.chBuf[:u.cursorPos])
+				copy(newBuf[u.cursorPos:], runes)
+				copy(newBuf[u.cursorPos+len(runes):], u.chBuf[u.cursorPos:])
+				u.chBuf = newBuf
+				u.cursorPos += len(runes)
+				u.candidates = []string{}
+				u.candIdx = -1
+				u.updateSubstitutionHighlight()
+			}
+		}
 		return
 	case tcell.KeyRune:
 		u.chBuf = append(u.chBuf, 0)
