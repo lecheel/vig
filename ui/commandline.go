@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"github.com/atotto/clipboard"
 	"github.com/firstrow/wig"
 	"github.com/gdamore/tcell/v2"
 	"os"
@@ -17,10 +16,9 @@ import (
 var cmdHistory []string
 
 type uiCommandLine struct {
-	e                 *wig.Editor
-	keymap            *wig.KeyHandler
-	chBuf             []rune
-	cursorPos         int
+	e      *wig.Editor
+	keymap *wig.KeyHandler
+	*LineEditor
 	historyIdx        int
 	candidates        []string
 	candIdx           int
@@ -89,8 +87,7 @@ func (u *uiCommandLine) Plane() wig.RenderPlane {
 func CmdLineInit(ctx wig.Context) {
 	u := &uiCommandLine{
 		e:                 ctx.Editor,
-		chBuf:             make([]rune, 0, 32),
-		cursorPos:         0,
+		LineEditor:        NewLineEditor(""),
 		historyIdx:        len(cmdHistory),
 		candidates:        []string{},
 		candIdx:           -1,
@@ -99,8 +96,7 @@ func CmdLineInit(ctx wig.Context) {
 
 	// Pre-fill range for visual modes, exactly like Vim
 	if ctx.Buf != nil && (ctx.Buf.Mode() == wig.MODE_VISUAL || ctx.Buf.Mode() == wig.MODE_VISUAL_LINE || ctx.Buf.Mode() == wig.MODE_VISUAL_BLOCK) {
-		u.chBuf = []rune("'<,'>")
-		u.cursorPos = len(u.chBuf)
+		u.SetText("'<,'>")
 	}
 	u.keymap = wig.NewKeyHandler(wig.ModeKeyMap{
 		wig.MODE_INSERT: wig.KeyMap{
@@ -124,36 +120,10 @@ func CmdLineInit(ctx wig.Context) {
 				}
 			},
 			"Up": func(ctx wig.Context) {
-				if len(u.candidates) > 0 {
-					u.navigateCandidate(0, 1)
-					return
-				}
-				if u.historyIdx > 0 {
-					u.historyIdx--
-					u.chBuf = []rune(cmdHistory[u.historyIdx])
-					u.cursorPos = len(u.chBuf)
-					u.candidates = []string{}
-					u.candIdx = -1
-				}
+				u.historyPrev()
 			},
 			"Down": func(ctx wig.Context) {
-				if len(u.candidates) > 0 {
-					u.navigateCandidate(0, -1)
-					return
-				}
-				if u.historyIdx < len(cmdHistory)-1 {
-					u.historyIdx++
-					u.chBuf = []rune(cmdHistory[u.historyIdx])
-					u.cursorPos = len(u.chBuf)
-					u.candidates = []string{}
-					u.candIdx = -1
-				} else {
-					u.historyIdx = len(cmdHistory)
-					u.chBuf = []rune{}
-					u.cursorPos = 0
-					u.candidates = []string{}
-					u.candIdx = -1
-				}
+				u.historyNext()
 			},
 			"Left": func(ctx wig.Context) {
 				if len(u.candidates) > 0 {
@@ -179,232 +149,125 @@ func CmdLineInit(ctx wig.Context) {
 	ctx.Editor.PushUi(u)
 }
 
+// historyPrev moves to the previous command in history, or steps up the
+// candidate list if autocomplete is open.
+func (u *uiCommandLine) historyPrev() {
+	if len(u.candidates) > 0 {
+		u.navigateCandidate(0, 1)
+		return
+	}
+	if u.historyIdx > 0 {
+		u.historyIdx--
+		u.SetText(cmdHistory[u.historyIdx])
+		u.candidates = []string{}
+		u.candIdx = -1
+	}
+}
+
+// historyNext moves to the next command in history (or to an empty line at
+// the end), or steps down the candidate list if autocomplete is open.
+func (u *uiCommandLine) historyNext() {
+	if len(u.candidates) > 0 {
+		u.navigateCandidate(0, -1)
+		return
+	}
+	if u.historyIdx < len(cmdHistory)-1 {
+		u.historyIdx++
+		u.SetText(cmdHistory[u.historyIdx])
+	} else {
+		u.historyIdx = len(cmdHistory)
+		u.SetText("")
+	}
+	u.candidates = []string{}
+	u.candIdx = -1
+}
+
+// insertWordUnderCursor inserts the word under the cursor in the active
+// buffer at the command line's cursor position. Used by Ctrl-R Ctrl-W.
+func (u *uiCommandLine) insertWordUnderCursor() {
+	eCtx := u.e.NewContext()
+	if eCtx.Buf == nil {
+		return
+	}
+	cur := wig.ContextCursorGet(eCtx)
+	line := wig.CursorLine(eCtx.Buf, cur)
+	if line == nil || len(line.Value) == 0 {
+		return
+	}
+	chars := line.Value
+	idx := cur.Char
+	if idx >= len(chars) {
+		idx = len(chars) - 1
+	}
+	isWordChar := func(r rune) bool {
+		return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
+	}
+	if !isWordChar(chars[idx]) && idx > 0 && isWordChar(chars[idx-1]) {
+		idx--
+	}
+	if !isWordChar(chars[idx]) {
+		return
+	}
+	start := idx
+	for start > 0 && isWordChar(chars[start-1]) {
+		start--
+	}
+	end := idx
+	for end < len(chars) && isWordChar(chars[end]) {
+		end++
+	}
+	if end <= start {
+		return
+	}
+	u.InsertText(string(chars[start:end]))
+	u.candidates = []string{}
+	u.candIdx = -1
+}
+
 func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
-	// Handle Ctrl-r special mode
+	// Register-insert mode: <Ctrl-r>{reg}
 	if u.ctrlRMode {
 		u.ctrlRMode = false
-		if ev.Key() == tcell.KeyCtrlW {
-			// Grab the word under cursor from buffer (letters, digits, underscores, excluding delimiters like .([)
-			eCtx := u.e.NewContext()
-			if eCtx.Buf != nil {
-				cur := wig.ContextCursorGet(eCtx)
-				line := wig.CursorLine(eCtx.Buf, cur)
-				if line != nil && len(line.Value) > 0 {
-					chars := line.Value
-					idx := cur.Char
-					if idx >= len(chars) {
-						idx = len(chars) - 1
-					}
-
-					isWordChar := func(r rune) bool {
-						return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
-					}
-
-					if !isWordChar(chars[idx]) {
-						if idx > 0 && isWordChar(chars[idx-1]) {
-							idx--
-						}
-					}
-
-					if isWordChar(chars[idx]) {
-						start := idx
-						for start > 0 && isWordChar(chars[start-1]) {
-							start--
-						}
-
-						end := idx
-						for end < len(chars) && isWordChar(chars[end]) {
-							end++
-						}
-
-						if end > start {
-							word := string(chars[start:end])
-							wordRunes := []rune(word)
-
-							newBuf := make([]rune, len(u.chBuf)+len(wordRunes))
-							copy(newBuf, u.chBuf[:u.cursorPos])
-							copy(newBuf[u.cursorPos:], wordRunes)
-							copy(newBuf[u.cursorPos+len(wordRunes):], u.chBuf[u.cursorPos:])
-
-							u.chBuf = newBuf
-							u.cursorPos += len(wordRunes)
-							u.candidates = []string{}
-							u.candIdx = -1
-						}
-					}
-				}
-			}
+		switch {
+		case ev.Key() == tcell.KeyCtrlW:
+			u.insertWordUnderCursor()
 			return
-		}
-
-		// Register insertion: <Ctrl-r>{reg} (e.g. +, %, 0-9, a-z, ")
-		var regKey rune
-		if ev.Key() == tcell.KeyRune {
-			regKey = ev.Rune()
-		}
-		if regKey != 0 {
+		case ev.Key() == tcell.KeyRune:
 			eCtx := u.e.NewContext()
-			text := wig.GetRegisterText(eCtx, regKey)
-			if text != "" {
-				textRunes := []rune(text)
-				newBuf := make([]rune, len(u.chBuf)+len(textRunes))
-				copy(newBuf, u.chBuf[:u.cursorPos])
-				copy(newBuf[u.cursorPos:], textRunes)
-				copy(newBuf[u.cursorPos+len(textRunes):], u.chBuf[u.cursorPos:])
-
-				u.chBuf = newBuf
-				u.cursorPos += len(textRunes)
+			if text := wig.GetRegisterText(eCtx, ev.Rune()); text != "" {
+				u.InsertText(text)
 				u.candidates = []string{}
 				u.candIdx = -1
 			}
 			return
 		}
-		// If not handled, fall through and process normally
+		// Unknown key: fall through and handle normally.
 	}
 
+	// Component-specific Ctrl-X keys: Ctrl-R starts register mode,
+	// Ctrl-P/N walk the history (or the open candidate list).
 	if ev.Modifiers()&tcell.ModCtrl != 0 {
 		switch ev.Key() {
 		case tcell.KeyCtrlR:
 			u.ctrlRMode = true
-		case tcell.KeyCtrlA:
-			u.cursorPos = 0
-		case tcell.KeyCtrlE:
-			u.cursorPos = len(u.chBuf)
-		case tcell.KeyCtrlB:
-			if u.cursorPos > 0 {
-				u.cursorPos--
-			}
-		case tcell.KeyCtrlF:
-			if u.cursorPos < len(u.chBuf) {
-				u.cursorPos++
-			}
-		case tcell.KeyCtrlD:
-			if u.cursorPos < len(u.chBuf) {
-				u.chBuf = append(u.chBuf[:u.cursorPos], u.chBuf[u.cursorPos+1:]...)
-				u.candidates = []string{}
-				u.candIdx = -1
-				u.updateSubstitutionHighlight()
-			}
+			return
 		case tcell.KeyCtrlP:
-			if len(u.candidates) > 0 {
-				u.navigateCandidate(0, 1)
-			} else if u.historyIdx > 0 {
-				u.historyIdx--
-				u.chBuf = []rune(cmdHistory[u.historyIdx])
-				u.cursorPos = len(u.chBuf)
-				u.candidates = []string{}
-				u.candIdx = -1
-			}
+			u.historyPrev()
+			return
 		case tcell.KeyCtrlN:
-			if len(u.candidates) > 0 {
-				u.navigateCandidate(0, -1)
-			} else if u.historyIdx < len(cmdHistory)-1 {
-				u.historyIdx++
-				u.chBuf = []rune(cmdHistory[u.historyIdx])
-				u.cursorPos = len(u.chBuf)
-				u.candidates = []string{}
-				u.candIdx = -1
-			} else {
-				u.historyIdx = len(cmdHistory)
-				u.chBuf = []rune{}
-				u.cursorPos = 0
-				u.candidates = []string{}
-				u.candIdx = -1
-			}
-		case tcell.KeyCtrlU:
-			u.chBuf = u.chBuf[u.cursorPos:]
-			u.cursorPos = 0
-			u.candidates = []string{}
-			u.candIdx = -1
-			u.updateSubstitutionHighlight()
-		case tcell.KeyCtrlK:
-			u.chBuf = u.chBuf[:u.cursorPos]
-			u.candidates = []string{}
-			u.candIdx = -1
-			u.updateSubstitutionHighlight()
-		case tcell.KeyCtrlW:
-			if u.cursorPos == 0 {
-				return
-			}
-			start := u.cursorPos
-			for start > 0 && u.chBuf[start-1] == ' ' {
-				start--
-			}
-			for start > 0 && u.chBuf[start-1] != ' ' {
-				start--
-			}
-			u.chBuf = append(u.chBuf[:start], u.chBuf[u.cursorPos:]...)
-			u.cursorPos = start
-			u.candidates = []string{}
-			u.candIdx = -1
-			u.updateSubstitutionHighlight()
+			u.historyNext()
+			return
 		}
-		return
 	}
 
-	if ev.Modifiers()&tcell.ModAlt != 0 || ev.Modifiers()&tcell.ModMeta != 0 {
+	handled, changed := u.HandleReadlineKey(ev)
+	if !handled {
 		return
 	}
-
-	switch ev.Key() {
-	case tcell.KeyBackspace, tcell.KeyBackspace2:
-		if u.cursorPos > 0 {
-			u.chBuf = append(u.chBuf[:u.cursorPos-1], u.chBuf[u.cursorPos:]...)
-			u.cursorPos--
-			u.candidates = []string{}
-			u.candIdx = -1
-			u.updateSubstitutionHighlight()
-		}
-		return
-	case tcell.KeyDelete:
-		if u.cursorPos < len(u.chBuf) {
-			u.chBuf = append(u.chBuf[:u.cursorPos], u.chBuf[u.cursorPos+1:]...)
-			u.candidates = []string{}
-			u.candIdx = -1
-			u.updateSubstitutionHighlight()
-		}
-		return
-	case tcell.KeyLeft:
-		if u.cursorPos > 0 {
-			u.cursorPos--
-		}
-		return
-	case tcell.KeyRight:
-		if u.cursorPos < len(u.chBuf) {
-			u.cursorPos++
-		}
-		return
-	case tcell.KeyHome:
-		u.cursorPos = 0
-		return
-	case tcell.KeyEnd:
-		u.cursorPos = len(u.chBuf)
-		return
-	case tcell.KeyInsert:
-		if ev.Modifiers()&tcell.ModShift != 0 {
-			if text, err := clipboard.ReadAll(); err == nil && text != "" {
-				runes := []rune(text)
-				newBuf := make([]rune, len(u.chBuf)+len(runes))
-				copy(newBuf, u.chBuf[:u.cursorPos])
-				copy(newBuf[u.cursorPos:], runes)
-				copy(newBuf[u.cursorPos+len(runes):], u.chBuf[u.cursorPos:])
-				u.chBuf = newBuf
-				u.cursorPos += len(runes)
-				u.candidates = []string{}
-				u.candIdx = -1
-				u.updateSubstitutionHighlight()
-			}
-		}
-		return
-	case tcell.KeyRune:
-		u.chBuf = append(u.chBuf, 0)
-		copy(u.chBuf[u.cursorPos+1:], u.chBuf[u.cursorPos:])
-		u.chBuf[u.cursorPos] = ev.Rune()
-		u.cursorPos++
+	if changed {
 		u.candidates = []string{}
 		u.candIdx = -1
 		u.updateSubstitutionHighlight()
-		return
 	}
 }
 

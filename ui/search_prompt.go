@@ -2,17 +2,15 @@ package ui
 
 import (
 	"fmt"
-	"github.com/atotto/clipboard"
 	"github.com/firstrow/wig"
 	"github.com/gdamore/tcell/v2"
 	"strings"
 )
 
 type uiSearchPrompt struct {
-	e           *wig.Editor
-	keymap      *wig.KeyHandler
-	chBuf       []rune
-	cursorPos   int
+	e      *wig.Editor
+	keymap *wig.KeyHandler
+	*LineEditor
 	origCur     wig.Cursor
 	origPattern string
 }
@@ -25,8 +23,7 @@ func CmdSearchPromptInit(ctx wig.Context) {
 	cur := wig.ContextCursorGet(ctx)
 	cmdLine := &uiSearchPrompt{
 		e:           ctx.Editor,
-		chBuf:       []rune{},
-		cursorPos:   0,
+		LineEditor:  NewLineEditor(""),
 		origCur:     *cur,
 		origPattern: wig.LastSearchPattern,
 	}
@@ -61,109 +58,20 @@ func (u *uiSearchPrompt) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 		u.cancel(ctx)
 		return
 	}
-	if ev.Modifiers()&tcell.ModCtrl != 0 {
-		switch ev.Key() {
-		case tcell.KeyCtrlA:
-			u.cursorPos = 0
-		case tcell.KeyCtrlE:
-			u.cursorPos = len(u.chBuf)
-		case tcell.KeyCtrlB:
-			if u.cursorPos > 0 {
-				u.cursorPos--
-			}
-		case tcell.KeyCtrlF:
-			if u.cursorPos < len(u.chBuf) {
-				u.cursorPos++
-			}
-		case tcell.KeyCtrlU:
-			u.chBuf = u.chBuf[u.cursorPos:]
-			u.cursorPos = 0
-			u.updateLiveSearch(ctx)
-		case tcell.KeyCtrlK:
-			u.chBuf = u.chBuf[:u.cursorPos]
-			u.updateLiveSearch(ctx)
-		case tcell.KeyCtrlW:
-			if u.cursorPos == 0 {
-				return
-			}
-			start := u.cursorPos
-			for start > 0 && u.chBuf[start-1] == ' ' {
-				start--
-			}
-			for start > 0 && u.chBuf[start-1] != ' ' {
-				start--
-			}
-			u.chBuf = append(u.chBuf[:start], u.chBuf[u.cursorPos:]...)
-			u.cursorPos = start
-			u.updateLiveSearch(ctx)
-		case tcell.KeyCtrlD:
-			if u.cursorPos < len(u.chBuf) {
-				u.chBuf = append(u.chBuf[:u.cursorPos], u.chBuf[u.cursorPos+1:]...)
-				u.updateLiveSearch(ctx)
-			}
-		}
+	if ev.Key() == tcell.KeyEnter {
+		u.execute(ctx, strings.TrimSpace(u.Text()))
 		return
 	}
-	if ev.Modifiers()&tcell.ModAlt != 0 {
+	// Backspace on an empty prompt cancels the search.
+	if (ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2) && len(u.chBuf) == 0 {
+		u.cancel(ctx)
 		return
 	}
-	if ev.Modifiers()&tcell.ModMeta != 0 {
+	handled, changed := u.HandleReadlineKey(ev)
+	if !handled {
 		return
 	}
-	if ev.Key() == tcell.KeyInsert && ev.Modifiers()&tcell.ModShift != 0 {
-		if text, err := clipboard.ReadAll(); err == nil && text != "" {
-			runes := []rune(text)
-			newBuf := make([]rune, len(u.chBuf)+len(runes))
-			copy(newBuf, u.chBuf[:u.cursorPos])
-			copy(newBuf[u.cursorPos:], runes)
-			copy(newBuf[u.cursorPos+len(runes):], u.chBuf[u.cursorPos:])
-			u.chBuf = newBuf
-			u.cursorPos += len(runes)
-			u.updateLiveSearch(ctx)
-		}
-		return
-	}
-	switch ev.Key() {
-	case tcell.KeyBackspace, tcell.KeyBackspace2:
-		if u.cursorPos > 0 {
-			u.chBuf = append(u.chBuf[:u.cursorPos-1], u.chBuf[u.cursorPos:]...)
-			u.cursorPos--
-			u.updateLiveSearch(ctx)
-		} else if len(u.chBuf) == 0 {
-			u.cancel(ctx)
-		}
-		return
-	case tcell.KeyDelete:
-		if u.cursorPos < len(u.chBuf) {
-			u.chBuf = append(u.chBuf[:u.cursorPos], u.chBuf[u.cursorPos+1:]...)
-			u.updateLiveSearch(ctx)
-		}
-		return
-	case tcell.KeyLeft:
-		if u.cursorPos > 0 {
-			u.cursorPos--
-		}
-		return
-	case tcell.KeyRight:
-		if u.cursorPos < len(u.chBuf) {
-			u.cursorPos++
-		}
-		return
-	case tcell.KeyHome:
-		u.cursorPos = 0
-		return
-	case tcell.KeyEnd:
-		u.cursorPos = len(u.chBuf)
-		return
-	case tcell.KeyEnter:
-		cmd := strings.TrimSpace(string(u.chBuf))
-		u.execute(ctx, cmd)
-		return
-	case tcell.KeyRune:
-		u.chBuf = append(u.chBuf, 0)
-		copy(u.chBuf[u.cursorPos+1:], u.chBuf[u.cursorPos:])
-		u.chBuf[u.cursorPos] = ev.Rune()
-		u.cursorPos++
+	if changed {
 		u.updateLiveSearch(ctx)
 	}
 }
