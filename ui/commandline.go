@@ -269,6 +269,47 @@ func (u *uiCommandLine) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 			u.cursorPos = 0
 		case tcell.KeyCtrlE:
 			u.cursorPos = len(u.chBuf)
+		case tcell.KeyCtrlB:
+			if u.cursorPos > 0 {
+				u.cursorPos--
+			}
+		case tcell.KeyCtrlF:
+			if u.cursorPos < len(u.chBuf) {
+				u.cursorPos++
+			}
+		case tcell.KeyCtrlD:
+			if u.cursorPos < len(u.chBuf) {
+				u.chBuf = append(u.chBuf[:u.cursorPos], u.chBuf[u.cursorPos+1:]...)
+				u.candidates = []string{}
+				u.candIdx = -1
+				u.updateSubstitutionHighlight()
+			}
+		case tcell.KeyCtrlP:
+			if len(u.candidates) > 0 {
+				u.navigateCandidate(0, 1)
+			} else if u.historyIdx > 0 {
+				u.historyIdx--
+				u.chBuf = []rune(cmdHistory[u.historyIdx])
+				u.cursorPos = len(u.chBuf)
+				u.candidates = []string{}
+				u.candIdx = -1
+			}
+		case tcell.KeyCtrlN:
+			if len(u.candidates) > 0 {
+				u.navigateCandidate(0, -1)
+			} else if u.historyIdx < len(cmdHistory)-1 {
+				u.historyIdx++
+				u.chBuf = []rune(cmdHistory[u.historyIdx])
+				u.cursorPos = len(u.chBuf)
+				u.candidates = []string{}
+				u.candIdx = -1
+			} else {
+				u.historyIdx = len(cmdHistory)
+				u.chBuf = []rune{}
+				u.cursorPos = 0
+				u.candidates = []string{}
+				u.candIdx = -1
+			}
 		case tcell.KeyCtrlU:
 			u.chBuf = u.chBuf[u.cursorPos:]
 			u.cursorPos = 0

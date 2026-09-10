@@ -12,6 +12,7 @@ type uiSearchPrompt struct {
 	e           *wig.Editor
 	keymap      *wig.KeyHandler
 	chBuf       []rune
+	cursorPos   int
 	origCur     wig.Cursor
 	origPattern string
 }
@@ -25,6 +26,7 @@ func CmdSearchPromptInit(ctx wig.Context) {
 	cmdLine := &uiSearchPrompt{
 		e:           ctx.Editor,
 		chBuf:       []rune{},
+		cursorPos:   0,
 		origCur:     *cur,
 		origPattern: wig.LastSearchPattern,
 	}
@@ -59,41 +61,99 @@ func (u *uiSearchPrompt) insertCh(ctx wig.Context, ev *tcell.EventKey) {
 		u.cancel(ctx)
 		return
 	}
-
 	if ev.Modifiers()&tcell.ModCtrl != 0 {
-		return
-	}
-
-	if ev.Modifiers()&tcell.ModAlt != 0 {
-		return
-	}
-
-	if ev.Modifiers()&tcell.ModMeta != 0 {
-		return
-	}
-
-	if ev.Key() == tcell.KeyBackspace || ev.Key() == tcell.KeyBackspace2 {
-		if len(u.chBuf) > 0 {
-			u.chBuf = u.chBuf[:len(u.chBuf)-1]
+		switch ev.Key() {
+		case tcell.KeyCtrlA:
+			u.cursorPos = 0
+		case tcell.KeyCtrlE:
+			u.cursorPos = len(u.chBuf)
+		case tcell.KeyCtrlB:
+			if u.cursorPos > 0 {
+				u.cursorPos--
+			}
+		case tcell.KeyCtrlF:
+			if u.cursorPos < len(u.chBuf) {
+				u.cursorPos++
+			}
+		case tcell.KeyCtrlU:
+			u.chBuf = u.chBuf[u.cursorPos:]
+			u.cursorPos = 0
 			u.updateLiveSearch(ctx)
-		} else {
-			u.cancel(ctx)
+		case tcell.KeyCtrlK:
+			u.chBuf = u.chBuf[:u.cursorPos]
+			u.updateLiveSearch(ctx)
+		case tcell.KeyCtrlW:
+			if u.cursorPos == 0 {
+				return
+			}
+			start := u.cursorPos
+			for start > 0 && u.chBuf[start-1] == ' ' {
+				start--
+			}
+			for start > 0 && u.chBuf[start-1] != ' ' {
+				start--
+			}
+			u.chBuf = append(u.chBuf[:start], u.chBuf[u.cursorPos:]...)
+			u.cursorPos = start
+			u.updateLiveSearch(ctx)
+		case tcell.KeyCtrlD:
+			if u.cursorPos < len(u.chBuf) {
+				u.chBuf = append(u.chBuf[:u.cursorPos], u.chBuf[u.cursorPos+1:]...)
+				u.updateLiveSearch(ctx)
+			}
 		}
 		return
 	}
-
-	if ev.Key() == tcell.KeyEnter {
+	if ev.Modifiers()&tcell.ModAlt != 0 {
+		return
+	}
+	if ev.Modifiers()&tcell.ModMeta != 0 {
+		return
+	}
+	switch ev.Key() {
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if u.cursorPos > 0 {
+			u.chBuf = append(u.chBuf[:u.cursorPos-1], u.chBuf[u.cursorPos:]...)
+			u.cursorPos--
+			u.updateLiveSearch(ctx)
+		} else if len(u.chBuf) == 0 {
+			u.cancel(ctx)
+		}
+		return
+	case tcell.KeyDelete:
+		if u.cursorPos < len(u.chBuf) {
+			u.chBuf = append(u.chBuf[:u.cursorPos], u.chBuf[u.cursorPos+1:]...)
+			u.updateLiveSearch(ctx)
+		}
+		return
+	case tcell.KeyLeft:
+		if u.cursorPos > 0 {
+			u.cursorPos--
+		}
+		return
+	case tcell.KeyRight:
+		if u.cursorPos < len(u.chBuf) {
+			u.cursorPos++
+		}
+		return
+	case tcell.KeyHome:
+		u.cursorPos = 0
+		return
+	case tcell.KeyEnd:
+		u.cursorPos = len(u.chBuf)
+		return
+	case tcell.KeyEnter:
 		cmd := strings.TrimSpace(string(u.chBuf))
 		u.execute(ctx, cmd)
 		return
-	}
-
-	if ev.Key() == tcell.KeyRune {
-		u.chBuf = append(u.chBuf, ev.Rune())
+	case tcell.KeyRune:
+		u.chBuf = append(u.chBuf, 0)
+		copy(u.chBuf[u.cursorPos+1:], u.chBuf[u.cursorPos:])
+		u.chBuf[u.cursorPos] = ev.Rune()
+		u.cursorPos++
 		u.updateLiveSearch(ctx)
 	}
 }
-
 func (u *uiSearchPrompt) updateLiveSearch(ctx wig.Context) {
 	pat := string(u.chBuf)
 	wig.LastSearchPattern = pat
@@ -134,8 +194,23 @@ func (u *uiSearchPrompt) Render(view wig.View) {
 	}
 	bg := strings.Repeat(" ", w)
 	view.SetContent(0, h, bg, st)
-	msg := fmt.Sprintf("/%s%s", string(u.chBuf), string(tcell.RuneBlock))
-	view.SetContent(0, h, msg, st)
+	before := string(u.chBuf[:u.cursorPos])
+	atCursor := " "
+	if u.cursorPos < len(u.chBuf) {
+		atCursor = string(u.chBuf[u.cursorPos])
+	}
+	after := ""
+	if u.cursorPos+1 < len(u.chBuf) {
+		after = string(u.chBuf[u.cursorPos+1:])
+	}
+	promptPrefix := "/"
+	view.SetContent(0, h, promptPrefix+before, st)
+	cursorStyle := st.Reverse(true)
+	view.SetContent(len([]rune(promptPrefix))+len([]rune(before)), h, atCursor, cursorStyle)
+	if len(after) > 0 {
+		view.SetContent(len([]rune(promptPrefix))+len([]rune(before))+1, h, after, st)
+	}
+	_ = fmt.Sprintf
 }
 func (u *uiSearchPrompt) Mode() wig.Mode {
 	return wig.MODE_INSERT
