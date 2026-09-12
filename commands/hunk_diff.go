@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/firstrow/wig"
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
@@ -192,12 +193,20 @@ func (u *UiHunkDiff) currentHunk() (HunkDiffHunk, bool) {
 }
 
 // setBufferLines replaces the file buffer's content as one undo transaction
-// and refreshes the diff. ReloadBufferContent keeps undo/redo, git gutter,
-// highlighter and LSP all seeing a proper reload event.
+// and refreshes the diff. ReloadBufferContent keeps undo/redo, git gutter
+// and LSP seeing a proper reload event, but it does NOT rebuild the
+// syntax highlighter (see commands.reloadBufferPostFormat, which does this
+// explicitly), so we do the same here — otherwise the tree-sitter spans
+// stay anchored to the pre-edit line contents and the render path picks
+// up stale styles.
 func (u *UiHunkDiff) setBufferLines(ctx wig.Context, lines []string) {
 	sub := ctx
 	sub.Buf = u.buf
 	wig.ReloadBufferContent(sub, strings.Join(lines, "\n"))
+	if u.buf.Highlighter != nil {
+		u.buf.Highlighter.Build()
+	}
+	ctx.Editor.Events.Broadcast(wig.EventBufferReloaded{Buf: u.buf})
 	u.refresh()
 }
 
@@ -397,7 +406,7 @@ func (u *UiHunkDiff) toggleFocus(ctx wig.Context) {
 }
 
 func (u *UiHunkDiff) yank(ctx wig.Context) {
-	if u.cur < 0 || u.cur >= len(u.d.Rows) {
+	if u.d == nil || u.cur < 0 || u.cur >= len(u.d.Rows) {
 		return
 	}
 	row := u.d.Rows[u.cur]
@@ -419,29 +428,66 @@ func (u *UiHunkDiff) yank(ctx wig.Context) {
 		line = work[row.LeftIdx]
 	}
 	text := line + "\n"
+
+	// Mirror the reference hunkdiff behavior: put the line into the
+	// system clipboard as well as wig's own registers, so it can be
+	// pasted into other apps. wig's saveRegister only writes to the
+	// system clipboard when the "active register" is '+' or '*', so we
+	// write directly here instead of going through SetRegister.
+	_ = clipboard.WriteAll(text)
+
+	// '0' = dedicated yank register, '"' = unnamed register. Both are
+	// marked line-kind so a subsequent `p` in any wig buffer (including
+	// this widget's paste) treats them as whole-line content.
 	wig.SetRegister('0', text, true, false)
 	wig.SetRegister('"', text, true, false)
+	wig.SetRegister('+', text, true, false)
+	wig.SetRegister('*', text, true, false)
+
 	u.status = "Yanked 1 line"
 	ctx.Editor.Redraw()
 }
 
+// paste inserts the unnamed register's content below the cursor's
+// working-side row.
+//
+// Matching the reference hunkdiff semantics, paste only accepts line-kind
+// content: a yank of a character or a partial line must NOT paste as a
+// whole line (that would silently replace or duplicate text the user
+// never selected). The line-kind flag is carried by wig's `yank` struct
+// and surfaced through NamedRegisters.
+//
+// The register value may span multiple lines (e.g. `3yy` produces one
+// entry with embedded \n). We split and insert each line as a separate
+// buffer line so embedded newlines never end up inside a single element.
 func (u *UiHunkDiff) paste(ctx wig.Context) {
-	text := wig.GetRegisterText(ctx, '"')
+	if u.d == nil || u.cur < 0 || u.cur >= len(u.d.Rows) {
+		return
+	}
+
+	// Line-kind check: the unnamed register must be a line-kind yank.
+	// A missing register, or one that is stream-kind (character / range
+	// yank), is rejected just like the reference implementation.
+	reg, ok := wig.NamedRegisters['"']
+	if !ok || !reg.IsLine {
+		u.status = "Clipboard has no line"
+		ctx.Editor.Redraw()
+		return
+	}
+
+	text := strings.TrimRight(reg.Val, "\r\n")
 	if text == "" {
 		u.status = "Clipboard is empty"
 		ctx.Editor.Redraw()
 		return
 	}
-	text = strings.TrimRight(text, "\r\n")
-	if text == "" {
-		u.status = "Clipboard is empty"
-		ctx.Editor.Redraw()
-		return
-	}
+	insertLines := strings.Split(text, "\n")
+
 	work := u.workLines()
 	row := u.d.Rows[u.cur]
 	insertAt := row.LeftIdx + 1
 	if row.LeftIdx < 0 {
+		// Padding row on the left: paste at the next real left line.
 		for r := u.cur - 1; r >= 0; r-- {
 			if u.d.Rows[r].LeftIdx >= 0 {
 				insertAt = u.d.Rows[r].LeftIdx + 1
@@ -455,9 +501,9 @@ func (u *UiHunkDiff) paste(ctx wig.Context) {
 	if insertAt > len(work) {
 		insertAt = len(work)
 	}
-	newLines := make([]string, 0, len(work)+1)
+	newLines := make([]string, 0, len(work)+len(insertLines))
 	newLines = append(newLines, work[:insertAt]...)
-	newLines = append(newLines, text)
+	newLines = append(newLines, insertLines...)
 	newLines = append(newLines, work[insertAt:]...)
 	u.setBufferLines(ctx, newLines)
 	u.status = "Pasted line"
@@ -592,39 +638,114 @@ func hunkDiffHeadLines(e *wig.Editor, buf *wig.Buffer) ([]string, error) {
 	return strings.Split(s, "\n"), nil
 }
 
-// sanitizeLine strips ASCII control chars (except tab) and DEL, and expands
-// tabs to four spaces. Tabs are expanded here rather than relying on the
-// renderer because tab width is terminal-dependent and would break the
-// per-cell width accounting in writeCellRow.
-func sanitizeLine(s string) string {
-	if s == "" {
-		return s
+// renderSourceLine writes a buffer source line into the view at (x, y),
+// truncated/padded to exactly w visual cells, applying syntax-highlight
+// spans from hl on top of baseStyle.
+//
+// lineNum is the 0-based line index in the buffer that hl was built for
+// (pass -1 to skip highlighting, e.g. for HEAD-only insert rows that have
+// no corresponding work-buffer line). Spans are indexed by rune position,
+// matching the convention ui.WindowRender uses when it consumes the same
+// highlighter — see the span-walk loop in ui/window.go.
+//
+// Tab characters are expanded inline to 4 spaces during the write, so the
+// per-cell width accounting stays exact even though tabs are one rune but
+// several cells. Control bytes (everything below 0x20 except tab, plus DEL)
+// are skipped: they can appear in a source file from a pasted terminal
+// capture, and writing them verbatim into the cell buffer would corrupt
+// neighboring cells on some terminals.
+//
+// Highlight layering: we take the foreground from the span's style and
+// keep the background from baseStyle. That preserves the diff backgrounds
+// (diff.minus / diff.plus) and the cursor-line background under the
+// highlighted text, instead of letting the span's own background overwrite
+// them and break the diff visual.
+func renderSourceLine(
+	view wig.View,
+	x, y, w int,
+	raw string,
+	lineNum int,
+	hl wig.Highlighter,
+	baseStyle tcell.Style,
+) {
+	if w <= 0 {
+		return
 	}
-	needs := false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '\t' || (c < 0x20) || c == 0x7f {
-			needs = true
+
+	var spans []wig.Span
+	if hl != nil && lineNum >= 0 {
+		spans = hl.HighlightLine(lineNum)
+	}
+
+	// Base background, re-applied whenever we layer a span's foreground.
+	_, baseBg, _ := baseStyle.Decompose()
+
+	col := 0
+	spanIdx := 0
+	runeIdx := 0
+
+	for _, ch := range raw {
+		// Skip control bytes that should never reach the cell buffer.
+		if (ch < 0x20 && ch != '\t') || ch == 0x7f {
+			runeIdx++
+			continue
+		}
+
+		// Advance past spans that have already ended.
+		for spanIdx < len(spans) && int(spans[spanIdx].EndCol) <= runeIdx {
+			spanIdx++
+		}
+		cellStyle := baseStyle
+		if spanIdx < len(spans) &&
+			int(spans[spanIdx].StartCol) <= runeIdx &&
+			int(spans[spanIdx].EndCol) > runeIdx {
+			fg, _, _ := spans[spanIdx].Style.Decompose()
+			if fg != tcell.ColorDefault {
+				cellStyle = tcell.StyleDefault.Background(baseBg).Foreground(fg)
+			}
+		}
+
+		// Width of this rune in cells. Tabs expand to 4; wide runes
+		// (CJK, emoji) take their measured width; zero-width combining
+		// marks are treated as 1 to avoid an infinite loop.
+		cellWidth := 1
+		if ch == '\t' {
+			cellWidth = 4
+		} else {
+			cellWidth = runewidth.RuneWidth(ch)
+			if cellWidth <= 0 {
+				cellWidth = 1
+			}
+		}
+		if col+cellWidth > w {
+			cellWidth = w - col
+		}
+		if cellWidth <= 0 {
+			break
+		}
+
+		if ch == '\t' {
+			for k := 0; k < cellWidth; k++ {
+				view.SetContent(x+col+k, y, " ", cellStyle)
+			}
+		} else {
+			view.SetContent(x+col, y, string(ch), cellStyle)
+			for k := 1; k < cellWidth; k++ {
+				view.SetContent(x+col+k, y, " ", cellStyle)
+			}
+		}
+		col += cellWidth
+		runeIdx++
+		if col >= w {
 			break
 		}
 	}
-	if !needs {
-		return s
+
+	// Pad the remainder of the panel with baseStyle so no stale cell from
+	// the previous frame can leak through.
+	for ; col < w; col++ {
+		view.SetContent(x+col, y, " ", baseStyle)
 	}
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '\t' {
-			b.WriteString("    ")
-			continue
-		}
-		if c < 0x20 || c == 0x7f {
-			continue
-		}
-		b.WriteByte(c)
-	}
-	return b.String()
 }
 
 // fillRow writes n blank cells starting at (x, y). Used to clear regions of
@@ -796,22 +917,34 @@ func (u *UiHunkDiff) Render(view wig.View) {
 			rightStyle = wig.ApplyBg("ui.cursorline", rightStyle)
 		}
 
-		// Left panel.
-		var leftContent string
+		// Left panel. The work buffer's line index is exactly the line
+		// index the tree-sitter highlighter was built for, so spans line
+		// up perfectly. Leading space mirrors the previous layout.
 		if row.LeftIdx >= 0 && row.LeftIdx < len(work) {
-			leftContent = " " + sanitizeLine(work[row.LeftIdx])
+			view.SetContent(1, y, " ", leftStyle)
+			renderSourceLine(view, 2, y, leftInner-1, work[row.LeftIdx], row.LeftIdx, u.buf.Highlighter, leftStyle)
+		} else {
+			fillRow(view, 1, y, leftInner, leftStyle)
 		}
-		writeCellRow(view, 1, y, leftInner, leftContent, leftStyle)
 
 		// Separator column.
 		view.SetContent(splitX, y, "|", borderStyle)
 
-		// Right panel.
-		var rightContent string
+		// Right panel. For context rows work[i] == head[j], so the work
+		// buffer's highlighter at index LeftIdx produces correct spans
+		// for the HEAD content too. For pure insert rows there is no
+		// corresponding work line, so hlLine stays -1 and the render
+		// falls back to baseStyle (plain text on the insert background).
 		if row.RightIdx >= 0 && row.RightIdx < len(u.head) {
-			rightContent = " " + sanitizeLine(u.head[row.RightIdx])
+			view.SetContent(splitX+1, y, " ", rightStyle)
+			hlLine := -1
+			if row.LeftIdx >= 0 && row.LeftIdx < len(work) {
+				hlLine = row.LeftIdx
+			}
+			renderSourceLine(view, splitX+2, y, rightInner-1, u.head[row.RightIdx], hlLine, u.buf.Highlighter, rightStyle)
+		} else {
+			fillRow(view, splitX+1, y, rightInner, rightStyle)
 		}
-		writeCellRow(view, splitX+1, y, rightInner, rightContent, rightStyle)
 
 		// Cursor row focus indicator.
 		if isCursorRow {
