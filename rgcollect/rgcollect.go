@@ -101,6 +101,14 @@ var rgState = struct {
 }
 var rgMutex sync.Mutex
 
+// rgLoadedResults holds the full RgResult set (with match spans) most
+// recently read by LoadResults. LoadResults' public signature only
+// returns []wig.Location for compatibility with existing callers, so
+// InitGrouped consults this package var — indexed the same as the
+// returned locations — to recover MatchStart/MatchEnd on the "saved"
+// recall path instead of falling back to a zero-width match.
+var rgLoadedResults []RgResult
+
 // RgHighlighter provides syntax highlighting for the [rg] grouped buffer.
 type RgHighlighter struct {
 	Buf     *wig.Buffer
@@ -256,10 +264,20 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 	if title != "" && title != "saved" {
 		queryRunes = len([]rune(title))
 	}
+	// On the "saved" recall path, rgLoadedResults (set by LoadResults)
+	// carries the real MatchStart/MatchEnd that were persisted to disk;
+	// for a live search there's nothing loaded, so fall back to the
+	// query-length-derived span as before.
+	useLoaded := title == "saved" && len(rgLoadedResults) == len(locations)
+
 	results := make([]RgResult, 0, len(locations))
-	for _, loc := range locations {
+	for i, loc := range locations {
 		matchStart := loc.Char
 		matchEnd := matchStart + queryRunes
+		if useLoaded {
+			matchStart = rgLoadedResults[i].MatchStart
+			matchEnd = rgLoadedResults[i].MatchEnd
+		}
 		// Strip any trailing newline/CR once, here, so every later
 		// consumer (initial render, rgRefreshPreview's browse-content
 		// branch, the preview splice) works from clean text. Leaving
@@ -277,6 +295,9 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 		})
 	}
 	rgState.results = results
+	if title != "saved" {
+		_ = saveResultsToFile(results)
+	}
 
 	// Find or create [rg] buffer
 	buf := ctx.Editor.BufferFindByFilePath("[rg]", false)
@@ -600,29 +621,68 @@ func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.
 	return true
 }
 
-// SaveResults serializes search results to ~/.config/wig/rg_search.json
-func SaveResults(locations []wig.Location) error {
-	results := make([]RgResult, len(locations))
-	for i, loc := range locations {
-		results[i] = RgResult{
-			FilePath: loc.FilePath,
-			Line:     loc.Line,
-			Char:     loc.Char,
-			Text:     loc.Text,
-		}
-	}
+func saveResultsToFile(results []RgResult) error {
 	data, err := json.Marshal(results)
 	if err != nil {
 		return err
 	}
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
 	dir := filepath.Join(home, ".config", "wig")
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
 	path := filepath.Join(dir, "rg_search.json")
 	return os.WriteFile(path, data, 0644)
 }
 
-// LoadResults reads saved search results from ~/.config/wig/rg_search.json
+// SaveResults serializes search results to ~/.config/wig/rg_search.json.
+//
+// When rgState.results is already populated and matches locations (e.g. after
+// InitGrouped), its rich match spans (MatchStart/MatchEnd) are preserved.
+// If SaveResults is called before InitGrouped or with new locations, it
+// falls back to constructing RgResults from locations so persistence is
+// never lost or overwritten with an empty slice.
+func SaveResults(locations []wig.Location) error {
+	rgMutex.Lock()
+	defer rgMutex.Unlock()
+
+	var results []RgResult
+	matchesState := len(rgState.results) > 0 &&
+		(len(locations) == 0 || (len(rgState.results) == len(locations) && rgState.results[0].FilePath == locations[0].FilePath && rgState.results[0].Line == locations[0].Line))
+
+	if matchesState {
+		results = make([]RgResult, len(rgState.results))
+		copy(results, rgState.results)
+	} else if len(locations) > 0 {
+		results = make([]RgResult, len(locations))
+		for i, loc := range locations {
+			text := strings.TrimSuffix(strings.TrimSuffix(loc.Text, "\n"), "\r")
+			results[i] = RgResult{
+				FilePath:   loc.FilePath,
+				Line:       loc.Line,
+				Char:       loc.Char,
+				MatchStart: loc.Char,
+				MatchEnd:   loc.Char,
+				Text:       text,
+			}
+		}
+	} else {
+		results = make([]RgResult, len(rgState.results))
+		copy(results, rgState.results)
+	}
+
+	return saveResultsToFile(results)
+}
+
+// LoadResults reads saved search results from ~/.config/wig/rg_search.json.
+//
+// It also stashes the full decoded RgResult slice (with MatchStart/
+// MatchEnd) in rgLoadedResults, indexed identically to the returned
+// []wig.Location, so InitGrouped can recover the real match spans on the
+// "saved" recall path instead of guessing a zero-width one.
 func LoadResults() []wig.Location {
 	home, _ := os.UserHomeDir()
 	path := filepath.Join(home, ".config", "wig", "rg_search.json")
@@ -634,6 +694,7 @@ func LoadResults() []wig.Location {
 	if err := json.Unmarshal(data, &results); err != nil {
 		return nil
 	}
+	rgLoadedResults = results
 	locations := make([]wig.Location, len(results))
 	for i, r := range results {
 		locations[i] = wig.Location{
@@ -647,12 +708,14 @@ func LoadResults() []wig.Location {
 }
 
 // rgDimStyle is applied to excluded result rows and to file headers whose
-// whole group has been excluded.
+// whole group has been excluded. It applies strikethrough so items marked
+// by Space (SPC) clearly display as struck out.
 func rgDimStyle() tcell.Style {
+	style := tcell.StyleDefault.Foreground(tcell.ColorGray)
 	if s, ok := wig.FindColor("comment"); ok {
-		return s
+		style = s
 	}
-	return tcell.StyleDefault.Foreground(tcell.ColorGray)
+	return style.StrikeThrough(true)
 }
 
 // rgMatchStyle picks the span style for a match when preview is off:
