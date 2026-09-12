@@ -129,6 +129,7 @@ func CmdCursorLeft(ctx Context) {
 			ctx.Buf.Selection = nil
 			setBufferMode(ctx, MODE_NORMAL)
 		}
+		CmdEnsureCursorVisible(ctx)
 		return
 	}
 	cur := ContextCursorGet(ctx)
@@ -151,6 +152,7 @@ func CmdCursorRight(ctx Context) {
 			ctx.Buf.Selection = nil
 			setBufferMode(ctx, MODE_NORMAL)
 		}
+		CmdEnsureCursorVisible(ctx)
 		return
 	}
 	cur := ContextCursorGet(ctx)

@@ -95,7 +95,9 @@ func (m *MultiCursor) MoveLeft(count uint32) {
 		for i := uint32(0); i < count; i++ {
 			if cur.Char > 0 {
 				cur.Char--
-				cur.PreserveCharPosition = cur.Char
+				if line := CursorLine(m.buf, cur); line != nil {
+					cur.PreserveCharPosition = VisualCol(line.Value, cur.Char)
+				}
 			}
 		}
 		m.Cursors[idx].Selection = nil
@@ -112,7 +114,7 @@ func (m *MultiCursor) MoveRight(count uint32) {
 		for i := uint32(0); i < count; i++ {
 			if cur.Char < len(line.Value)-1 {
 				cur.Char++
-				cur.PreserveCharPosition = cur.Char
+				cur.PreserveCharPosition = VisualCol(line.Value, cur.Char)
 			}
 		}
 		m.Cursors[idx].Selection = nil
