@@ -107,6 +107,10 @@ type rgLineEntry struct {
 }
 
 var rgState = struct {
+	// title is the query string the current result set was produced from
+	// (or "saved" for the F11 recall path). Rendered by RgViewWidget as
+	// part of the popup's "search: …" header line.
+	title   string
 	results []RgResult
 	lineMap map[int]rgLineEntry
 }{
@@ -415,6 +419,7 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 			Text:       text,
 		})
 	}
+	rgState.title = title
 	rgState.results = results
 	if title != "saved" {
 		_ = saveResultsToFile(results)
@@ -430,26 +435,14 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 
 	buf.ResetLines()
 
-	// Build buffer content and lineMap
+	// Build buffer content and lineMap.
+	//
+	// The title row, shortcut-hint row, and blank spacer that used to
+	// prefix the buffer are gone: the RgViewWidget renders all three as
+	// popup chrome (header search info, header replace prompt, footer
+	// hint) so the buffer body only contains real result entries.
 	lineMap := make(map[int]rgLineEntry)
 	lineNum := 0
-
-	rootDir := ctx.Editor.Projects.GetRoot()
-
-	// Title line
-	buf.Append(fmt.Sprintf("ripgrep search results for '%s' in %s", title, rootDir))
-	lineMap[lineNum] = rgLineEntry{kind: 0}
-	lineNum++
-
-	// Shortcut hint row under title so it is visible in the buffer content
-	buf.Append(rgBrowseHint)
-	lineMap[lineNum] = rgLineEntry{kind: 0}
-	lineNum++
-
-	// Blank line after title
-	buf.Append("")
-	lineMap[lineNum] = rgLineEntry{kind: 0}
-	lineNum++
 
 	resultIdx := 0
 	var currentFile string
@@ -483,8 +476,11 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 	buf.Highlighter = &RgHighlighter{Buf: buf, LineMap: lineMap}
 
 	// Determine starting cursor position: restore last saved index/position
-	// when reviewing via F11 ("saved"), or start at line 3 for new searches.
-	startLine := 3
+	// when reviewing via F11 ("saved"), or start at the first result line
+	// for new searches. Line numbers here are buffer-local to the
+	// chrome-less layout (result #1 begins at line 0 or 1 depending on
+	// whether a file header precedes it).
+	startLine := 0
 	if title == "saved" {
 		savedIdx, savedLine := loadLastPosition()
 		if savedIdx >= 0 {
@@ -496,14 +492,14 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 					break
 				}
 			}
-			if !found && savedLine >= 3 && savedLine < lineNum {
+			if !found && savedLine >= 0 && savedLine < lineNum {
 				startLine = savedLine
 			}
-		} else if savedLine >= 3 && savedLine < lineNum {
+		} else if savedLine >= 0 && savedLine < lineNum {
 			startLine = savedLine
 		}
 	} else {
-		saveLastPosition(0, 3)
+		saveLastPosition(0, 0)
 	}
 	if startLine >= lineNum {
 		startLine = max(0, lineNum-1)
@@ -786,7 +782,9 @@ func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.
 		Line: max(result.Line-1, 0),
 		Char: result.Char,
 	})
-	ctx.Editor.EchoMessage(fmt.Sprintf("[%d/%d matches] %s  ───  %s", entry.resultIdx+1, len(rgState.results), strings.TrimSpace(result.Text), rgBrowseHint))
+	// Shortcut hint is rendered by the popup's hint row, not here — only
+	// the match position and text go to the echo row.
+	ctx.Editor.EchoMessage(fmt.Sprintf("[%d/%d matches] %s", entry.resultIdx+1, len(rgState.results), strings.TrimSpace(result.Text)))
 	wig.CmdCursorCenter(ctx)
 
 	return true
@@ -828,22 +826,24 @@ func SaveResults(locations []wig.Location) error {
 		results = make([]RgResult, len(rgState.results))
 		copy(results, rgState.results)
 	} else if len(locations) > 0 {
+		// Locations carry only the match start; the query length is not
+		// available here, so the match span cannot be reconstructed
+		// exactly. Persist it as zero-width rather than guessing a
+		// length — a wrong width is worse than no highlight at all, and
+		// InitGrouped overwrites this file with the full RgResults
+		// (including real match spans) as soon as the same search is
+		// rendered.
 		results = make([]RgResult, 0, len(locations))
 		for _, loc := range locations {
 			text := strings.TrimSuffix(strings.TrimSuffix(loc.Text, "\n"), "\r")
 			if len(results) > 0 && results[len(results)-1].FilePath == loc.FilePath && results[len(results)-1].Line == loc.Line {
-				last := &results[len(results)-1]
-				last.Matches = append(last.Matches, MatchSpan{Start: loc.Char, End: loc.Char})
 				continue
 			}
 			results = append(results, RgResult{
-				FilePath:   loc.FilePath,
-				Line:       loc.Line,
-				Char:       loc.Char,
-				MatchStart: loc.Char,
-				MatchEnd:   loc.Char,
-				Matches:    []MatchSpan{{Start: loc.Char, End: loc.Char}},
-				Text:       text,
+				FilePath: loc.FilePath,
+				Line:     loc.Line,
+				Char:     loc.Char,
+				Text:     text,
 			})
 		}
 	} else {

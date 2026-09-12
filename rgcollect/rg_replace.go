@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/firstrow/wig"
 	"github.com/gdamore/tcell/v2"
@@ -345,14 +346,18 @@ func rgCancelReplace(ctx wig.Context) {
 
 const rgBrowseHint = "[Enter] Open  [/] Search  [Tab] Replace  [SPC] Exclude  [l/L] File  [u] Undo  [q] Close"
 
-// rgRenderBrowseStatus echoes the shortcut hint along with any active
-// status message on the bottom echo line so the shortcuts are always visible.
+// rgRenderBrowseStatus writes the current status message to the popup's
+// echo row. The shortcut hint is deliberately NOT appended here — it is
+// rendered exactly once by the popup's own hint row (RgViewWidget.Render,
+// hintRow). When there is no status message, e.Message is cleared directly
+// rather than through EchoMessage(""), which would append a blank entry to
+// the [Messages] buffer on every cursor move.
 func rgRenderBrowseStatus(ctx wig.Context) {
 	if rgRSP.statusMsg != "" {
-		ctx.Editor.EchoMessage(fmt.Sprintf("%s  ───  %s", rgRSP.statusMsg, rgBrowseHint))
+		ctx.Editor.EchoMessage(rgRSP.statusMsg)
 		return
 	}
-	ctx.Editor.EchoMessage(rgBrowseHint)
+	ctx.Editor.Message = ""
 }
 
 func rgClampCursor(buf *wig.Buffer, cur *wig.Cursor) {
@@ -515,6 +520,12 @@ func rgClose(ctx wig.Context) {
 
 	ctx.Buf = targetBuf
 	ctx.Editor.ActiveWindow().VisitBuffer(ctx)
+
+	// The widget early-returns when the active buffer is not [rg], so
+	// leaving it on the UI stack would be harmless, but popping it here
+	// keeps the stack tidy across many F11 opens.
+	CloseRgViewWidget(ctx.Editor)
+
 	ctx.Editor.EchoMessage("")
 	ctx.Editor.Redraw()
 }
@@ -687,11 +698,24 @@ func rgApplySearch(ctx wig.Context) {
 		if charIdx < 0 {
 			charIdx = 0
 		}
+		// rg --vimgrep reports a 1-based *byte* column (for Vim quickfix
+		// compatibility), so the same conversion as parseRgJSON in
+		// commands/helpers.go is required: turn the byte offset into a
+		// rune offset before it reaches wig.Location.Char, or the
+		// highlight shifts right on any line whose prefix contains
+		// multi-byte runes (box-drawing `─` in comments, Unicode
+		// identifiers, emoji, ...). On pure-ASCII lines byte and rune
+		// offsets coincide, so this is a no-op there.
+		lineText := parts[3]
+		if charIdx > len(lineText) {
+			charIdx = len(lineText)
+		}
+		charIdx = utf8.RuneCountInString(lineText[:charIdx])
 		locs = append(locs, wig.Location{
 			FilePath: parts[0],
 			Line:     lineNum,
 			Char:     charIdx,
-			Text:     parts[3],
+			Text:     lineText,
 		})
 	}
 
@@ -714,19 +738,13 @@ func rgApplySearch(ctx wig.Context) {
 	InitGrouped(ctx, query, locs)
 }
 
-// rgRenderReplaceStatus echoes the replace prompt. The insertion point
-// is shown as a solid block (█) between the already-typed "before" and
-// the "after" remainder, so it is always unambiguous where the next
-// keystroke will land. A [REPLACE] / [PREVIEW] badge and a bracket
-// frame make the whole line read as an active input field rather than
-// a transient status message.
+// rgRenderReplaceStatus is a no-op kept for call-site compatibility. The
+// replace prompt — including the insertion-point block — is rendered by
+// the popup header (RgViewWidget.Render / rgReplaceLine), so echoing it
+// here would show it twice. Any stale echo from before replace mode was
+// entered is cleared by setting e.Message directly.
 func rgRenderReplaceStatus(ctx wig.Context) {
-	before := string(rgRSP.replacement[:rgRSP.replaceCursor])
-	after := string(rgRSP.replacement[rgRSP.replaceCursor:])
-	ctx.Editor.EchoMessage(fmt.Sprintf(
-		"─── [REPLACE] ─── before ▐%s█%s▌ after ─── Enter: apply  Esc: cancel",
-		before, after,
-	))
+	ctx.Editor.Message = ""
 }
 
 func splicePreviewText(text string, matches []MatchSpan, replacement string) string {

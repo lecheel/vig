@@ -1,6 +1,7 @@
 package rgcollect
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/firstrow/wig"
@@ -90,6 +91,93 @@ func CloseRgViewWidget(e *wig.Editor) {
 // If the active window's buffer is no longer the rg buffer (e.g. the user
 // opened a file with Enter or :cn), the widget paints nothing — the
 // underlying window's normal rendering is visible instead.
+// rgTruncate returns s truncated to maxLen runes, appending "..." when cut.
+// Local to this file because ui.truncate is unexported and rgcollect cannot
+// import the ui package.
+func rgTruncate(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= maxLen {
+		return s
+	}
+	if maxLen < 3 {
+		return string(r[:maxLen])
+	}
+	return string(r[:maxLen-3]) + "..."
+}
+
+// rgSearchInfoLine formats the popup's header line:
+//
+//	search: <query> - <current>/<total> matches in <files> files
+//
+// current is the 1-based index of the result under the cursor (0 when the
+// cursor is not on a result line, e.g. on a file header or blank separator).
+// total counts every match span across every result; files counts distinct
+// file paths.
+func rgSearchInfoLine(curLine int) string {
+	title := rgState.title
+	if title == "" {
+		title = "?"
+	}
+	total := 0
+	filesMap := make(map[string]struct{})
+	for _, r := range rgState.results {
+		filesMap[r.FilePath] = struct{}{}
+		if n := len(r.GetMatches()); n > 0 {
+			total += n
+		} else {
+			total++
+		}
+	}
+	current := 0
+	if entry, ok := rgState.lineMap[curLine]; ok && entry.kind == 2 {
+		current = entry.resultIdx + 1
+	}
+	return fmt.Sprintf(" search: %s - %d/%d matches in %d files",
+		title, current, total, len(filesMap))
+}
+
+// rgReplaceLine formats the popup's replace prompt line:
+//
+//	Replace: [<text>] <-              (browse / search phases)
+//	Replace: [<before>█<after>] <-    (replace phase, cursor as block)
+//
+// The trailing "<-" is a static indicator pointing at the input box; it is
+// not a cursor.
+func rgReplaceLine() string {
+	if rgRSP.phase == rgPhaseReplace {
+		before := string(rgRSP.replacement[:rgRSP.replaceCursor])
+		after := string(rgRSP.replacement[rgRSP.replaceCursor:])
+		return fmt.Sprintf(" Replace: [%s█%s] <-", before, after)
+	}
+	return fmt.Sprintf(" Replace: [%s] <-", string(rgRSP.replacement))
+}
+
+// Render paints the [rg] buffer's content full screen width inside a
+// rounded frame that reserves only the bottom statusline row:
+//
+//	row  0          ╭─ rg ─────...──────╮     box top edge (with "rg" title)
+//	row  1          │ search: … - N/M matches in K files
+//	row  2          │ Replace: [ … █ … ] <-
+//	rows 3..vh-4    │ <buffer content>        (row = 3 + (lineNum - ScrollOffset))
+//	row  vh-3       │ <status message or shortcut hint>
+//	row  vh-2       ╰─────────────────...──╯  box bottom edge
+//	row  vh-1       (left untouched — underlying statusline)
+//
+// The search/replace prompts, the shortcut hint, and any echo message all
+// live INSIDE the popup chrome. The bottom row directly above the box
+// border shows an echo message when one is set (e.g. "[3/47 matches] foo"
+// from :cn / :cp), and falls back to the shortcut hint otherwise — so
+// there is never an empty row between the content and the bottom border.
+//
+// The buffer itself only contains the result entries (file headers, blank
+// separators, match lines) — see InitGrouped.
+//
+// If the active window's buffer is no longer the rg buffer (e.g. the user
+// opened a file with Enter or :cn), the widget paints nothing — the
+// underlying window's normal rendering is visible instead.
 func (u *RgViewWidget) Render(view wig.View) {
 	if w := u.e.ActiveWindow(); w == nil || w.Buffer() != u.buf {
 		return
@@ -99,29 +187,50 @@ func (u *RgViewWidget) Render(view wig.View) {
 	}
 
 	vw, vh := view.Size()
-	if vw < 4 || vh < 4 {
+	if vw < 6 || vh < 8 {
 		return
 	}
 
 	bg := wig.Color("default")
 
 	// Border style: prefer the theme's comment colour, which is subtle and
-	// reads as chrome rather than content; fall back to ui.linenr, then
-	// default.
+	// reads as chrome rather than content; fall back to ui.linenr.
 	borderStyle := wig.Color("ui.linenr")
 	if s, ok := wig.FindColor("comment"); ok {
 		borderStyle = s
 	}
+	infoStyle := wig.Color("ui.text.directory")
+	replaceStyle := wig.Color("ui.text")
+	hintStyle := wig.Color("ui.linenr")
 
-	// Clear every cell we own (rows 0..vh-2) so stale cells from the
-	// window below can never leak through.
+	// Clear rows 0..vh-2 so stale cells from the window below can never
+	// leak through. Row vh-1 is left alone for the statusline.
 	for y := 0; y < vh-1; y++ {
 		view.SetContent(0, y, strings.Repeat(" ", vw), bg)
 	}
 
-	// Rounded box frame: rows 0 .. vh-3, cols 0 .. vw-1.
+	// Row layout. The bottom row of the frame (statusRow) shows either an
+	// echo message or the shortcut hint — never both, never empty — so the
+	// content area runs all the way down to it without a gap.
 	boxTop := 0
-	boxBottom := vh - 3
+	infoRow := 1
+	replaceRow := 2
+	contentTop := 3
+	statusRow := vh - 3
+	boxBottom := vh - 2
+
+	contentBottom := statusRow - 1
+	contentH := contentBottom - contentTop + 1
+	if contentH < 1 {
+		contentH = 1
+	}
+	contentX := 1
+	contentW := vw - 2
+	if contentW < 1 {
+		contentW = 1
+	}
+
+	// Rounded frame.
 	view.SetContent(0, boxTop, "╭", borderStyle)
 	view.SetContent(vw-1, boxTop, "╮", borderStyle)
 	for x := 1; x < vw-1; x++ {
@@ -135,26 +244,31 @@ func (u *RgViewWidget) Render(view wig.View) {
 		view.SetContent(vw-1, y, "│", borderStyle)
 	}
 
-	// Content area sits inside the frame: one cell inset on each side, one
-	// row inset top and bottom.
-	contentX := 1
-	contentW := vw - 2
-	contentTop := 1
-	contentH := boxBottom - contentTop // = vh - 4
-	if contentW < 1 || contentH < 1 {
-		return
-	}
+	// Title text on the top border.
+	view.SetContent(2, boxTop, " rg ", borderStyle)
 
-	hl, _ := u.buf.Highlighter.(*RgHighlighter)
 	cur := wig.WindowCursorGet(u.e.ActiveWindow(), u.buf)
 	if cur == nil {
 		return
 	}
 
-	// Keep the cursor inside the visible viewport. The rg key handlers
-	// (rgCursorDown, rgPageDown, ...) change cur.Line without touching
-	// ScrollOffset, so doing it here — every frame — is what actually
-	// scrolls the view when the cursor moves off-screen.
+	// Header: search stats.
+	view.SetContent(1, infoRow, rgTruncate(rgSearchInfoLine(cur.Line), contentW), infoStyle)
+
+	// Header: replace prompt. Highlight it when the replace sub-mode is
+	// active so the user has a clear cue that keystrokes now edit the
+	// replacement.
+	if rgRSP.phase == rgPhaseReplace {
+		if s, ok := wig.FindColor("ui.menu.selected"); ok {
+			replaceStyle = s
+		}
+	}
+	view.SetContent(1, replaceRow, rgTruncate(rgReplaceLine(), contentW), replaceStyle)
+
+	// Content area — same buffer row -> screen row mapping as before, just
+	// shifted down by contentTop instead of being offset by the frame.
+	hl, _ := u.buf.Highlighter.(*RgHighlighter)
+
 	if cur.Line < cur.ScrollOffset {
 		cur.ScrollOffset = cur.Line
 	}
@@ -223,7 +337,6 @@ func (u *RgViewWidget) Render(view wig.View) {
 				x += cellWidth
 			}
 
-			// Cursor past the end of the line (EOL in normal mode).
 			if lineNum == cur.Line && cur.Char >= len(runes)-1 && x < contentW {
 				view.SetContent(contentX+x, y, " ", cursorStyle)
 			}
@@ -232,17 +345,47 @@ func (u *RgViewWidget) Render(view wig.View) {
 		lineNum++
 	}
 
-	// Echo message row (vh-2). The statusline renderer writes here before
-	// us and the rg key handlers use EchoMessage for their browse / replace
-	// / search hints, so re-drawing it here (on top of the frame we just
-	// painted) keeps the hints visible.
-	msgRow := vh - 2
-	view.SetContent(0, msgRow, strings.Repeat(" ", vw), bg)
-	if msg := u.e.Message; msg != "" {
+	// Bottom status row. Echo message wins when present (e.g. ":cn"
+	// navigation feedback); otherwise the shortcut hint is shown. Both
+	// live on the same row so the content never leaves an empty gap
+	// above the bottom border.
+	//
+	// Only the interior is cleared (x = 1 .. vw-2), so the left and right
+	// border glyphs drawn by the frame loop above are not wiped away —
+	// clearing the full row here was leaving a gap in both vertical edges
+	// of the box exactly on this row.
+	if contentW > 0 {
+		view.SetContent(1, statusRow, strings.Repeat(" ", contentW), bg)
+	}
+	if msg := rgEchoMessage(u.e.Message); msg != "" {
 		msgStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow)
 		if s, ok := wig.FindColor("ui.message"); ok {
 			msgStyle = s
 		}
-		view.SetContent(0, msgRow, msg, msgStyle)
+		view.SetContent(1, statusRow, rgTruncate(msg, contentW), msgStyle)
+	} else {
+		view.SetContent(1, statusRow, rgTruncate(rgBrowseHint, contentW), hintStyle)
 	}
+}
+
+// rgEchoMessage filters an editor echo message before it is painted on the
+// popup's echo row. It strips:
+//
+//   - the bare shortcut hint (already rendered in the hint row);
+//   - the "  ───  <rgBrowseHint>" suffix that rgRenderBrowseStatus appends
+//     to status messages;
+//   - the entire legacy "─── [REPLACE] ─── …" / "─── [SEARCH] ─── …"
+//     sub-mode echoes, which used to sit in the echo area and are now
+//     redundant because the popup header shows the same state.
+func rgEchoMessage(msg string) string {
+	if msg == rgBrowseHint {
+		return ""
+	}
+	if suffix := "  ───  " + rgBrowseHint; strings.HasSuffix(msg, suffix) {
+		msg = strings.TrimSuffix(msg, suffix)
+	}
+	if strings.HasPrefix(msg, "─── [REPLACE]") || strings.HasPrefix(msg, "─── [SEARCH]") {
+		return ""
+	}
+	return msg
 }
