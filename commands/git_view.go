@@ -940,43 +940,200 @@ func populateGitStatusBuffer(buf *wig.Buffer) (map[int]gitStatusLine, int) {
 	return lineMap, firstSelectable
 }
 
-// CmdGitView opens or toggles the buffer-based git status panel.
+// CmdGitView opens (or toggles) the git status panel as a centered popup
+// occupying ~90% of the screen width. Replaces the older split/full-buffer
+// implementation: the popup floats over the active window without touching
+// the split tree, so opening it does not disturb the current layout.
 func CmdGitView(ctx wig.Context) {
 	if !gitIsRepo() {
 		ctx.Editor.EchoMessage("Not a git repository")
 		return
 	}
 
-	gitBuf := ctx.Editor.BufferFindByFilePath("[git]", false)
-	if gitBuf != nil && ctx.Editor.ActiveBuffer() == gitBuf {
-		// Toggle off: close split or kill buffer
-		if len(ctx.Editor.Windows()) > 1 {
-			wig.CmdWindowCloseAndKillBuffer(ctx)
-		} else {
-			wig.CmdKillBuffer(ctx)
+	// Toggle off: if a popup is already open, close it.
+	for _, c := range ctx.Editor.UiComponents {
+		if _, ok := c.(*ui.GitViewPopupWidget); ok {
+			ctx.Editor.PopUiComponent(c)
+			ctx.Editor.Redraw()
+			return
 		}
-		return
 	}
 
-	if gitBuf == nil {
-		gitBuf = wig.NewBuffer()
-		gitBuf.FilePath = "[git]"
-		ctx.Editor.Buffers = append(ctx.Editor.Buffers, gitBuf)
+	cb := ui.GitViewCallbacks{
+		OnRefresh: func(c wig.Context) []wig.GitViewItem {
+			return GetGitStatusItems()
+		},
+		OnEnter: gitViewPopupEnter,
+		OnStage: func(c wig.Context, item *wig.GitViewItem) {
+			GitStageItem(*item)
+		},
+		OnDiff:   gitViewPopupDiff,
+		OnPush:   gitViewPopupPush,
+		OnStash:  gitViewPopupStash,
+		OnCommit: gitViewPopupCommit,
 	}
 
-	_, firstLine := populateGitStatusBuffer(gitBuf)
-	setupGitStatusKeyHandler(gitBuf)
+	ui.GitViewPopupInit(ctx, GetGitStatusItems(), cb)
+}
 
-	useSplit := ctx.Editor.Config.GitStatusView != "full"
+// gitViewPopupEnter handles Enter on a file, branch or stash item.
+func gitViewPopupEnter(ctx wig.Context, item *wig.GitViewItem) {
+	switch item.Type {
+	case "file":
+		filePath := item.FilePath
+		if !filepath.IsAbs(filePath) {
+			rootDir := ctx.Editor.Projects.GetRoot()
+			filePath = filepath.Join(rootDir, filePath)
+		}
+		buf, err := ctx.Editor.OpenFile(filePath)
+		if err != nil {
+			ctx.Editor.EchoMessage("Cannot open: " + err.Error())
+			return
+		}
+		ctx.Buf = buf
+		ctx.Editor.ActiveWindow().VisitBuffer(ctx)
 
-	if useSplit && len(ctx.Editor.Windows()) == 1 {
-		wig.CmdWindowVSplit(ctx)
-		wig.CmdWindowNext(ctx)
+	case "branch":
+		err := GitSwitchBranch(*item)
+		branchName := item.StashRef
+		if branchName == "" {
+			branchName = item.FilePath
+		}
+		if err != nil {
+			ctx.Editor.EchoMessage(err.Error())
+			return
+		}
+		for _, b := range ctx.Editor.Buffers {
+			if b.FilePath != "" && !strings.HasPrefix(b.FilePath, "[") {
+				_ = wig.BufferReloadFile(b)
+				if b.Highlighter != nil {
+					b.Highlighter.Build()
+				}
+			}
+		}
+		ctx.Editor.EchoMessage(fmt.Sprintf("Switched to branch '%s'", branchName))
+
+	case "stash":
+		stashItem := *item
+		prompt := fmt.Sprintf("Stash %s: Pop stash? (y: pop / n: drop / c: cancel)", stashItem.StashRef)
+		ui.ConfirmInit(ctx, prompt, func() {
+			GitStashAction(stashItem, "pop")
+			gitViewPopupRefreshIfOpen(ctx)
+			ctx.Editor.EchoMessage("Stash popped: " + stashItem.StashRef)
+		}, func() {
+			GitStashAction(stashItem, "drop")
+			gitViewPopupRefreshIfOpen(ctx)
+			ctx.Editor.EchoMessage("Stash dropped: " + stashItem.StashRef)
+		}, func() {
+			ctx.Editor.EchoMessage("Stash cancelled")
+		})
 	}
+}
 
-	ctx.Buf = gitBuf
-	ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: firstLine, Char: 0})
-	wig.CmdCursorCenter(ctx)
+// gitViewPopupDiff opens a diff buffer for the selected file or stash.
+func gitViewPopupDiff(ctx wig.Context, item *wig.GitViewItem) {
+	switch item.Type {
+	case "stash":
+		diffOut := gitRun("stash", "show", "-p", item.StashRef)
+		if strings.TrimSpace(diffOut) == "" {
+			ctx.Editor.EchoMessage("No diff for " + item.StashRef)
+			return
+		}
+		diffBufName := fmt.Sprintf("[diff: %s]", item.StashRef)
+		dBuf := ctx.Editor.BufferFindByFilePath(diffBufName, true)
+		dBuf.ResetLines()
+		for _, l := range strings.Split(diffOut, "\n") {
+			dBuf.Append(l)
+		}
+		dBuf.Highlighter = &DiffHighlighter{Buf: dBuf}
+		dBuf.KeyHandler = wig.DefaultKeyHandler(wig.ModeKeyMap{
+			wig.MODE_NORMAL: wig.KeyMap{
+				"d":   wig.CmdKillBuffer,
+				"q":   wig.CmdKillBuffer,
+				"Esc": wig.CmdKillBuffer,
+			},
+		})
+		ctx.Buf = dBuf
+		ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: 0, Char: 0})
+
+	case "file":
+		diffLines := GetGitDiffLines(*item)
+		if len(diffLines) == 0 {
+			ctx.Editor.EchoMessage("No diff")
+			return
+		}
+		diffBufName := fmt.Sprintf("[diff: %s]", item.FilePath)
+		dBuf := ctx.Editor.BufferFindByFilePath(diffBufName, true)
+		dBuf.ResetLines()
+		for _, l := range diffLines {
+			dBuf.Append(l)
+		}
+		dBuf.Highlighter = &DiffHighlighter{Buf: dBuf}
+		dBuf.KeyHandler = wig.DefaultKeyHandler(wig.ModeKeyMap{
+			wig.MODE_NORMAL: wig.KeyMap{
+				"d":   wig.CmdKillBuffer,
+				"q":   wig.CmdKillBuffer,
+				"Esc": wig.CmdKillBuffer,
+			},
+		})
+		ctx.Buf = dBuf
+		ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: 0, Char: 0})
+	}
+}
+
+// gitViewPopupPush prompts for and runs `git push origin HEAD`.
+func gitViewPopupPush(ctx wig.Context) {
+	curBranchOut, _ := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+	curBranch := strings.TrimSpace(string(curBranchOut))
+	if curBranch == "" {
+		curBranch = "HEAD"
+	}
+	prompt := fmt.Sprintf("Push '%s' to origin? (y/n/c)", curBranch)
+	ui.ConfirmInit(ctx, prompt, func() {
+		ctx.Editor.EchoMessage(fmt.Sprintf("pushing '%s' to origin...", curBranch))
+		ctx.Editor.Redraw()
+		cmd := exec.Command("git", "push", "origin", "HEAD")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			outStr := strings.TrimSpace(string(out))
+			if outStr == "" {
+				outStr = err.Error()
+			}
+			outStr = strings.ReplaceAll(outStr, "\n", " ")
+			ctx.Editor.EchoMessage("Push failed: " + outStr)
+		} else {
+			ctx.Editor.EchoMessage("Push complete: origin/" + curBranch)
+		}
+	}, func() {
+		ctx.Editor.EchoMessage("Push cancelled")
+	}, func() {
+		ctx.Editor.EchoMessage("Push cancelled")
+	})
+}
+
+// gitViewPopupStash stashes unstaged changes (keeps staged and untracked).
+func gitViewPopupStash(ctx wig.Context) {
+	GitStashUnstaged()
+	ctx.Editor.EchoMessage("Stashed unstaged changes")
+}
+
+// gitViewPopupCommit stages all tracked changes and opens the commit editor,
+// optionally pre-generating the message with git-ai.
+func gitViewPopupCommit(ctx wig.Context, useAI bool) {
+	GitStageAll()
+	GitShowCommitBuffer(ctx, useAI)
+}
+
+// gitViewPopupRefreshIfOpen triggers a refresh on the currently-open git
+// popup, if any. Called from Confirm callbacks that mutate git state so the
+// list updates without the user pressing `r` manually.
+func gitViewPopupRefreshIfOpen(ctx wig.Context) {
+	for _, c := range ctx.Editor.UiComponents {
+		if w, ok := c.(*ui.GitViewPopupWidget); ok {
+			w.Refresh(ctx)
+			return
+		}
+	}
 }
 
 func setupGitStatusKeyHandler(gitBuf *wig.Buffer) {
@@ -1502,10 +1659,6 @@ func gitCommitFinish(ctx wig.Context) {
 
 	wig.CmdKillBuffer(ctx)
 
-	gitBuf := ctx.Editor.BufferFindByFilePath("[git]", false)
-	if gitBuf != nil {
-		populateGitStatusBuffer(gitBuf)
-	}
 	msg := FormatCommitSummary(outStr)
 	if msg == "" {
 		msg = "commit done"
