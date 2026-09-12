@@ -446,7 +446,7 @@ func DefaultKeyMap(args ...string) wig.ModeKeyMap {
 				"f": wig.CmdGotoFile,
 				"F": wig.CmdGotoFileOtherWindow,
 				"d": commands.CmdGotoDefinition,
-				"t": commands.CmdGitHunkExternalTx,
+				"t": commands.CmdHunkDiffOpen,
 				"O": commands.CmdGotoDefinitionOtherWindow,
 				"o": commands.CmdViewDefinitionOtherWindow,
 				"n": commands.CmdGotoNextFunction,

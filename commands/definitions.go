@@ -56,6 +56,9 @@ func init() {
 	wig.AllCommands["cp"] = wig.CmdDefinition{Desc: "Previous result", Fn: wig.CmdVisitPrevLine, Repeatable: true}
 	wig.AllCommands["CmdGitHunkNext"] = wig.CmdDefinition{Desc: "Next git hunk", Fn: CmdGitHunkNext, Repeatable: true}
 	wig.AllCommands["CmdGitHunkPrev"] = wig.CmdDefinition{Desc: "Previous git hunk", Fn: CmdGitHunkPrev, Repeatable: true}
+	wig.AllCommands["CmdHunkDiffOpen"] = wig.CmdDefinition{Desc: "Open hunk diff (two-panel vs HEAD)", Fn: CmdHunkDiffOpen}
+	wig.AllCommands["hunkdiff"] = wig.CmdDefinition{Desc: "Open hunk diff (two-panel vs HEAD)", Fn: CmdHunkDiffOpen}
+	wig.AllCommands["CmdHunkDiffClose"] = wig.CmdDefinition{Desc: "Close hunk diff", Fn: CmdHunkDiffClose}
 
 	// Command-line basics
 	wig.AllCommands["q"] = wig.CmdDefinition{Desc: "Quit", Fn: CmdExit}
