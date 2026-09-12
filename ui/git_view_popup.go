@@ -267,8 +267,9 @@ const gitViewHint = " [Enter] Open  [s] Stage  [d] Diff  [c] Commit  [a] AI  [p]
 func (u *GitViewPopupWidget) Render(view wig.View) {
 	vw, vh := view.Size()
 
-	// 90% screen width, centered. Height is bounded so the popup stays a
-	// popup — not a full-height overlay — even on tall terminals.
+	// 90% of the screen in both dimensions, centered. Leaves a thin
+	// margin on every side so the popup still reads as an overlay rather
+	// than a full-screen takeover.
 	boxW := int(float32(vw) * 0.90)
 	if boxW < 40 {
 		boxW = 40
@@ -276,7 +277,7 @@ func (u *GitViewPopupWidget) Render(view wig.View) {
 	if boxW > vw {
 		boxW = vw
 	}
-	boxH := min(26, vh-4)
+	boxH := int(float32(vh) * 0.90)
 	if boxH < 8 {
 		boxH = 8
 	}

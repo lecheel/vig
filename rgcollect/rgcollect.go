@@ -576,13 +576,30 @@ func CmdRgEnter(ctx wig.Context) {
 	}
 }
 
-// visitRgCollectLine is the registered visit handler for [rgcollect ...] buffers.
-// It automatically skips blank lines when navigating with :cn or :cp.
-func visitRgCollectLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.Context)) bool {
-	if !strings.HasPrefix(sourceBuf.FilePath, "[rgcollect ") {
-		return false
-	}
+// visitGrouped is the shared implementation behind visitRgCollectLine and
+// visitLineGrouped. Both handlers do exactly the same thing: locate the
+// window showing sourceBuf, run the requested :cn / :cp movement, snap the
+// cursor to the nearest "real result" row (skipping chrome), resolve that
+// row to a (file, line, char) triple, and open it in the source window.
+//
+// The two callers differ only in:
+//
+//   - matches:   whether this handler owns sourceBuf (guard predicate)
+//   - isResult:  whether a buffer line is a selectable result row
+//   - resolve:   how a result row maps to (file, 1-based line, char)
+//
+// All three are passed in as closures so the helper itself stays free of
+// rgState / rgcollect-specific knowledge, and so the [rg] caller can keep
+// holding rgMutex across the whole visit (the helper never locks).
+func visitGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.Context),
+	isResult func(int) bool,
+	resolve func(int) (file string, line, char int, ok bool),
+	notFoundMsg string,
+	onVisit func(int)) bool {
 
+	// Find the window containing the source buffer. If it isn't visible
+	// (the user just jumped away from it), fall back to the active window
+	// so the cursor we manipulate is the one the user last saw.
 	var sourceWin *wig.Window
 	for _, win := range ctx.Editor.Windows() {
 		if win.Buffer() == sourceBuf {
@@ -590,7 +607,6 @@ func visitRgCollectLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wi
 			break
 		}
 	}
-
 	if sourceWin == nil {
 		sourceWin = ctx.Editor.ActiveWindow()
 	}
@@ -609,9 +625,9 @@ func visitRgCollectLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wi
 
 		found := false
 		if newLine > startLine {
+			// Moving forward (e.g. :cn) — snap to the next result row.
 			for l := newLine; l < maxLines; l++ {
-				line := wig.CursorLineByNum(sourceBuf, l)
-				if line != nil && !line.Value.IsEmpty() {
+				if isResult(l) {
 					bufCur.Line = l
 					bufCur.Char = 0
 					found = true
@@ -624,9 +640,9 @@ func visitRgCollectLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wi
 				return true
 			}
 		} else if newLine < startLine {
+			// Moving backward (e.g. :cp) — snap to the previous result row.
 			for l := newLine; l >= 0; l-- {
-				line := wig.CursorLineByNum(sourceBuf, l)
-				if line != nil && !line.Value.IsEmpty() {
+				if isResult(l) {
 					bufCur.Line = l
 					bufCur.Char = 0
 					found = true
@@ -639,21 +655,30 @@ func visitRgCollectLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wi
 				return true
 			}
 		} else {
-			line := wig.CursorLineByNum(sourceBuf, newLine)
-			if line == nil || line.Value.IsEmpty() {
+			// Cursor didn't move — search forward from the current line.
+			for l := newLine; l < maxLines; l++ {
+				if isResult(l) {
+					bufCur.Line = l
+					bufCur.Char = 0
+					found = true
+					break
+				}
+			}
+			if !found {
 				return true
 			}
 		}
 	}
 
-	line := wig.CursorLineByNum(sourceBuf, bufCur.Line)
-	if line == nil {
+	if !isResult(bufCur.Line) {
 		return true
 	}
 
-	filename, lineNum, chNum := wig.ParseFileLocation(line.Value.String(), 0)
-	if filename == "" {
-		ctx.Editor.EchoMessage("no file path found under cursor")
+	filename, lineNum, chNum, ok := resolve(bufCur.Line)
+	if !ok {
+		if notFoundMsg != "" {
+			ctx.Editor.EchoMessage(notFoundMsg)
+		}
 		return true
 	}
 
@@ -666,12 +691,42 @@ func visitRgCollectLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wi
 	ctx.Buf = targetBuf
 	ctx.Win = sourceWin
 	sourceWin.VisitBuffer(ctx, wig.Cursor{
-		Line: lineNum - 1,
+		Line: max(lineNum-1, 0),
 		Char: chNum,
 	})
 	wig.CmdCursorCenter(ctx)
 
+	if onVisit != nil {
+		onVisit(bufCur.Line)
+	}
 	return true
+}
+
+// visitRgCollectLine is the registered visit handler for [rgcollect ...] buffers.
+// It automatically skips blank lines when navigating with :cn or :cp.
+func visitRgCollectLine(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.Context)) bool {
+	if !strings.HasPrefix(sourceBuf.FilePath, "[rgcollect ") {
+		return false
+	}
+
+	isResult := func(l int) bool {
+		line := wig.CursorLineByNum(sourceBuf, l)
+		return line != nil && !line.Value.IsEmpty()
+	}
+	resolve := func(l int) (string, int, int, bool) {
+		line := wig.CursorLineByNum(sourceBuf, l)
+		if line == nil {
+			return "", 0, 0, false
+		}
+		filename, lineNum, chNum := wig.ParseFileLocation(line.Value.String(), 0)
+		if filename == "" {
+			return "", 0, 0, false
+		}
+		return filename, lineNum, chNum, true
+	}
+
+	return visitGrouped(ctx, sourceBuf, movement, isResult, resolve,
+		"no file path found under cursor", nil)
 }
 
 // visitLineGrouped is the registered visit handler for [rg] buffers.
@@ -686,108 +741,34 @@ func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.
 	rgMutex.Lock()
 	defer rgMutex.Unlock()
 
-	// Find the window containing the source buffer
-	var sourceWin *wig.Window
-	for _, win := range ctx.Editor.Windows() {
-		if win.Buffer() == sourceBuf {
-			sourceWin = win
-			break
+	isResult := func(l int) bool {
+		entry, ok := rgState.lineMap[l]
+		return ok && entry.kind == 2
+	}
+	resolve := func(l int) (string, int, int, bool) {
+		entry, ok := rgState.lineMap[l]
+		if !ok || entry.kind != 2 || entry.resultIdx >= len(rgState.results) {
+			return "", 0, 0, false
 		}
+		saveLastPosition(entry.resultIdx, l)
+		result := rgState.results[entry.resultIdx]
+		return result.FilePath, result.Line, result.Char, true
 	}
-
-	// If [rg] is not in a window, use the active window to get/update its cursor.
-	// The active window just opened a file from [rg], so it still has the cursor.
-	if sourceWin == nil {
-		sourceWin = ctx.Editor.ActiveWindow()
-	}
-
-	bufCur := wig.WindowCursorGet(sourceWin, sourceBuf)
-	startLine := bufCur.Line
-	maxLines := sourceBuf.Lines.Len
-
-	if movement != nil {
-		nctx := ctx.Editor.NewContext()
-		nctx.Buf = sourceBuf
-		nctx.Win = sourceWin
-
-		movement(nctx)
-		newLine := bufCur.Line
-
-		found := false
-		if newLine > startLine {
-			// Moving forward (e.g. :cn / CmdCursorLineDown) — find next result line
-			for l := newLine; l < maxLines; l++ {
-				if entry, ok := rgState.lineMap[l]; ok && entry.kind == 2 {
-					bufCur.Line = l
-					bufCur.Char = 0
-					found = true
-					break
-				}
-			}
-			if !found {
-				bufCur.Line = startLine
-				ctx.Editor.EchoMessage("No more search results")
-				return true
-			}
-		} else if newLine < startLine {
-			// Moving backward (e.g. :cp / CmdCursorLineUp) — find previous result line
-			for l := newLine; l >= 0; l-- {
-				if entry, ok := rgState.lineMap[l]; ok && entry.kind == 2 {
-					bufCur.Line = l
-					bufCur.Char = 0
-					found = true
-					break
-				}
-			}
-			if !found {
-				bufCur.Line = startLine
-				ctx.Editor.EchoMessage("No earlier search results")
-				return true
-			}
-		} else {
-			// Cursor didn't move — search forward from current line
-			for l := newLine; l < maxLines; l++ {
-				if entry, ok := rgState.lineMap[l]; ok && entry.kind == 2 {
-					bufCur.Line = l
-					bufCur.Char = 0
-					found = true
-					break
-				}
-			}
-			if !found {
-				return true
-			}
-		}
-	}
-
-	entry, ok := rgState.lineMap[bufCur.Line]
-	if !ok || entry.kind != 2 {
-		return true
-	}
-
-	if entry.resultIdx >= len(rgState.results) {
-		return true
-	}
-
-	saveLastPosition(entry.resultIdx, bufCur.Line)
-	result := rgState.results[entry.resultIdx]
-	targetBuf, err := ctx.Editor.OpenFile(result.FilePath)
-	if err != nil {
-		ctx.Editor.EchoMessage("Cannot open: " + err.Error())
-		return true
-	}
-	ctx.Buf = targetBuf
-	ctx.Win = sourceWin
-	sourceWin.VisitBuffer(ctx, wig.Cursor{
-		Line: max(result.Line-1, 0),
-		Char: result.Char,
-	})
 	// Shortcut hint is rendered by the popup's hint row, not here — only
 	// the match position and text go to the echo row.
-	ctx.Editor.EchoMessage(fmt.Sprintf("[%d/%d matches] %s", entry.resultIdx+1, len(rgState.results), strings.TrimSpace(result.Text)))
-	wig.CmdCursorCenter(ctx)
+	onVisit := func(l int) {
+		entry, ok := rgState.lineMap[l]
+		if !ok || entry.kind != 2 || entry.resultIdx >= len(rgState.results) {
+			return
+		}
+		result := rgState.results[entry.resultIdx]
+		ctx.Editor.EchoMessage(fmt.Sprintf(
+			"[%d/%d matches] %s",
+			entry.resultIdx+1, len(rgState.results), strings.TrimSpace(result.Text),
+		))
+	}
 
-	return true
+	return visitGrouped(ctx, sourceBuf, movement, isResult, resolve, "", onVisit)
 }
 
 func saveResultsToFile(results []RgResult) error {

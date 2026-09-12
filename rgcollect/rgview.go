@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/firstrow/wig"
-	"github.com/gdamore/tcell/v2"
 )
 
 // RgViewWidget renders the [rg] grouped search results as a 100%-screen-width
@@ -161,16 +160,17 @@ func rgReplaceLine() string {
 //	row  0          ╭─ rg ─────...──────╮     box top edge (with "rg" title)
 //	row  1          │ search: … - N/M matches in K files
 //	row  2          │ Replace: [ … █ … ] <-
-//	rows 3..vh-4    │ <buffer content>        (row = 3 + (lineNum - ScrollOffset))
-//	row  vh-3       │ <status message or shortcut hint>
-//	row  vh-2       ╰─────────────────...──╯  box bottom edge
+//	rows 3..vh-3    │ <buffer content>        (row = 3 + (lineNum - ScrollOffset))
+//	row  vh-2       ╰─ [shortcut hint] ─╯    box bottom edge (hint embedded)
 //	row  vh-1       (left untouched — underlying statusline)
 //
-// The search/replace prompts, the shortcut hint, and any echo message all
-// live INSIDE the popup chrome. The bottom row directly above the box
-// border shows an echo message when one is set (e.g. "[3/47 matches] foo"
-// from :cn / :cp), and falls back to the shortcut hint otherwise — so
-// there is never an empty row between the content and the bottom border.
+// This mirrors the git status popup's layout (see
+// ui.GitViewPopupWidget.Render): the shortcut hint is written across the
+// middle of the bottom border rather than occupying its own row, so the
+// content area extends all the way down to the row above it and the frame
+// never wastes a row on chrome. Echo messages (e.g. "[3/47 matches] foo"
+// from :cn / :cp) fall through to the editor's normal statusline on row
+// vh-1 instead of being painted inside the popup.
 //
 // The buffer itself only contains the result entries (file headers, blank
 // separators, match lines) — see InitGrouped.
@@ -209,17 +209,17 @@ func (u *RgViewWidget) Render(view wig.View) {
 		view.SetContent(0, y, strings.Repeat(" ", vw), bg)
 	}
 
-	// Row layout. The bottom row of the frame (statusRow) shows either an
-	// echo message or the shortcut hint — never both, never empty — so the
-	// content area runs all the way down to it without a gap.
+	// Row layout mirrors the git status popup: the shortcut hint is
+	// embedded in the bottom border row itself (see below), so the
+	// content area runs all the way down to the row just above it — no
+	// separate status row inside the frame.
 	boxTop := 0
 	infoRow := 1
 	replaceRow := 2
 	contentTop := 3
-	statusRow := vh - 3
 	boxBottom := vh - 2
 
-	contentBottom := statusRow - 1
+	contentBottom := boxBottom - 1
 	contentH := contentBottom - contentTop + 1
 	if contentH < 1 {
 		contentH = 1
@@ -246,6 +246,11 @@ func (u *RgViewWidget) Render(view wig.View) {
 
 	// Title text on the top border.
 	view.SetContent(2, boxTop, " rg ", borderStyle)
+
+	// Shortcut hint embedded in the bottom border, mirroring the git
+	// status popup (ui.GitViewPopupWidget.Render): the hint overwrites
+	// the middle of the ╰───╯ run instead of occupying a row of its own.
+	view.SetContent(2, boxBottom, rgTruncate(rgBrowseHint, vw-4), hintStyle)
 
 	cur := wig.WindowCursorGet(u.e.ActiveWindow(), u.buf)
 	if cur == nil {
@@ -345,47 +350,4 @@ func (u *RgViewWidget) Render(view wig.View) {
 		lineNum++
 	}
 
-	// Bottom status row. Echo message wins when present (e.g. ":cn"
-	// navigation feedback); otherwise the shortcut hint is shown. Both
-	// live on the same row so the content never leaves an empty gap
-	// above the bottom border.
-	//
-	// Only the interior is cleared (x = 1 .. vw-2), so the left and right
-	// border glyphs drawn by the frame loop above are not wiped away —
-	// clearing the full row here was leaving a gap in both vertical edges
-	// of the box exactly on this row.
-	if contentW > 0 {
-		view.SetContent(1, statusRow, strings.Repeat(" ", contentW), bg)
-	}
-	if msg := rgEchoMessage(u.e.Message); msg != "" {
-		msgStyle := tcell.StyleDefault.Foreground(tcell.ColorYellow)
-		if s, ok := wig.FindColor("ui.message"); ok {
-			msgStyle = s
-		}
-		view.SetContent(1, statusRow, rgTruncate(msg, contentW), msgStyle)
-	} else {
-		view.SetContent(1, statusRow, rgTruncate(rgBrowseHint, contentW), hintStyle)
-	}
-}
-
-// rgEchoMessage filters an editor echo message before it is painted on the
-// popup's echo row. It strips:
-//
-//   - the bare shortcut hint (already rendered in the hint row);
-//   - the "  ───  <rgBrowseHint>" suffix that rgRenderBrowseStatus appends
-//     to status messages;
-//   - the entire legacy "─── [REPLACE] ─── …" / "─── [SEARCH] ─── …"
-//     sub-mode echoes, which used to sit in the echo area and are now
-//     redundant because the popup header shows the same state.
-func rgEchoMessage(msg string) string {
-	if msg == rgBrowseHint {
-		return ""
-	}
-	if suffix := "  ───  " + rgBrowseHint; strings.HasSuffix(msg, suffix) {
-		msg = strings.TrimSuffix(msg, suffix)
-	}
-	if strings.HasPrefix(msg, "─── [REPLACE]") || strings.HasPrefix(msg, "─── [SEARCH]") {
-		return ""
-	}
-	return msg
 }
