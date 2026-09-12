@@ -82,24 +82,19 @@ func computeHunkDiff(work, head []string) *HunkDiffData {
 			continue
 		}
 
-		startRow := len(d.Rows)
 		leftStart, rightStart := i, j
+		var leftIndices []int
+		var rightIndices []int
 
 		for i < m || j < n {
 			if i < m && j < n && work[i] == head[j] {
 				break
 			}
 			if j >= n || (i < m && lcs[i+1][j] >= lcs[i][j+1]) {
-				d.Rows = append(d.Rows, HunkDiffRow{
-					LeftIdx: i, RightIdx: -1,
-					Kind: hunkDiffDelete, HunkIdx: -1,
-				})
+				leftIndices = append(leftIndices, i)
 				i++
 			} else {
-				d.Rows = append(d.Rows, HunkDiffRow{
-					LeftIdx: -1, RightIdx: j,
-					Kind: hunkDiffInsert, HunkIdx: -1,
-				})
+				rightIndices = append(rightIndices, j)
 				j++
 			}
 		}
@@ -109,8 +104,37 @@ func computeHunkDiff(work, head []string) *HunkDiffData {
 			LeftFrom: leftStart + 1, LeftTo: i,
 			RightFrom: rightStart + 1, RightTo: j,
 		})
-		for k := startRow; k < len(d.Rows); k++ {
-			d.Rows[k].HunkIdx = hunkIdx
+
+		maxCount := len(leftIndices)
+		if len(rightIndices) > maxCount {
+			maxCount = len(rightIndices)
+		}
+
+		for k := 0; k < maxCount; k++ {
+			lIdx := -1
+			if k < len(leftIndices) {
+				lIdx = leftIndices[k]
+			}
+			rIdx := -1
+			if k < len(rightIndices) {
+				rIdx = rightIndices[k]
+			}
+
+			kind := hunkDiffContext
+			if lIdx >= 0 && rIdx >= 0 {
+				kind = hunkDiffDelete
+			} else if lIdx >= 0 {
+				kind = hunkDiffDelete
+			} else {
+				kind = hunkDiffInsert
+			}
+
+			d.Rows = append(d.Rows, HunkDiffRow{
+				LeftIdx:  lIdx,
+				RightIdx: rIdx,
+				Kind:     kind,
+				HunkIdx:  hunkIdx,
+			})
 		}
 	}
 
@@ -257,9 +281,7 @@ func CmdHunkDiffOpen(ctx wig.Context) {
 			"k":    u.up,
 			"Up":   u.up,
 
-			"g": wig.KeyMap{
-				"g": u.goTop,
-			},
+			"g": u.goTop,
 			"G": u.goBottom,
 
 			"PgDn":   func(ctx wig.Context) { u.moveBy(ctx, +10) },
@@ -786,7 +808,7 @@ func fillRow(view wig.View, x, y, n int, style tcell.Style) {
 // The blend weight is deliberately low (3/16). Syntax foregrounds and the
 // cursor-line highlight layer on top of this background, and shouldn't be
 // drowned out by the hunk tint.
-func hunkBgFor(deleteSide bool) tcell.Color {
+func hunkBgFor(deleteSide bool, active bool) tcell.Color {
 	hunkKey := "diff.hunk.insert"
 	accentKey := "diff.plus"
 	if deleteSide {
@@ -794,34 +816,53 @@ func hunkBgFor(deleteSide bool) tcell.Color {
 		accentKey = "diff.minus"
 	}
 
-	// 1. Explicit hunk key.
+	_, defaultBg, _ := wig.Color("default").Decompose()
+
+	// 1. Explicit hunk key if theme defined a custom background.
 	if s, ok := wig.FindColor(hunkKey); ok {
 		_, bg, _ := s.Decompose()
-		if bg != tcell.ColorDefault {
+		if bg != tcell.ColorDefault && bg != defaultBg {
 			return bg
 		}
 	}
 
-	// 2. Theme's own diff.minus/diff.plus background.
+	// 2. Theme's own diff.minus/diff.plus background, if custom.
 	if s, ok := wig.FindColor(accentKey); ok {
 		_, bg, _ := s.Decompose()
-		if bg != tcell.ColorDefault {
+		if bg != tcell.ColorDefault && bg != defaultBg {
 			return bg
 		}
 	}
 
 	// 3. Blend the accent fg into the default bg.
-	_, defaultBg, _ := wig.Color("default").Decompose()
-	if defaultBg == tcell.ColorDefault {
-		return tcell.ColorDefault
-	}
 	accentFg, _, _ := wig.Color(accentKey).Decompose()
 	if accentFg == tcell.ColorDefault {
-		return tcell.ColorDefault
+		if deleteSide {
+			accentFg = tcell.NewRGBColor(220, 50, 50)
+		} else {
+			accentFg = tcell.NewRGBColor(50, 200, 50)
+		}
 	}
+
+	if defaultBg == tcell.ColorDefault {
+		if deleteSide {
+			if active {
+				return tcell.NewRGBColor(70, 20, 20)
+			}
+			return tcell.NewRGBColor(45, 15, 15)
+		}
+		if active {
+			return tcell.NewRGBColor(20, 70, 20)
+		}
+		return tcell.NewRGBColor(15, 45, 15)
+	}
+
 	dr, dg, db := defaultBg.RGB()
 	ar, ag, ab := accentFg.RGB()
-	const w = int32(3) // out of 16 — subtle
+	w := int32(4) // out of 16 — visible block tint for inactive hunks
+	if active {
+		w = int32(7) // more prominent tint for active hunk
+	}
 	nr := (dr*(16-w) + ar*w) / 16
 	ng := (dg*(16-w) + ag*w) / 16
 	nb := (db*(16-w) + ab*w) / 16
@@ -884,70 +925,69 @@ func (u *UiHunkDiff) Render(view wig.View) {
 	}
 
 	bgStyle := wig.Color("default")
-	borderStyle := wig.Color("ui.linenr")
-	titleStyle := wig.Color("ui.popup.title")
-	headerStyle := wig.Color("comment")
+	_, defaultBg, _ := bgStyle.Decompose()
+	linenrStyle := wig.Color("ui.linenr")
 	statusStyle := wig.Color("ui.statusline")
-	cursorStyle := wig.Color("ui.cursor")
-	dividerStyle := wig.Color("ui.linenr")
 
-	// 1. Clear the entire viewport cell-by-cell.
+	cyanStyle := tcell.StyleDefault.Foreground(tcell.ColorAqua)
+	cyanBoldStyle := tcell.StyleDefault.Foreground(tcell.ColorAqua).Bold(true)
+	darkCyanStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkCyan)
+
+	cursorFg := wig.GetStyleFg("ui.popup.title")
+	if cursorFg == tcell.ColorDefault {
+		cursorFg = wig.GetStyleFg("diff.minus")
+	}
+	if cursorFg == tcell.ColorDefault {
+		cursorFg = tcell.ColorRed
+	}
+	cursorStyle := tcell.StyleDefault.Foreground(cursorFg).Bold(true)
+
+	// 1. Clear viewport.
 	for y := 0; y < vh; y++ {
 		fillRow(view, 0, y, vw, bgStyle)
 	}
 
-	// 2. Box border.
-	for x := 1; x < vw-1; x++ {
-		view.SetContent(x, 0, "-", borderStyle)
-		view.SetContent(x, vh-1, "-", borderStyle)
+	work := u.workLines()
+	maxLines := len(work)
+	if len(u.head) > maxLines {
+		maxLines = len(u.head)
 	}
-	for y := 1; y < vh-1; y++ {
-		view.SetContent(0, y, "|", borderStyle)
-		view.SetContent(vw-1, y, "|", borderStyle)
+	numWidth := 4
+	if maxLines >= 1000 {
+		numWidth = 5
 	}
-	view.SetContent(0, 0, "+", borderStyle)
-	view.SetContent(vw-1, 0, "+", borderStyle)
-	view.SetContent(0, vh-1, "+", borderStyle)
-	view.SetContent(vw-1, vh-1, "+", borderStyle)
 
-	// 3. Title on top border.
-	title := fmt.Sprintf(" Hunk Diff - %s ", u.buf.GetName())
-	writeCellRow(view, 3, 0, vw-6, title, titleStyle)
-
-	// 4. Split column.
 	splitX := vw / 2
-	if splitX < 12 {
-		splitX = 12
+	if splitX < numWidth+10 {
+		splitX = numWidth + 10
 	}
-	if splitX > vw-12 {
-		splitX = vw - 12
-	}
-	leftInner := splitX - 1       // cells in [1, splitX-1]
-	rightInner := vw - splitX - 2 // cells in [splitX+1, vw-2]
-
-	// 5. Header row (y=1).
-	writeCellRow(view, 1, 1, leftInner, " Working (buffer)", headerStyle)
-	view.SetContent(splitX, 1, "|", borderStyle)
-	writeCellRow(view, splitX+1, 1, rightInner, " HEAD", headerStyle)
-
-	// 6. Divider row (y=2).
-	for x := 1; x < vw-1; x++ {
-		if x == splitX {
-			view.SetContent(x, 2, "+", dividerStyle)
-		} else {
-			view.SetContent(x, 2, "-", dividerStyle)
-		}
+	if splitX > vw-(numWidth+10) {
+		splitX = vw - (numWidth + 10)
 	}
 
-	// 7. Content region.
-	rowTop := 3
+	leftCodeWidth := splitX - (numWidth + 2)
+	if leftCodeWidth < 1 {
+		leftCodeWidth = 1
+	}
+	rightCodeWidth := vw - (splitX + 2 + numWidth)
+	if rightCodeWidth < 1 {
+		rightCodeWidth = 1
+	}
+
+	// 2. Header row (y = 0).
+	fillRow(view, 0, 0, vw, bgStyle)
+	leftTitle := fmt.Sprintf("%s (Working)", u.buf.GetName())
+	writeCellRow(view, 0, 0, splitX-1, leftTitle, cyanBoldStyle.Background(defaultBg))
+	writeCellRow(view, splitX+2+numWidth, 0, rightCodeWidth, "HEAD", cyanBoldStyle.Background(defaultBg))
+
+	// 3. Diff content rows (y = 1 .. vh - 3).
+	rowTop := 1
 	rowBottom := vh - 3
 	pageSize := rowBottom - rowTop + 1
 	if pageSize < 1 {
 		pageSize = 1
 	}
 
-	// Auto-scroll.
 	if u.cur < u.scroll {
 		u.scroll = u.cur
 	}
@@ -958,120 +998,218 @@ func (u *UiHunkDiff) Render(view wig.View) {
 		u.scroll = 0
 	}
 
-	work := u.workLines()
+	currentHunkIdx := -1
+	if u.cur >= 0 && u.cur < len(u.d.Rows) {
+		currentHunkIdx = u.d.Rows[u.cur].HunkIdx
+	}
+
+	isDark := true
+	if defaultBg != tcell.ColorDefault {
+		dr, dg, db := defaultBg.RGB()
+		if (dr*299+dg*587+db*114)/1000 > 128 {
+			isDark = false
+		}
+	}
 
 	for i := 0; i < pageSize; i++ {
 		rowIdx := u.scroll + i
 		y := rowTop + i
 
 		if rowIdx >= len(u.d.Rows) {
-			// Empty filler row: panels stay clear.
-			fillRow(view, 1, y, leftInner, bgStyle)
-			view.SetContent(splitX, y, "|", borderStyle)
-			fillRow(view, splitX+1, y, rightInner, bgStyle)
+			fillRow(view, 0, y, vw, bgStyle)
 			continue
 		}
 
 		row := u.d.Rows[rowIdx]
-		leftStyle := bgStyle
-		rightStyle := bgStyle
+		isHunk := row.HunkIdx >= 0
+		isCurrentHunk := (isHunk && row.HunkIdx == currentHunkIdx)
+		isCursorRow := (rowIdx == u.cur)
 
-		// Hunk rows get a shaded background so the changed region reads
-		// as a block across the split, not just as colored text. The
-		// tint depends on the row kind (reddish for delete, greenish
-		// for insert); both panels share the same tint so the row is
-		// one continuous band even where one panel is empty padding.
-		//
-		// The content panel keeps its diff.minus / diff.plus foreground
-		// on top of the tinted background; the empty panel gets the
-		// same background with default foreground so it extends the
-		// block without looking like unrendered text.
-		hunkBg := tcell.ColorDefault
-		if row.HunkIdx >= 0 {
-			switch row.Kind {
-			case hunkDiffDelete:
-				hunkBg = hunkBgFor(true)
-				leftStyle = wig.Color("diff.minus").Background(hunkBg)
-				rightStyle = wig.Color("default").Background(hunkBg)
-			case hunkDiffInsert:
-				hunkBg = hunkBgFor(false)
-				rightStyle = wig.Color("diff.plus").Background(hunkBg)
-				leftStyle = wig.Color("default").Background(hunkBg)
-			default:
-				// Defensive: context rows always have HunkIdx == -1,
-				// but if this ever fires, shade both sides uniformly
-				// rather than letting a hunk row go unshaded.
-				hunkBg = hunkBgFor(true)
-				leftStyle = leftStyle.Background(hunkBg)
-				rightStyle = rightStyle.Background(hunkBg)
+		leftBg := defaultBg
+		rightBg := defaultBg
+
+		if isHunk {
+			if isDark {
+				leftBg = tcell.NewRGBColor(16, 75, 92)
+				rightBg = tcell.NewRGBColor(12, 52, 65)
+				if isCurrentHunk {
+					leftBg = tcell.NewRGBColor(20, 92, 112)
+					rightBg = tcell.NewRGBColor(15, 65, 80)
+				}
+			} else {
+				leftBg = tcell.NewRGBColor(200, 235, 245)
+				rightBg = tcell.NewRGBColor(220, 242, 250)
 			}
 		}
 
-		isCursorRow := rowIdx == u.cur
-		if isCursorRow {
-			leftStyle = wig.ApplyBg("ui.cursorline", leftStyle)
-			rightStyle = wig.ApplyBg("ui.cursorline", rightStyle)
+		leftBaseStyle := tcell.StyleDefault.Background(leftBg).Foreground(wig.GetStyleFg("default"))
+		rightBaseStyle := tcell.StyleDefault.Background(rightBg).Foreground(wig.GetStyleFg("default"))
+
+		// Left line number
+		var leftNumStr string
+		leftNumStyle := linenrStyle.Background(leftBg)
+		if row.LeftIdx >= 0 {
+			leftNumStr = fmt.Sprintf("%*d ", numWidth-1, row.LeftIdx+1)
+		} else {
+			leftNumStr = "~" + strings.Repeat(" ", numWidth-1)
+			leftNumStyle = cyanStyle.Background(leftBg)
+		}
+		writeCellRow(view, 0, y, numWidth, leftNumStr, leftNumStyle)
+
+		// Left cursor indicator slot (2 cells)
+		if isCursorRow && u.focus == "left" {
+			view.SetContent(numWidth, y, "[", cursorStyle.Background(leftBg))
+			view.SetContent(numWidth+1, y, "]", cursorStyle.Background(leftBg))
+		} else {
+			fillRow(view, numWidth, y, 2, leftBaseStyle)
 		}
 
-		// Left panel. The work buffer's line index is exactly the line
-		// index the tree-sitter highlighter was built for, so spans line
-		// up perfectly. Leading space mirrors the previous layout.
+		// Left code
 		if row.LeftIdx >= 0 && row.LeftIdx < len(work) {
-			view.SetContent(1, y, " ", leftStyle)
-			renderSourceLine(view, 2, y, leftInner-1, work[row.LeftIdx], row.LeftIdx, u.buf.Highlighter, leftStyle)
+			renderSourceLine(view, numWidth+2, y, leftCodeWidth, work[row.LeftIdx], row.LeftIdx, u.buf.Highlighter, leftBaseStyle)
 		} else {
-			fillRow(view, 1, y, leftInner, leftStyle)
+			fillRow(view, numWidth+2, y, leftCodeWidth, leftBaseStyle)
 		}
 
-		// Separator column. When the row is inside a hunk, tint the
-		// separator with the same background so the band is unbroken
-		// across the split column instead of looking like two separate
-		// blocks.
-		sepStyle := borderStyle
-		if hunkBg != tcell.ColorDefault {
-			sepStyle = borderStyle.Background(hunkBg)
+		// Middle gutter (2 cells)
+		midStyle := cyanBoldStyle.Background(rightBg)
+		if isCursorRow && u.focus == "right" {
+			view.SetContent(splitX, y, "[", cursorStyle.Background(rightBg))
+			view.SetContent(splitX+1, y, "]", cursorStyle.Background(rightBg))
+		} else if isHunk {
+			symbol := "◆ "
+			if row.LeftIdx >= 0 && row.RightIdx < 0 {
+				symbol = "◀ "
+			} else if row.LeftIdx < 0 && row.RightIdx >= 0 {
+				symbol = "▶ "
+			}
+			writeCellRow(view, splitX, y, 2, symbol, midStyle)
+		} else {
+			fillRow(view, splitX, y, 2, rightBaseStyle)
 		}
-		view.SetContent(splitX, y, "|", sepStyle)
 
-		// Right panel. For context rows work[i] == head[j], so the work
-		// buffer's highlighter at index LeftIdx produces correct spans
-		// for the HEAD content too. For pure insert rows there is no
-		// corresponding work line, so hlLine stays -1 and the render
-		// falls back to baseStyle (plain text on the insert background).
+		// Right line number
+		var rightNumStr string
+		rightNumStyle := linenrStyle.Background(rightBg)
+		if row.RightIdx >= 0 {
+			rightNumStr = fmt.Sprintf("%*d ", numWidth-1, row.RightIdx+1)
+		} else {
+			rightNumStr = "~" + strings.Repeat(" ", numWidth-1)
+			rightNumStyle = cyanStyle.Background(rightBg)
+		}
+		writeCellRow(view, splitX+2, y, numWidth, rightNumStr, rightNumStyle)
+
+		// Right code
+		hlLine := -1
+		if row.LeftIdx >= 0 && row.LeftIdx < len(work) {
+			hlLine = row.LeftIdx
+		}
 		if row.RightIdx >= 0 && row.RightIdx < len(u.head) {
-			view.SetContent(splitX+1, y, " ", rightStyle)
-			hlLine := -1
-			if row.LeftIdx >= 0 && row.LeftIdx < len(work) {
-				hlLine = row.LeftIdx
-			}
-			renderSourceLine(view, splitX+2, y, rightInner-1, u.head[row.RightIdx], hlLine, u.buf.Highlighter, rightStyle)
+			renderSourceLine(view, splitX+2+numWidth, y, rightCodeWidth, u.head[row.RightIdx], hlLine, u.buf.Highlighter, rightBaseStyle)
 		} else {
-			fillRow(view, splitX+1, y, rightInner, rightStyle)
-		}
-
-		// Cursor row focus indicator.
-		if isCursorRow {
-			if u.focus == "right" && rightInner > 0 {
-				view.SetContent(vw-2, y, " ", cursorStyle)
-			} else if leftInner > 0 {
-				view.SetContent(1, y, " ", cursorStyle)
-			}
+			fillRow(view, splitX+2+numWidth, y, rightCodeWidth, rightBaseStyle)
 		}
 	}
 
-	// 8. Status row (y = vh-2).
-	msg := u.status
-	if msg == "" {
-		hunkNum := 0
-		if u.cur >= 0 && u.cur < len(u.d.Rows) && u.d.Rows[u.cur].HunkIdx >= 0 {
-			hunkNum = u.d.Rows[u.cur].HunkIdx + 1
+	// 4. Status row (y = vh - 2).
+	statusY := vh - 2
+	fillRow(view, 0, statusY, vw, statusStyle)
+
+	badgeStyle := tcell.StyleDefault.Background(tcell.ColorDarkCyan).Foreground(tcell.ColorBlack).Bold(true)
+	writeCellRow(view, 0, statusY, 6, " DIFF ", badgeStyle)
+
+	hunkNum := 0
+	hunkTotal := len(u.d.Hunks)
+	hunkKind := "No Changes"
+	if u.cur >= 0 && u.cur < len(u.d.Rows) && u.d.Rows[u.cur].HunkIdx >= 0 {
+		idx := u.d.Rows[u.cur].HunkIdx
+		hunkNum = idx + 1
+		h := u.d.Hunks[idx]
+		if h.LeftTo >= h.LeftFrom && h.RightTo >= h.RightFrom {
+			hunkKind = "Modified"
+		} else if h.LeftTo >= h.LeftFrom {
+			hunkKind = "Added"
+		} else {
+			hunkKind = "Deleted"
 		}
-		msg = fmt.Sprintf(
-			" Hunk %d/%d  focus:%s  [ l/L ] hunk  [Tab] focus  [a]pply  [d]el  [y]ank  [p]aste  [u]ndo  [w]save  [q]close",
-			hunkNum, len(u.d.Hunks), u.focus,
-		)
-	} else {
-		msg = " " + msg
 	}
-	writeCellRow(view, 1, vh-2, vw-2, msg, statusStyle)
+
+	lLineStr := "~"
+	rLineStr := "~"
+	if u.cur >= 0 && u.cur < len(u.d.Rows) {
+		if u.d.Rows[u.cur].LeftIdx >= 0 {
+			lLineStr = fmt.Sprintf("%d", u.d.Rows[u.cur].LeftIdx+1)
+		}
+		if u.d.Rows[u.cur].RightIdx >= 0 {
+			rLineStr = fmt.Sprintf("%d", u.d.Rows[u.cur].RightIdx+1)
+		}
+	}
+
+	hunkText := fmt.Sprintf(" Hunk %02d/%02d [%s] (L%s vs R%s)", hunkNum, hunkTotal, hunkKind, lLineStr, rLineStr)
+	if u.status != "" {
+		hunkText += fmt.Sprintf("  —  %s", u.status)
+	}
+	writeCellRow(view, 6, statusY, vw-6, hunkText, statusStyle)
+
+	focusText := "Focus: Working (Left) "
+	if u.focus == "right" {
+		focusText = "Focus: HEAD (Right) "
+	}
+	focusX := vw - len(focusText) - 1
+	if focusX > 35 {
+		focusStyle := cyanBoldStyle.Background(wig.GetStyleBg("ui.statusline"))
+		writeCellRow(view, focusX, statusY, len(focusText), focusText, focusStyle)
+	}
+
+	// 5. Keys help row (y = vh - 1).
+	helpY := vh - 1
+	fillRow(view, 0, helpY, vw, bgStyle)
+
+	type keyHint struct {
+		key  string
+		desc string
+	}
+	hints := []keyHint{
+		{"Tab", "Switch"},
+		{"a", "Apply"},
+		{"u", "Undo"},
+		{"y", "Yank"},
+		{"p", "Paste"},
+		{"d", "Del"},
+		{"l/L", "Hunk"},
+		{"w", "Write"},
+		{"q", "Quit"},
+	}
+
+	hx := 1
+	bracketStyle := darkCyanStyle.Background(defaultBg)
+	keyStyle := cyanBoldStyle.Background(defaultBg)
+	descStyle := tcell.StyleDefault.Background(defaultBg).Foreground(wig.GetStyleFg("comment"))
+	if wig.GetStyleFg("comment") == tcell.ColorDefault {
+		descStyle = tcell.StyleDefault.Background(defaultBg).Foreground(tcell.ColorGray)
+	}
+
+	for _, h := range hints {
+		if hx+len(h.key)+len(h.desc)+5 >= vw {
+			break
+		}
+		view.SetContent(hx, helpY, "[", bracketStyle)
+		hx++
+		for _, ch := range h.key {
+			view.SetContent(hx, helpY, string(ch), keyStyle)
+			hx++
+		}
+		view.SetContent(hx, helpY, "]", bracketStyle)
+		hx++
+		view.SetContent(hx, helpY, " ", descStyle)
+		hx++
+		for _, ch := range h.desc {
+			view.SetContent(hx, helpY, string(ch), descStyle)
+			hx++
+		}
+		view.SetContent(hx, helpY, " ", descStyle)
+		hx++
+		view.SetContent(hx, helpY, " ", descStyle)
+		hx++
+	}
 }
