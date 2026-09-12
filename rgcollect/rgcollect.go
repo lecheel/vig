@@ -227,42 +227,9 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 	// Set highlighter
 	buf.Highlighter = &RgHighlighter{Buf: buf, LineMap: lineMap}
 
-	// Set key handler (DefaultKeyHandler + Enter override)
-	buf.KeyHandler = wig.DefaultKeyHandler(wig.ModeKeyMap{
-		wig.MODE_NORMAL: wig.KeyMap{
-			"Enter": CmdRgEnter,
-			"l": func(ctx wig.Context) {
-				cur := wig.ContextCursorGet(ctx)
-				hl, ok := ctx.Buf.Highlighter.(*RgHighlighter)
-				if !ok {
-					return
-				}
-				for i := cur.Line + 1; i < ctx.Buf.Lines.Len; i++ {
-					if entry, ok := hl.LineMap[i]; ok && entry.kind == 1 {
-						cur.Line = i
-						cur.Char = 0
-						wig.CmdCursorCenter(ctx)
-						return
-					}
-				}
-			},
-			"L": func(ctx wig.Context) {
-				cur := wig.ContextCursorGet(ctx)
-				hl, ok := ctx.Buf.Highlighter.(*RgHighlighter)
-				if !ok {
-					return
-				}
-				for i := cur.Line - 1; i >= 0; i-- {
-					if entry, ok := hl.LineMap[i]; ok && entry.kind == 1 {
-						cur.Line = i
-						cur.Char = 0
-						wig.CmdCursorCenter(ctx)
-						return
-					}
-				}
-			},
-		},
-	})
+	// Set key handler: Enter opens the file under cursor, Tab (or /) starts
+	// the search/replace flow, l / L jump between file headers.
+	rgInstallDefaultHandler(buf)
 
 	// Visit buffer (current window, full screen)
 	ctx.Buf = buf
