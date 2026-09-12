@@ -3,10 +3,12 @@ package rgcollect
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 
 	"github.com/firstrow/wig"
+	"github.com/gdamore/tcell/v2"
 )
 
 // ──────────────────────────────────────────────────────────────────
@@ -30,6 +32,7 @@ import (
 //    Space    toggle inclusion of cursor's row (or whole file on header)
 //    u        undo the last apply (file-level)
 //    l / L    jump to next / previous file header
+//    q        close [rg] view
 //
 //  Key bindings (replace):
 //    <rune>   insert at replace cursor
@@ -52,6 +55,7 @@ type rgPhase int
 const (
 	rgPhaseBrowse rgPhase = iota
 	rgPhaseReplace
+	rgPhaseSearch
 )
 
 // appliedFile captures the on-disk bytes of a file just before the
@@ -70,6 +74,8 @@ var rgReplaceState = struct {
 	phase         rgPhase
 	replacement   []rune
 	replaceCursor int
+	searchQuery   []rune
+	searchCursor  int
 	applied       []appliedFile
 	statusMsg     string
 }{
@@ -89,15 +95,42 @@ const rgTypeable = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567
 // rgInstallBrowseHandler restores the browse key handler on buf.
 // Called on view open and whenever the replace sub-mode exits.
 func rgInstallBrowseHandler(buf *wig.Buffer) {
-	buf.KeyHandler = wig.DefaultKeyHandler(wig.ModeKeyMap{
+	// Use NewKeyHandler (not DefaultKeyHandler) so default editor normal mode
+	// keys cannot leak through and cause edits or unexpected behavior in the
+	// search results buffer.
+	buf.KeyHandler = wig.NewKeyHandler(wig.ModeKeyMap{
 		wig.MODE_NORMAL: wig.KeyMap{
-			"Enter": CmdRgEnter,
-			"Tab":   rgEnterReplace,
-			"Space": rgToggleExclude,
-			"u":     rgUndoApply,
-			"l":     rgJumpNextFile,
-			"L":     rgJumpPrevFile,
+			"Enter":  CmdRgEnter,
+			"/":      rgEnterSearch,
+			"s":      rgEnterSearch,
+			"Tab":    rgEnterReplace,
+			"Space":  rgToggleExclude,
+			"u":      rgUndoApply,
+			"l":      rgJumpNextFile,
+			"L":      rgJumpPrevFile,
+			"q":      rgClose,
+			"Esc":    rgClose,
+			"j":      rgCursorDown,
+			"Down":   rgCursorDown,
+			"k":      rgCursorUp,
+			"Up":     rgCursorUp,
+			"ctrl+d": rgPageDown,
+			"PgDn":   rgPageDown,
+			"ctrl+u": rgPageUp,
+			"PgUp":   rgPageUp,
+			"g":      rgGoTop,
+			"Home":   rgGoTop,
+			"G":      rgGoBottom,
+			"End":    rgGoBottom,
+			"h":      rgCursorLeftBrowse,
+			"Left":   rgCursorLeftBrowse,
+			"Right":  rgCursorRightBrowse,
 		},
+	})
+
+	// Block every unbound key so it can never leak to the buffer or editor.
+	buf.KeyHandler.Fallback(func(ctx wig.Context, ev *tcell.EventKey) {
+		rgRenderBrowseStatus(ctx)
 	})
 }
 
@@ -166,6 +199,8 @@ func rgToggleExclude(ctx wig.Context) {
 	// included a result back, its splice must reappear. Refresh handles
 	// both.
 	rgRefreshPreview(ctx)
+	rgRSP.statusMsg = ""
+	rgRenderBrowseStatus(ctx)
 	ctx.Editor.Redraw()
 }
 
@@ -175,7 +210,8 @@ func rgToggleExclude(ctx wig.Context) {
 func rgUndoApply(ctx wig.Context) {
 	applied := rgRSP.applied
 	if len(applied) == 0 {
-		ctx.Editor.EchoMessage("Nothing to undo")
+		rgRSP.statusMsg = "Nothing to undo"
+		rgRenderBrowseStatus(ctx)
 		return
 	}
 	rgRSP.applied = nil
@@ -186,7 +222,8 @@ func rgUndoApply(ctx wig.Context) {
 			restored++
 		}
 	}
-	ctx.Editor.EchoMessage(fmt.Sprintf("Undo: restored %d file(s)", restored))
+	rgRSP.statusMsg = fmt.Sprintf("Undo: restored %d file(s)", restored)
+	rgRenderBrowseStatus(ctx)
 	ctx.Editor.Redraw()
 }
 
@@ -203,6 +240,9 @@ func rgInstallReplaceHandler(buf *wig.Buffer) {
 	}
 	km["Space"] = func(ctx wig.Context) { rgInsertRune(ctx, ' ') }
 	km["Backspace"] = rgBackspace
+	km["Backspace2"] = rgBackspace
+	km["ctrl+h"] = rgBackspace
+	km["BS"] = rgBackspace
 	km["Delete"] = rgDeleteForward
 	km["Left"] = rgCursorLeft
 	km["Right"] = rgCursorRight
@@ -238,6 +278,8 @@ func rgInsertRune(ctx wig.Context, r rune) {
 func rgBackspace(ctx wig.Context) {
 	i := rgRSP.replaceCursor
 	if i <= 0 {
+		// Backspace on an already-empty prompt dismisses it.
+		rgCancelReplace(ctx)
 		return
 	}
 	rgRSP.replacement = append(rgRSP.replacement[:i-1], rgRSP.replacement[i:]...)
@@ -297,8 +339,379 @@ func rgCancelReplace(ctx wig.Context) {
 	rgRSP.statusMsg = ""
 	rgInstallBrowseHandler(ctx.Buf)
 	rgRefreshPreview(ctx)
+	rgRenderBrowseStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+const rgBrowseHint = "[Enter] Open  [/] Search  [Tab] Replace  [SPC] Exclude  [l/L] File  [u] Undo  [q] Close"
+
+// rgRenderBrowseStatus echoes the shortcut hint along with any active
+// status message on the bottom echo line so the shortcuts are always visible.
+func rgRenderBrowseStatus(ctx wig.Context) {
+	if rgRSP.statusMsg != "" {
+		ctx.Editor.EchoMessage(fmt.Sprintf("%s  ───  %s", rgRSP.statusMsg, rgBrowseHint))
+		return
+	}
+	ctx.Editor.EchoMessage(rgBrowseHint)
+}
+
+func rgClampCursor(buf *wig.Buffer, cur *wig.Cursor) {
+	if buf == nil || cur == nil {
+		return
+	}
+	if cur.Line < 0 {
+		cur.Line = 0
+	}
+	if cur.Line >= buf.Lines.Len {
+		cur.Line = max(0, buf.Lines.Len-1)
+	}
+	line := wig.CursorLineByNum(buf, cur.Line)
+	if line != nil {
+		lineLen := len([]rune(line.Value.String()))
+		if cur.Char > lineLen {
+			cur.Char = lineLen
+		}
+		if cur.Char < 0 {
+			cur.Char = 0
+		}
+	}
+}
+
+func rgCursorDown(ctx wig.Context) {
+	cur := wig.ContextCursorGet(ctx)
+	if cur != nil && ctx.Buf != nil && cur.Line < ctx.Buf.Lines.Len-1 {
+		cur.Line++
+		rgClampCursor(ctx.Buf, cur)
+		updateCurrentPos(cur.Line)
+	}
+	rgRSP.statusMsg = ""
+	rgRenderBrowseStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgCursorUp(ctx wig.Context) {
+	cur := wig.ContextCursorGet(ctx)
+	if cur != nil && ctx.Buf != nil && cur.Line > 0 {
+		cur.Line--
+		rgClampCursor(ctx.Buf, cur)
+		updateCurrentPos(cur.Line)
+	}
+	rgRSP.statusMsg = ""
+	rgRenderBrowseStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgPageDown(ctx wig.Context) {
+	cur := wig.ContextCursorGet(ctx)
+	if cur != nil && ctx.Buf != nil {
+		cur.Line += 15
+		rgClampCursor(ctx.Buf, cur)
+		updateCurrentPos(cur.Line)
+	}
+	rgRSP.statusMsg = ""
+	rgRenderBrowseStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgPageUp(ctx wig.Context) {
+	cur := wig.ContextCursorGet(ctx)
+	if cur != nil && ctx.Buf != nil {
+		cur.Line -= 15
+		rgClampCursor(ctx.Buf, cur)
+		updateCurrentPos(cur.Line)
+	}
+	rgRSP.statusMsg = ""
+	rgRenderBrowseStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgGoTop(ctx wig.Context) {
+	cur := wig.ContextCursorGet(ctx)
+	if cur != nil {
+		cur.Line = 0
+		cur.Char = 0
+		updateCurrentPos(0)
+	}
+	rgRSP.statusMsg = ""
+	rgRenderBrowseStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgGoBottom(ctx wig.Context) {
+	cur := wig.ContextCursorGet(ctx)
+	if cur != nil && ctx.Buf != nil && ctx.Buf.Lines.Len > 0 {
+		cur.Line = ctx.Buf.Lines.Len - 1
+		cur.Char = 0
+		updateCurrentPos(cur.Line)
+	}
+	rgRSP.statusMsg = ""
+	rgRenderBrowseStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgCursorLeftBrowse(ctx wig.Context) {
+	cur := wig.ContextCursorGet(ctx)
+	if cur != nil && cur.Char > 0 {
+		cur.Char--
+	}
+	rgRenderBrowseStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgCursorRightBrowse(ctx wig.Context) {
+	cur := wig.ContextCursorGet(ctx)
+	if cur != nil {
+		cur.Char++
+	}
+	rgRenderBrowseStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+// rgClose closes the [rg] buffer view and returns to the previous buffer.
+func rgClose(ctx wig.Context) {
+	rgMutex.Lock()
+	defer rgMutex.Unlock()
+
+	cur := wig.ContextCursorGet(ctx)
+	if cur != nil {
+		if entry, ok := rgState.lineMap[cur.Line]; ok && entry.kind == 2 {
+			saveLastPosition(entry.resultIdx, cur.Line)
+		} else {
+			saveLastPosition(-1, cur.Line)
+		}
+	}
+
+	rgRSP.phase = rgPhaseBrowse
+	rgRSP.replacement = nil
+	rgRSP.replaceCursor = 0
+	rgRSP.statusMsg = ""
+
+	targetBuf := rgPreviousBuf
+	bufValid := false
+	if targetBuf != nil {
+		for _, b := range ctx.Editor.Buffers {
+			if b == targetBuf {
+				bufValid = true
+				break
+			}
+		}
+	}
+
+	if !bufValid {
+		targetBuf = nil
+		for i := len(ctx.Editor.Buffers) - 1; i >= 0; i-- {
+			b := ctx.Editor.Buffers[i]
+			if b.FilePath != "[rg]" && !strings.HasPrefix(b.FilePath, "[rgcollect ") {
+				targetBuf = b
+				break
+			}
+		}
+	}
+
+	if targetBuf == nil {
+		targetBuf = wig.NewBuffer()
+		ctx.Editor.Buffers = append(ctx.Editor.Buffers, targetBuf)
+	}
+
+	ctx.Buf = targetBuf
+	ctx.Editor.ActiveWindow().VisitBuffer(ctx)
 	ctx.Editor.EchoMessage("")
 	ctx.Editor.Redraw()
+}
+
+// ── Search sub-mode (input prompt with BS support) ───────────────
+
+func rgEnterSearch(ctx wig.Context) {
+	rgRSP.phase = rgPhaseSearch
+	rgRSP.searchQuery = nil
+	rgRSP.searchCursor = 0
+	rgRSP.statusMsg = ""
+	rgInstallSearchHandler(ctx.Buf)
+	rgRenderSearchStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgCancelSearch(ctx wig.Context) {
+	rgRSP.phase = rgPhaseBrowse
+	rgRSP.searchQuery = nil
+	rgRSP.searchCursor = 0
+	rgInstallBrowseHandler(ctx.Buf)
+	rgRenderBrowseStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgInstallSearchHandler(buf *wig.Buffer) {
+	km := wig.KeyMap{}
+	for _, r := range rgTypeable {
+		c := r
+		km[string(c)] = func(ctx wig.Context) { rgInsertSearchRune(ctx, c) }
+	}
+	km["Space"] = func(ctx wig.Context) { rgInsertSearchRune(ctx, ' ') }
+	km["Backspace"] = rgSearchBackspace
+	km["Backspace2"] = rgSearchBackspace
+	km["ctrl+h"] = rgSearchBackspace
+	km["BS"] = rgSearchBackspace
+	km["Delete"] = rgSearchDeleteForward
+	km["Left"] = rgSearchCursorLeft
+	km["Right"] = rgSearchCursorRight
+	km["Home"] = rgSearchCursorHome
+	km["End"] = rgSearchCursorEnd
+	km["Enter"] = rgApplySearch
+	km["Esc"] = rgCancelSearch
+	km["ctrl+c"] = rgCancelSearch
+
+	buf.KeyHandler = wig.NewKeyHandler(wig.ModeKeyMap{
+		wig.MODE_NORMAL: km,
+	})
+}
+
+func rgInsertSearchRune(ctx wig.Context, r rune) {
+	i := rgRSP.searchCursor
+	if i < 0 || i > len(rgRSP.searchQuery) {
+		i = len(rgRSP.searchQuery)
+	}
+	newQuery := make([]rune, 0, len(rgRSP.searchQuery)+1)
+	newQuery = append(newQuery, rgRSP.searchQuery[:i]...)
+	newQuery = append(newQuery, r)
+	newQuery = append(newQuery, rgRSP.searchQuery[i:]...)
+	rgRSP.searchQuery = newQuery
+	rgRSP.searchCursor = i + 1
+	rgRenderSearchStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgSearchBackspace(ctx wig.Context) {
+	i := rgRSP.searchCursor
+	if i <= 0 {
+		// Backspace on an already-empty prompt dismisses it.
+		rgCancelSearch(ctx)
+		return
+	}
+	rgRSP.searchQuery = append(rgRSP.searchQuery[:i-1], rgRSP.searchQuery[i:]...)
+	rgRSP.searchCursor = i - 1
+	rgRenderSearchStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgSearchDeleteForward(ctx wig.Context) {
+	i := rgRSP.searchCursor
+	if i >= len(rgRSP.searchQuery) {
+		return
+	}
+	rgRSP.searchQuery = append(rgRSP.searchQuery[:i], rgRSP.searchQuery[i+1:]...)
+	rgRenderSearchStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgSearchCursorLeft(ctx wig.Context) {
+	if rgRSP.searchCursor > 0 {
+		rgRSP.searchCursor--
+	}
+	rgRenderSearchStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgSearchCursorRight(ctx wig.Context) {
+	if rgRSP.searchCursor < len(rgRSP.searchQuery) {
+		rgRSP.searchCursor++
+	}
+	rgRenderSearchStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgSearchCursorHome(ctx wig.Context) {
+	rgRSP.searchCursor = 0
+	rgRenderSearchStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgSearchCursorEnd(ctx wig.Context) {
+	rgRSP.searchCursor = len(rgRSP.searchQuery)
+	rgRenderSearchStatus(ctx)
+	ctx.Editor.Redraw()
+}
+
+func rgRenderSearchStatus(ctx wig.Context) {
+	before := string(rgRSP.searchQuery[:rgRSP.searchCursor])
+	after := string(rgRSP.searchQuery[rgRSP.searchCursor:])
+	ctx.Editor.EchoMessage(fmt.Sprintf(
+		"─── [SEARCH] ─── query: ▐%s█%s▌ ─── Enter: search  Esc: cancel",
+		before, after,
+	))
+}
+
+func rgApplySearch(ctx wig.Context) {
+	query := strings.TrimSpace(string(rgRSP.searchQuery))
+	if query == "" {
+		ctx.Editor.EchoMessage("Empty search query")
+		rgCancelSearch(ctx)
+		return
+	}
+
+	ctx.Editor.EchoMessage("Searching for '" + query + "'...")
+	ctx.Editor.Redraw()
+
+	rootDir := ctx.Editor.Projects.GetRoot()
+	if rootDir == "" {
+		rootDir = "."
+	}
+
+	cmd := exec.Command("rg", "--vimgrep", query)
+	cmd.Dir = rootDir
+	out, err := cmd.Output()
+	if err != nil && len(out) == 0 {
+		rgRSP.phase = rgPhaseBrowse
+		rgRSP.searchQuery = nil
+		rgRSP.searchCursor = 0
+		rgRSP.statusMsg = "No matches for '" + query + "'"
+		rgInstallBrowseHandler(ctx.Buf)
+		rgRenderBrowseStatus(ctx)
+		ctx.Editor.Redraw()
+		return
+	}
+
+	lines := strings.Split(string(out), "\n")
+	var locs []wig.Location
+	for _, l := range lines {
+		if l == "" {
+			continue
+		}
+		parts := strings.SplitN(l, ":", 4)
+		if len(parts) < 4 {
+			continue
+		}
+		var lineNum, colNum int
+		fmt.Sscanf(parts[1], "%d", &lineNum)
+		fmt.Sscanf(parts[2], "%d", &colNum)
+		charIdx := colNum - 1
+		if charIdx < 0 {
+			charIdx = 0
+		}
+		locs = append(locs, wig.Location{
+			FilePath: parts[0],
+			Line:     lineNum,
+			Char:     charIdx,
+			Text:     parts[3],
+		})
+	}
+
+	if len(locs) == 0 {
+		rgRSP.phase = rgPhaseBrowse
+		rgRSP.searchQuery = nil
+		rgRSP.searchCursor = 0
+		rgRSP.statusMsg = "No matches for '" + query + "'"
+		rgInstallBrowseHandler(ctx.Buf)
+		rgRenderBrowseStatus(ctx)
+		ctx.Editor.Redraw()
+		return
+	}
+
+	rgRSP.phase = rgPhaseBrowse
+	rgRSP.searchQuery = nil
+	rgRSP.searchCursor = 0
+	rgRSP.statusMsg = ""
+
+	InitGrouped(ctx, query, locs)
 }
 
 // rgRenderReplaceStatus echoes the replace prompt. The insertion point
@@ -316,6 +729,38 @@ func rgRenderReplaceStatus(ctx wig.Context) {
 	))
 }
 
+func splicePreviewText(text string, matches []MatchSpan, replacement string) string {
+	runes := []rune(text)
+	var sb strings.Builder
+	last := 0
+	for _, m := range matches {
+		start, end := m.Start, m.End
+		if start < 0 {
+			start = 0
+		}
+		if start < last {
+			start = last
+		}
+		if start > len(runes) {
+			start = len(runes)
+		}
+		if end < start {
+			end = start
+		}
+		if end > len(runes) {
+			end = len(runes)
+		}
+		sb.WriteString(string(runes[last:start]))
+		sb.WriteString(string(runes[start:end]))
+		sb.WriteString(replacement)
+		last = end
+	}
+	if last < len(runes) {
+		sb.WriteString(string(runes[last:]))
+	}
+	return sb.String()
+}
+
 // rgRefreshPreview rebuilds the [rg] buffer content so that, once a
 // non-empty replacement has been typed, each included match is
 // rendered inline as:
@@ -328,10 +773,6 @@ func rgRenderReplaceStatus(ctx wig.Context) {
 // struck-through; the replacement is spliced in immediately after it.
 // When the replacement is empty, or a result is excluded, the
 // original result text is restored.
-//
-// ReloadBufferContent is used rather than per-line mutation so the change
-// round-trips through the buffer's own reload path (highlighter, LSP,
-// dirty flag), keeping the flow consistent with the rest of the editor.
 func rgRefreshPreview(ctx wig.Context) {
 	buf := ctx.Buf
 	if buf == nil {
@@ -346,8 +787,6 @@ func rgRefreshPreview(ctx wig.Context) {
 		len(rgRSP.replacement) > 0
 	replacement := string(rgRSP.replacement)
 
-	// Preserve the cursor line/char across the reload so preview toggling
-	// does not jump the user out of the row they were inspecting.
 	cur := wig.ContextCursorGet(ctx)
 	savedLine, savedChar := 0, 0
 	if cur != nil {
@@ -366,30 +805,10 @@ func rgRefreshPreview(ctx wig.Context) {
 			if entry.resultIdx >= 0 && entry.resultIdx < len(rgState.results) {
 				result := rgState.results[entry.resultIdx]
 				if showPreview && !result.Excluded {
-					// Text stored on the RgResult has no trailing newline
-					// (InitGrouped strips it) so MatchStart/MatchEnd are
-					// rune offsets directly into this slice.
-					runes := []rune(result.Text)
-					start, end := result.MatchStart, result.MatchEnd
-					if start < 0 {
-						start = 0
-					}
-					if start > len(runes) {
-						start = len(runes)
-					}
-					if end < start {
-						end = start
-					}
-					if end > len(runes) {
-						end = len(runes)
-					}
 					content = fmt.Sprintf(
-						"%d:\t%s%s%s%s",
+						"%d:\t%s",
 						result.Line,
-						string(runes[:start]),
-						string(runes[start:end]),
-						replacement,
-						string(runes[end:]),
+						splicePreviewText(result.Text, result.GetMatches(), replacement),
 					)
 				} else {
 					content = fmt.Sprintf("%d:\t%s", result.Line, result.Text)
@@ -499,31 +918,47 @@ func rgApplyReplace(ctx wig.Context) {
 	} else {
 		rgRSP.statusMsg = fmt.Sprintf("Applied %d replacement(s) in %d file(s) — press u to undo", totalReplacements, filesChanged)
 	}
-	ctx.Editor.EchoMessage(rgRSP.statusMsg)
+	rgRenderBrowseStatus(ctx)
 	ctx.Editor.Redraw()
 }
 
-// rgSpliceFile applies replacement to every match in content.  Each
+// rgSpliceFile applies replacement to every match in content. Each
 // match carries rune offsets into its line; sorting descending by
 // (line, start) means a later splice never shifts an earlier match's
 // coordinates within the same line.
 func rgSpliceFile(content string, matches []RgResult, replacement string) (string, int) {
 	lines := strings.Split(content, "\n")
-	sort.Slice(matches, func(i, j int) bool {
-		if matches[i].Line != matches[j].Line {
-			return matches[i].Line > matches[j].Line
+	type singleMatch struct {
+		line  int
+		start int
+		end   int
+	}
+	var allMatches []singleMatch
+	for _, r := range matches {
+		for _, m := range r.GetMatches() {
+			allMatches = append(allMatches, singleMatch{
+				line:  r.Line,
+				start: m.Start,
+				end:   m.End,
+			})
 		}
-		return matches[i].MatchStart > matches[j].MatchStart
+	}
+
+	sort.Slice(allMatches, func(i, j int) bool {
+		if allMatches[i].line != allMatches[j].line {
+			return allMatches[i].line > allMatches[j].line
+		}
+		return allMatches[i].start > allMatches[j].start
 	})
 
 	applied := 0
-	for _, m := range matches {
-		idx := m.Line - 1
+	for _, m := range allMatches {
+		idx := m.line - 1
 		if idx < 0 || idx >= len(lines) {
 			continue
 		}
 		runes := []rune(lines[idx])
-		start, end := m.MatchStart, m.MatchEnd
+		start, end := m.start, m.end
 		if start < 0 || start > len(runes) {
 			continue
 		}
@@ -548,7 +983,9 @@ func rgJumpNextFile(ctx wig.Context) {
 		if entry, ok := hl.LineMap[i]; ok && entry.kind == 1 {
 			cur.Line = i
 			cur.Char = 0
+			updateCurrentPos(i)
 			wig.CmdCursorCenter(ctx)
+			rgRenderBrowseStatus(ctx)
 			return
 		}
 	}
@@ -564,7 +1001,9 @@ func rgJumpPrevFile(ctx wig.Context) {
 		if entry, ok := hl.LineMap[i]; ok && entry.kind == 1 {
 			cur.Line = i
 			cur.Char = 0
+			updateCurrentPos(i)
 			wig.CmdCursorCenter(ctx)
+			rgRenderBrowseStatus(ctx)
 			return
 		}
 	}

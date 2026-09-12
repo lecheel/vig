@@ -34,6 +34,7 @@ func Init(ctx wig.Context, title string, items []wig.Location) {
 					ParseLocation: true,
 				})
 			},
+			"q": rgClose,
 		},
 	})
 
@@ -64,24 +65,36 @@ func (h *TestHighlighter) HighlightLine(lineNum int) []wig.Span {
 
 // ── Grouped rg search results (full screen, no split) ──
 
+// MatchSpan represents a matched region within a line (0-based rune offsets).
+type MatchSpan struct {
+	Start int `json:"start"`
+	End   int `json:"end"`
+}
+
 // RgResult is a single search result serialized to JSON.
 //
-// MatchStart / MatchEnd are rune offsets within Text (0-based, half-open).
-// They delimit the ripgrep-reported match span and are used by the
-// replace flow to splice the replacement at exactly the right place,
-// bottom-up / right-to-left so no edit shifts the coordinates of another.
-//
-// Excluded is session state: it is not persisted, since F11 recall is
-// meant to run a fresh search. Space in browse mode flips it; the
-// replace apply skips excluded results.
+// Matches contains all matched spans on this line. When a line has multiple
+// matches, they are merged into one RgResult so the line is not shown as
+// duplicate lines.
 type RgResult struct {
-	FilePath   string `json:"file_path"`
-	Line       int    `json:"line"`
-	Char       int    `json:"char"`
-	MatchStart int    `json:"match_start,omitempty"`
-	MatchEnd   int    `json:"match_end,omitempty"`
-	Text       string `json:"text"`
-	Excluded   bool   `json:"-"`
+	FilePath   string      `json:"file_path"`
+	Line       int         `json:"line"`
+	Char       int         `json:"char"`
+	MatchStart int         `json:"match_start,omitempty"`
+	MatchEnd   int         `json:"match_end,omitempty"`
+	Matches    []MatchSpan `json:"matches,omitempty"`
+	Text       string      `json:"text"`
+	Excluded   bool        `json:"-"`
+}
+
+func (r RgResult) GetMatches() []MatchSpan {
+	if len(r.Matches) > 0 {
+		return r.Matches
+	}
+	if r.MatchEnd > r.MatchStart {
+		return []MatchSpan{{Start: r.MatchStart, End: r.MatchEnd}}
+	}
+	return nil
 }
 
 // rgLineEntry maps a buffer line number to its semantic kind.
@@ -100,6 +113,72 @@ var rgState = struct {
 	lineMap: make(map[int]rgLineEntry),
 }
 var rgMutex sync.Mutex
+
+type rgPosData struct {
+	ResultIdx int `json:"result_idx"`
+	Line      int `json:"line"`
+}
+
+var rgLastPos = rgPosData{ResultIdx: -1, Line: 3}
+
+func lastPosFilePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	dir := filepath.Join(home, ".config", "wig")
+	_ = os.MkdirAll(dir, 0755)
+	return filepath.Join(dir, "rg_last_pos.json")
+}
+
+func saveLastPosition(resultIdx, line int) {
+	rgLastPos.ResultIdx = resultIdx
+	rgLastPos.Line = line
+
+	path := lastPosFilePath()
+	if path == "" {
+		return
+	}
+	data, err := json.Marshal(rgLastPos)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, data, 0644)
+}
+
+func loadLastPosition() (int, int) {
+	if rgLastPos.ResultIdx >= 0 || rgLastPos.Line > 3 {
+		return rgLastPos.ResultIdx, rgLastPos.Line
+	}
+	path := lastPosFilePath()
+	if path == "" {
+		return -1, 3
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return -1, 3
+	}
+	var pos rgPosData
+	if err := json.Unmarshal(data, &pos); err != nil {
+		return -1, 3
+	}
+	rgLastPos = pos
+	return pos.ResultIdx, pos.Line
+}
+
+func updateCurrentPos(line int) {
+	rgMutex.Lock()
+	defer rgMutex.Unlock()
+	if entry, ok := rgState.lineMap[line]; ok && entry.kind == 2 {
+		saveLastPosition(entry.resultIdx, line)
+	} else {
+		saveLastPosition(-1, line)
+	}
+}
+
+// rgPreviousBuf remembers the buffer active before [rg] was opened so
+// pressing 'q' returns to it.
+var rgPreviousBuf *wig.Buffer
 
 // rgLoadedResults holds the full RgResult set (with match spans) most
 // recently read by LoadResults. LoadResults' public signature only
@@ -194,55 +273,66 @@ func (h *RgHighlighter) HighlightLine(lineNum int) []wig.Span {
 			Style:    wig.Color("comment"), // Green prefix
 		}}
 
-		matchStart := prefixRunes + uint16(result.MatchStart)
-		matchEnd := prefixRunes + uint16(result.MatchEnd)
-		if matchEnd > lineLen {
-			matchEnd = lineLen
-		}
-		if matchStart < prefixRunes {
-			matchStart = prefixRunes
-		}
-		if matchStart > lineLen {
-			matchStart = lineLen
-		}
-
-		// In replace mode, once a non-empty replacement has been typed,
-		// the buffer content has already been spliced by rgRefreshPreview
-		// to look like:  <prefix><before><match><replacement><after>.
-		// Draw the original match struck through and the replacement
-		// text as a bold green block immediately after it — live, with
-		// no separate preview toggle.
+		matches := result.GetMatches()
 		inPreview := rgRSP.phase == rgPhaseReplace &&
 			len(rgRSP.replacement) > 0
 
 		if inPreview {
-			if matchEnd > matchStart {
-				spans = append(spans, wig.Span{
-					StartCol: matchStart,
-					EndCol:   matchEnd,
-					Style:    rgStruckStyle(),
-				})
-			}
+			colOffset := uint16(0)
 			replLen := uint16(len(rgRSP.replacement))
-			replStart := matchEnd
-			replEnd := replStart + replLen
-			if replEnd > lineLen {
-				replEnd = lineLen
-			}
-			if replEnd > replStart {
-				spans = append(spans, wig.Span{
-					StartCol: replStart,
-					EndCol:   replEnd,
-					Style:    rgReplacementStyle(),
-				})
+			for _, m := range matches {
+				mStart := prefixRunes + uint16(m.Start) + colOffset
+				mEnd := prefixRunes + uint16(m.End) + colOffset
+				if mEnd > lineLen {
+					mEnd = lineLen
+				}
+				if mStart < prefixRunes {
+					mStart = prefixRunes
+				}
+				if mStart > lineLen {
+					mStart = lineLen
+				}
+				if mEnd > mStart {
+					spans = append(spans, wig.Span{
+						StartCol: mStart,
+						EndCol:   mEnd,
+						Style:    rgStruckStyle(),
+					})
+				}
+				replStart := mEnd
+				replEnd := replStart + replLen
+				if replEnd > lineLen {
+					replEnd = lineLen
+				}
+				if replEnd > replStart {
+					spans = append(spans, wig.Span{
+						StartCol: replStart,
+						EndCol:   replEnd,
+						Style:    rgReplacementStyle(),
+					})
+				}
+				colOffset += replLen
 			}
 		} else {
-			if matchEnd > matchStart {
-				spans = append(spans, wig.Span{
-					StartCol: matchStart,
-					EndCol:   matchEnd,
-					Style:    rgMatchStyle(),
-				})
+			for _, m := range matches {
+				mStart := prefixRunes + uint16(m.Start)
+				mEnd := prefixRunes + uint16(m.End)
+				if mEnd > lineLen {
+					mEnd = lineLen
+				}
+				if mStart < prefixRunes {
+					mStart = prefixRunes
+				}
+				if mStart > lineLen {
+					mStart = lineLen
+				}
+				if mEnd > mStart {
+					spans = append(spans, wig.Span{
+						StartCol: mStart,
+						EndCol:   mEnd,
+						Style:    rgMatchStyle(),
+					})
+				}
 			}
 		}
 		return spans
@@ -255,6 +345,12 @@ func (h *RgHighlighter) HighlightLine(lineNum int) []wig.Span {
 func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 	rgMutex.Lock()
 	defer rgMutex.Unlock()
+
+	if ctx.Buf != nil && ctx.Buf.FilePath != "[rg]" && !strings.HasPrefix(ctx.Buf.FilePath, "[rgcollect ") {
+		rgPreviousBuf = ctx.Buf
+	} else if win := ctx.Editor.ActiveWindow(); win != nil && win.Buffer() != nil && win.Buffer().FilePath != "[rg]" && !strings.HasPrefix(win.Buffer().FilePath, "[rgcollect ") {
+		rgPreviousBuf = win.Buffer()
+	}
 
 	// Build results. MatchEnd is derived from the query string when it is
 	// available (title == query for a live search); for the "saved" recall
@@ -274,23 +370,48 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 	for i, loc := range locations {
 		matchStart := loc.Char
 		matchEnd := matchStart + queryRunes
-		if useLoaded {
+		var locMatches []MatchSpan
+
+		if useLoaded && i < len(rgLoadedResults) {
 			matchStart = rgLoadedResults[i].MatchStart
 			matchEnd = rgLoadedResults[i].MatchEnd
+			locMatches = rgLoadedResults[i].GetMatches()
 		}
+
+		if len(locMatches) == 0 && matchEnd > matchStart {
+			locMatches = []MatchSpan{{Start: matchStart, End: matchEnd}}
+		}
+
 		// Strip any trailing newline/CR once, here, so every later
-		// consumer (initial render, rgRefreshPreview's browse-content
-		// branch, the preview splice) works from clean text. Leaving
-		// this untrimmed let a stray "\n" get joined into the buffer's
-		// line-join on every replace-mode refresh, spawning an extra
-		// blank line each time — compounding on repeated Tab/Esc.
+		// consumer works from clean text.
 		text := strings.TrimSuffix(strings.TrimSuffix(loc.Text, "\n"), "\r")
+
+		// If this match is on the exact same file and line as the previous result,
+		// merge the match spans into one result so we don't display duplicate lines.
+		if len(results) > 0 && results[len(results)-1].FilePath == loc.FilePath && results[len(results)-1].Line == loc.Line {
+			last := &results[len(results)-1]
+			for _, m := range locMatches {
+				exists := false
+				for _, existing := range last.Matches {
+					if existing.Start == m.Start && existing.End == m.End {
+						exists = true
+						break
+					}
+				}
+				if !exists {
+					last.Matches = append(last.Matches, m)
+				}
+			}
+			continue
+		}
+
 		results = append(results, RgResult{
 			FilePath:   loc.FilePath,
 			Line:       loc.Line,
 			Char:       loc.Char,
 			MatchStart: matchStart,
 			MatchEnd:   matchEnd,
+			Matches:    locMatches,
 			Text:       text,
 		})
 	}
@@ -317,6 +438,11 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 
 	// Title line
 	buf.Append(fmt.Sprintf("ripgrep search results for '%s' in %s", title, rootDir))
+	lineMap[lineNum] = rgLineEntry{kind: 0}
+	lineNum++
+
+	// Shortcut hint row under title so it is visible in the buffer content
+	buf.Append(rgBrowseHint)
 	lineMap[lineNum] = rgLineEntry{kind: 0}
 	lineNum++
 
@@ -356,14 +482,43 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 	// Set highlighter
 	buf.Highlighter = &RgHighlighter{Buf: buf, LineMap: lineMap}
 
+	// Determine starting cursor position: restore last saved index/position
+	// when reviewing via F11 ("saved"), or start at line 3 for new searches.
+	startLine := 3
+	if title == "saved" {
+		savedIdx, savedLine := loadLastPosition()
+		if savedIdx >= 0 {
+			found := false
+			for l, entry := range lineMap {
+				if entry.kind == 2 && entry.resultIdx == savedIdx {
+					startLine = l
+					found = true
+					break
+				}
+			}
+			if !found && savedLine >= 3 && savedLine < lineNum {
+				startLine = savedLine
+			}
+		} else if savedLine >= 3 && savedLine < lineNum {
+			startLine = savedLine
+		}
+	} else {
+		saveLastPosition(0, 3)
+	}
+	if startLine >= lineNum {
+		startLine = max(0, lineNum-1)
+	}
+
 	// Browse-mode key handler: Enter opens, Tab enters replace, Space
 	// toggles inclusion, u undoes the last apply.
 	rgInstallBrowseHandler(buf)
 
 	// Visit buffer (current window, full screen)
 	ctx.Buf = buf
-	ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: 2, Char: 0})
+	ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: startLine, Char: 0})
 	wig.SetVisitSource(buf)
+	wig.CmdCursorCenter(ctx)
+	rgRenderBrowseStatus(ctx)
 }
 
 // CmdRgEnter is the Enter handler for the [rg] grouped buffer.
@@ -383,6 +538,7 @@ func CmdRgEnter(ctx wig.Context) {
 		if entry.resultIdx >= len(rgState.results) {
 			return
 		}
+		saveLastPosition(entry.resultIdx, cur.Line)
 		result := rgState.results[entry.resultIdx]
 		targetBuf, err := ctx.Editor.OpenFile(result.FilePath)
 		if err != nil {
@@ -395,7 +551,9 @@ func CmdRgEnter(ctx wig.Context) {
 			Char: result.Char,
 		})
 		wig.CmdCursorCenter(ctx)
+		ctx.Editor.EchoMessage("")
 	case 1: // filename header
+		saveLastPosition(-1, cur.Line)
 		targetBuf, err := ctx.Editor.OpenFile(entry.filePath)
 		if err != nil {
 			ctx.Editor.EchoMessage("Cannot open: " + err.Error())
@@ -406,6 +564,7 @@ func CmdRgEnter(ctx wig.Context) {
 			Line: 0,
 			Char: 0,
 		})
+		ctx.Editor.EchoMessage("")
 	case 0: // blank/title — do nothing
 	}
 }
@@ -603,6 +762,7 @@ func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.
 		return true
 	}
 
+	saveLastPosition(entry.resultIdx, bufCur.Line)
 	result := rgState.results[entry.resultIdx]
 	targetBuf, err := ctx.Editor.OpenFile(result.FilePath)
 	if err != nil {
@@ -615,7 +775,7 @@ func visitLineGrouped(ctx wig.Context, sourceBuf *wig.Buffer, movement func(wig.
 		Line: max(result.Line-1, 0),
 		Char: result.Char,
 	})
-	ctx.Editor.EchoMessage(fmt.Sprintf("[%d/%d matches] %s", entry.resultIdx+1, len(rgState.results), strings.TrimSpace(result.Text)))
+	ctx.Editor.EchoMessage(fmt.Sprintf("[%d/%d matches] %s  ───  %s", entry.resultIdx+1, len(rgState.results), strings.TrimSpace(result.Text), rgBrowseHint))
 	wig.CmdCursorCenter(ctx)
 
 	return true
@@ -657,17 +817,23 @@ func SaveResults(locations []wig.Location) error {
 		results = make([]RgResult, len(rgState.results))
 		copy(results, rgState.results)
 	} else if len(locations) > 0 {
-		results = make([]RgResult, len(locations))
-		for i, loc := range locations {
+		results = make([]RgResult, 0, len(locations))
+		for _, loc := range locations {
 			text := strings.TrimSuffix(strings.TrimSuffix(loc.Text, "\n"), "\r")
-			results[i] = RgResult{
+			if len(results) > 0 && results[len(results)-1].FilePath == loc.FilePath && results[len(results)-1].Line == loc.Line {
+				last := &results[len(results)-1]
+				last.Matches = append(last.Matches, MatchSpan{Start: loc.Char, End: loc.Char})
+				continue
+			}
+			results = append(results, RgResult{
 				FilePath:   loc.FilePath,
 				Line:       loc.Line,
 				Char:       loc.Char,
 				MatchStart: loc.Char,
 				MatchEnd:   loc.Char,
+				Matches:    []MatchSpan{{Start: loc.Char, End: loc.Char}},
 				Text:       text,
-			}
+			})
 		}
 	} else {
 		results = make([]RgResult, len(rgState.results))
