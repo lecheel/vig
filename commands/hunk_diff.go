@@ -335,16 +335,36 @@ func (u *UiHunkDiff) close(ctx wig.Context) {
 	ctx.Editor.Redraw()
 }
 
-func (u *UiHunkDiff) down(ctx wig.Context)  { u.cur++; u.clampCursor(); ctx.Editor.Redraw() }
-func (u *UiHunkDiff) up(ctx wig.Context)    { u.cur--; u.clampCursor(); ctx.Editor.Redraw() }
-func (u *UiHunkDiff) goTop(ctx wig.Context) { u.cur = 0; u.scroll = 0; ctx.Editor.Redraw() }
+func (u *UiHunkDiff) down(ctx wig.Context) {
+	u.status = ""
+	u.cur++
+	u.clampCursor()
+	ctx.Editor.Redraw()
+}
+
+func (u *UiHunkDiff) up(ctx wig.Context) {
+	u.status = ""
+	u.cur--
+	u.clampCursor()
+	ctx.Editor.Redraw()
+}
+
+func (u *UiHunkDiff) goTop(ctx wig.Context) {
+	u.status = ""
+	u.cur = 0
+	u.scroll = 0
+	ctx.Editor.Redraw()
+}
+
 func (u *UiHunkDiff) goBottom(ctx wig.Context) {
+	u.status = ""
 	u.cur = len(u.d.Rows) - 1
 	u.clampCursor()
 	ctx.Editor.Redraw()
 }
 
 func (u *UiHunkDiff) moveBy(ctx wig.Context, n int) {
+	u.status = ""
 	u.cur += n
 	u.clampCursor()
 	ctx.Editor.Redraw()
@@ -352,6 +372,7 @@ func (u *UiHunkDiff) moveBy(ctx wig.Context, n int) {
 
 // nextHunk / prevHunk walk hunk-by-hunk, wrapping around like ]c / [c.
 func (u *UiHunkDiff) nextHunk(ctx wig.Context) {
+	u.status = ""
 	if len(u.d.Hunks) == 0 {
 		return
 	}
@@ -384,6 +405,7 @@ func (u *UiHunkDiff) nextHunk(ctx wig.Context) {
 }
 
 func (u *UiHunkDiff) prevHunk(ctx wig.Context) {
+	u.status = ""
 	if len(u.d.Hunks) == 0 {
 		return
 	}
@@ -419,6 +441,7 @@ func (u *UiHunkDiff) prevHunk(ctx wig.Context) {
 }
 
 func (u *UiHunkDiff) toggleFocus(ctx wig.Context) {
+	u.status = ""
 	if u.focus == "right" {
 		u.focus = "left"
 	} else {
@@ -980,9 +1003,9 @@ func (u *UiHunkDiff) Render(view wig.View) {
 	writeCellRow(view, 0, 0, splitX-1, leftTitle, cyanBoldStyle.Background(defaultBg))
 	writeCellRow(view, splitX+2+numWidth, 0, rightCodeWidth, "HEAD", cyanBoldStyle.Background(defaultBg))
 
-	// 3. Diff content rows (y = 1 .. vh - 3).
+	// 3. Diff content rows (y = 1 .. vh - 4).
 	rowTop := 1
-	rowBottom := vh - 3
+	rowBottom := vh - 4
 	pageSize := rowBottom - rowTop + 1
 	if pageSize < 1 {
 		pageSize = 1
@@ -1039,6 +1062,46 @@ func (u *UiHunkDiff) Render(view wig.View) {
 			} else {
 				leftBg = tcell.NewRGBColor(200, 235, 245)
 				rightBg = tcell.NewRGBColor(220, 242, 250)
+			}
+		}
+
+		if isCursorRow {
+			if isDark {
+				if isHunk {
+					if u.focus == "left" {
+						leftBg = tcell.NewRGBColor(0, 95, 120)
+						rightBg = tcell.NewRGBColor(24, 75, 90)
+					} else {
+						leftBg = tcell.NewRGBColor(24, 75, 90)
+						rightBg = tcell.NewRGBColor(0, 95, 120)
+					}
+				} else {
+					if u.focus == "left" {
+						leftBg = tcell.NewRGBColor(20, 58, 72)
+						rightBg = tcell.NewRGBColor(14, 38, 48)
+					} else {
+						leftBg = tcell.NewRGBColor(14, 38, 48)
+						rightBg = tcell.NewRGBColor(20, 58, 72)
+					}
+				}
+			} else {
+				if isHunk {
+					if u.focus == "left" {
+						leftBg = tcell.NewRGBColor(175, 220, 235)
+						rightBg = tcell.NewRGBColor(195, 230, 240)
+					} else {
+						leftBg = tcell.NewRGBColor(195, 230, 240)
+						rightBg = tcell.NewRGBColor(175, 220, 235)
+					}
+				} else {
+					if u.focus == "left" {
+						leftBg = tcell.NewRGBColor(215, 238, 245)
+						rightBg = tcell.NewRGBColor(235, 245, 248)
+					} else {
+						leftBg = tcell.NewRGBColor(235, 245, 248)
+						rightBg = tcell.NewRGBColor(215, 238, 245)
+					}
+				}
 			}
 		}
 
@@ -1111,8 +1174,8 @@ func (u *UiHunkDiff) Render(view wig.View) {
 		}
 	}
 
-	// 4. Status row (y = vh - 2).
-	statusY := vh - 2
+	// 4. Status row (y = vh - 3).
+	statusY := vh - 3
 	fillRow(view, 0, statusY, vw, statusStyle)
 
 	badgeStyle := tcell.StyleDefault.Background(tcell.ColorDarkCyan).Foreground(tcell.ColorBlack).Bold(true)
@@ -1161,8 +1224,8 @@ func (u *UiHunkDiff) Render(view wig.View) {
 		writeCellRow(view, focusX, statusY, len(focusText), focusText, focusStyle)
 	}
 
-	// 5. Keys help row (y = vh - 1).
-	helpY := vh - 1
+	// 5. Keys help row (y = vh - 2).
+	helpY := vh - 2
 	fillRow(view, 0, helpY, vw, bgStyle)
 
 	type keyHint struct {
@@ -1212,4 +1275,7 @@ func (u *UiHunkDiff) Render(view wig.View) {
 		view.SetContent(hx, helpY, " ", descStyle)
 		hx++
 	}
+
+	// 6. Clear bottom cmd/echo line (y = vh - 1).
+	fillRow(view, 0, vh-1, vw, bgStyle)
 }
