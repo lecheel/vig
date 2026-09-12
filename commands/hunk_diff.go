@@ -757,6 +757,77 @@ func fillRow(view wig.View, x, y, n int, style tcell.Style) {
 	}
 }
 
+// hunkBgFor returns the background color used to shade rows belonging to a
+// hunk, giving the change region a block visual rather than colored text
+// alone. Two colors distinguish side:
+//
+//   - deleteSide=true:  the reddish tint applied to delete rows
+//   - deleteSide=false: the greenish tint applied to insert rows
+//
+// Both panels of a hunk row share the same tint, so a row reads as a single
+// band spanning the split column. Adjacent delete/insert rows within the
+// same hunk still show the classic red/green distinction because the tint
+// changes between them.
+//
+// Resolution order, most to least preferred:
+//
+//  1. Theme key `diff.hunk.delete` / `diff.hunk.insert`, if it defines a
+//     background. Themes can opt in to a custom hunk tint here.
+//  2. The theme's own `diff.minus` / `diff.plus` background, if set. Many
+//     themes already ship diff colors with a background, and reusing it
+//     keeps the hunk block consistent with how the rest of the editor
+//     paints diffs.
+//  3. A low-weight blend of the theme's `diff.minus` / `diff.plus`
+//     foreground into the default background, so the tint tracks the
+//     palette even when the theme sets no backgrounds at all.
+//  4. ColorDefault — no shading. Only happens when the theme defines
+//     neither the hunk keys, nor a real default bg, nor a diff fg.
+//
+// The blend weight is deliberately low (3/16). Syntax foregrounds and the
+// cursor-line highlight layer on top of this background, and shouldn't be
+// drowned out by the hunk tint.
+func hunkBgFor(deleteSide bool) tcell.Color {
+	hunkKey := "diff.hunk.insert"
+	accentKey := "diff.plus"
+	if deleteSide {
+		hunkKey = "diff.hunk.delete"
+		accentKey = "diff.minus"
+	}
+
+	// 1. Explicit hunk key.
+	if s, ok := wig.FindColor(hunkKey); ok {
+		_, bg, _ := s.Decompose()
+		if bg != tcell.ColorDefault {
+			return bg
+		}
+	}
+
+	// 2. Theme's own diff.minus/diff.plus background.
+	if s, ok := wig.FindColor(accentKey); ok {
+		_, bg, _ := s.Decompose()
+		if bg != tcell.ColorDefault {
+			return bg
+		}
+	}
+
+	// 3. Blend the accent fg into the default bg.
+	_, defaultBg, _ := wig.Color("default").Decompose()
+	if defaultBg == tcell.ColorDefault {
+		return tcell.ColorDefault
+	}
+	accentFg, _, _ := wig.Color(accentKey).Decompose()
+	if accentFg == tcell.ColorDefault {
+		return tcell.ColorDefault
+	}
+	dr, dg, db := defaultBg.RGB()
+	ar, ag, ab := accentFg.RGB()
+	const w = int32(3) // out of 16 — subtle
+	nr := (dr*(16-w) + ar*w) / 16
+	ng := (dg*(16-w) + ag*w) / 16
+	nb := (db*(16-w) + ab*w) / 16
+	return tcell.NewRGBColor(nr, ng, nb)
+}
+
 // writeCellRow writes s starting at (x, y), padded/truncated to exactly n
 // visual cells. Width is tracked with runewidth so wide runes (CJK, emoji)
 // don't desync the padding from what the terminal actually draws.
@@ -904,11 +975,36 @@ func (u *UiHunkDiff) Render(view wig.View) {
 		row := u.d.Rows[rowIdx]
 		leftStyle := bgStyle
 		rightStyle := bgStyle
-		switch row.Kind {
-		case hunkDiffDelete:
-			leftStyle = wig.Color("diff.minus")
-		case hunkDiffInsert:
-			rightStyle = wig.Color("diff.plus")
+
+		// Hunk rows get a shaded background so the changed region reads
+		// as a block across the split, not just as colored text. The
+		// tint depends on the row kind (reddish for delete, greenish
+		// for insert); both panels share the same tint so the row is
+		// one continuous band even where one panel is empty padding.
+		//
+		// The content panel keeps its diff.minus / diff.plus foreground
+		// on top of the tinted background; the empty panel gets the
+		// same background with default foreground so it extends the
+		// block without looking like unrendered text.
+		hunkBg := tcell.ColorDefault
+		if row.HunkIdx >= 0 {
+			switch row.Kind {
+			case hunkDiffDelete:
+				hunkBg = hunkBgFor(true)
+				leftStyle = wig.Color("diff.minus").Background(hunkBg)
+				rightStyle = wig.Color("default").Background(hunkBg)
+			case hunkDiffInsert:
+				hunkBg = hunkBgFor(false)
+				rightStyle = wig.Color("diff.plus").Background(hunkBg)
+				leftStyle = wig.Color("default").Background(hunkBg)
+			default:
+				// Defensive: context rows always have HunkIdx == -1,
+				// but if this ever fires, shade both sides uniformly
+				// rather than letting a hunk row go unshaded.
+				hunkBg = hunkBgFor(true)
+				leftStyle = leftStyle.Background(hunkBg)
+				rightStyle = rightStyle.Background(hunkBg)
+			}
 		}
 
 		isCursorRow := rowIdx == u.cur
@@ -927,8 +1023,15 @@ func (u *UiHunkDiff) Render(view wig.View) {
 			fillRow(view, 1, y, leftInner, leftStyle)
 		}
 
-		// Separator column.
-		view.SetContent(splitX, y, "|", borderStyle)
+		// Separator column. When the row is inside a hunk, tint the
+		// separator with the same background so the band is unbroken
+		// across the split column instead of looking like two separate
+		// blocks.
+		sepStyle := borderStyle
+		if hunkBg != tcell.ColorDefault {
+			sepStyle = borderStyle.Background(hunkBg)
+		}
+		view.SetContent(splitX, y, "|", sepStyle)
 
 		// Right panel. For context rows work[i] == head[j], so the work
 		// buffer's highlighter at index LeftIdx produces correct spans
@@ -964,7 +1067,7 @@ func (u *UiHunkDiff) Render(view wig.View) {
 			hunkNum = u.d.Rows[u.cur].HunkIdx + 1
 		}
 		msg = fmt.Sprintf(
-			" Hunk %d/%d  focus:%s  [j/k] move  [g/G] top/bot  [n/N l/L ]/[] hunk  [Tab] focus  [a] apply  [A] apply-all  [d] del  [y] yank  [p] paste  [u] undo  [w] save  [q] close",
+			" Hunk %d/%d  focus:%s  [ l/L ] hunk  [Tab] focus  [a]pply  [d]el  [y]ank  [p]aste  [u]ndo  [w]save  [q]close",
 			hunkNum, len(u.d.Hunks), u.focus,
 		)
 	} else {
