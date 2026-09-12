@@ -76,20 +76,6 @@ func CloseRgViewWidget(e *wig.Editor) {
 	}
 }
 
-// Render paints the [rg] buffer's content full screen width inside a
-// rounded frame:
-//
-//   - row  0          : box top edge    ╭───╮
-//   - rows 1 .. vh-4  : buffer content  │…  │  (buffer row = cur.ScrollOffset + y - 1)
-//   - row  vh-3       : box bottom edge ╰───╯
-//   - row  vh-2       : echo message (rgRenderBrowseStatus and friends),
-//     cleared when there is no message so stale window
-//     content can never bleed through
-//   - row  vh-1       : left untouched for the underlying statusline
-//
-// If the active window's buffer is no longer the rg buffer (e.g. the user
-// opened a file with Enter or :cn), the widget paints nothing — the
-// underlying window's normal rendering is visible instead.
 // rgTruncate returns s truncated to maxLen runes, appending "..." when cut.
 // Local to this file because ui.truncate is unexported and rgcollect cannot
 // import the ui package.

@@ -294,7 +294,7 @@ func (u *GitViewPopupWidget) Render(view wig.View) {
 	view.SetContent(x+2, y, truncate(title, boxW-4), wig.Color("ui.popup.title"))
 
 	// Hint on the bottom border, replacing the box edge chars it overlaps.
-	hintStyle := wig.Color("ui.linenr")
+	hintStyle := wig.Color("git.hint")
 	hint := truncate(gitViewHint, boxW-4)
 	view.SetContent(x+2, y+boxH-1, hint, hintStyle)
 
@@ -333,7 +333,7 @@ func (u *GitViewPopupWidget) Render(view wig.View) {
 		switch it.Type {
 		case "header":
 			lineText = cursor + "── " + it.Label + " "
-			itemStyle = wig.Color("ui.linenr.selected")
+			itemStyle = wig.Color("git.header")
 		case "separator":
 			lineText = ""
 		case "empty":
@@ -341,16 +341,40 @@ func (u *GitViewPopupWidget) Render(view wig.View) {
 			itemStyle = wig.Color("comment")
 		case "file":
 			lineText = fmt.Sprintf("%s%s  %s", cursor, it.Code, it.FilePath)
+			switch it.Code {
+			case "M":
+				itemStyle = wig.Color("git.file.modified")
+			case "A":
+				itemStyle = wig.Color("git.file.added")
+			case "D":
+				itemStyle = wig.Color("git.file.deleted")
+			case "R":
+				itemStyle = wig.Color("git.file.renamed")
+			case "?":
+				itemStyle = wig.Color("git.file.untracked")
+			default:
+				itemStyle = wig.Color("git.file.last_commit")
+			}
 		case "branch":
 			lineText = cursor + it.Label
+			if it.Status == "active_branch" {
+				itemStyle = wig.Color("git.branch.active")
+			} else {
+				itemStyle = wig.Color("git.branch.idle")
+			}
 		case "stash":
 			lineText = fmt.Sprintf("%s%s: %s", cursor, it.StashRef, it.Label)
+			itemStyle = wig.Color("git.stash")
 		default:
 			lineText = cursor + it.Label
 		}
 
+		// When the row is under the cursor, keep the code/path colors and
+		// only paint the "> " marker with the selection style, so the
+		// syntax coloring stays readable on the highlighted row.
+		cursorStyle := itemStyle
 		if isActive {
-			itemStyle = wig.Color("ui.menu.selected")
+			cursorStyle = wig.Color("ui.menu.selected")
 		}
 		if lineText == "" {
 			// Clear the row so stale cells from a previous frame don't
@@ -358,6 +382,19 @@ func (u *GitViewPopupWidget) Render(view wig.View) {
 			view.SetContent(cx, row, strings.Repeat(" ", innerW), wig.Color("default"))
 			continue
 		}
-		view.SetContent(cx, row, truncate(lineText, innerW), itemStyle)
+
+		// Two-segment paint: the "> " cursor marker (or its blank
+		// placeholder) is drawn with cursorStyle, the rest of the row with
+		// itemStyle. On the active row this preserves the per-status
+		// color of the code letter and path instead of flattening them
+		// under ui.menu.selected.
+		if isActive {
+			markerW := len(cursor) // "> " or "  " — always 2 ASCII runes
+			view.SetContent(cx, row, cursor, cursorStyle)
+			rest := truncate(lineText[markerW:], innerW-markerW)
+			view.SetContent(cx+markerW, row, rest, itemStyle)
+		} else {
+			view.SetContent(cx, row, truncate(lineText, innerW), itemStyle)
+		}
 	}
 }
