@@ -8,10 +8,40 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
 )
+
+// ansiEscapeRe matches the common ANSI/VT control sequences emitted by
+// build tools and progress spinners: CSI ("\x1b[…m", "\x1b[…K", …), OSC
+// ("\x1b]…\x07" or "\x1b]…\x1b\\"), charset selection ("\x1b(B"), and the
+// simple single-char forms ("\x1b=", "\x1b>"). Stripping these before the
+// text reaches the [Messages] buffer keeps the editor screen clean — the
+// buffer/renderer have no way to interpret raw control codes, so they
+// would otherwise be painted verbatim as garbage glyphs.
+var ansiEscapeRe = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][A-Z0-9]|\x1b[=>]`)
+
+// sanitizeTerminalOutput normalizes captured subprocess output so it can
+// be safely appended to a wig buffer. It:
+//  1. normalizes CRLF to LF,
+//  2. collapses in-place progress-bar overwrites by keeping only the text
+//     after the last \r on each line (e.g. "\rCompiling...\rDone" -> "Done"),
+//  3. strips ANSI escape sequences.
+func sanitizeTerminalOutput(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	if strings.ContainsRune(s, '\r') {
+		lines := strings.Split(s, "\n")
+		for i, line := range lines {
+			if idx := strings.LastIndexByte(line, '\r'); idx >= 0 {
+				lines[i] = line[idx+1:]
+			}
+		}
+		s = strings.Join(lines, "\n")
+	}
+	return ansiEscapeRe.ReplaceAllString(s, "")
+}
 
 func CmdThemeSelect(ctx wig.Context) {
 	currentDir := ctx.Editor.RuntimeDir("themes")
@@ -888,24 +918,88 @@ func CmdSaveFileWithFeedback(ctx wig.Context) {
 	}
 }
 
+// CmdMakeBuild formats+saves the active buffer, then runs `make build`
+// to compile the editor *without* launching it.
+//
+// Why `build` and not `run`/`build-run`:
+//
+// The Makefile defines three relevant targets:
+//
+//	run:        go run cmd/main.go   > /tmp/wig.panic.txt 2>&1
+//	build:      go build …           -o ~/go/bin/wig
+//	build-run:  build; wig           > /tmp/wig.panic.txt 2>&1
+//
+// `run` and `build-run` both spawn a *new wig process*. That's the
+// intended dev loop when invoked from a real shell, but it is
+// fundamentally wrong when invoked from inside wig via F5:
+//
+//   - The new child is itself a tcell application, so the user ends up
+//     staring at a nested second editor ("recursive open wig editor").
+//
+//   - Both targets redirect stdout/stderr to /tmp/wig.panic.txt. A
+//     child tcell app with its stdout pointing at a file cannot init
+//     correctly — it either fails or falls back to a dumb terminal and
+//     emits raw CSI/OSC bytes, which then get rendered as literal
+//     glyphs wherever they land. That is the "garbled screen" seen on
+//     the earlier `cmd.CombinedOutput()`-based implementation, and
+//     Suspend/Resume alone cannot rescue it because the redirect is
+//     happening *inside* make, downstream of us.
+//
+// Compiling in place avoids both problems: it's non-recursive, it needs
+// no tty handoff, and it produces a real signal (compile errors) the
+// user can act on. To pick up the new binary they exit and restart wig,
+// which is standard for any editor whose own source it is editing.
+//
+// Output is routed through sanitizeTerminalOutput so that any ANSI
+// sequences that `go build` or a toolchain wrapper still emits are
+// stripped before reaching the [Messages] buffer.
 func CmdMakeBuild(ctx wig.Context) {
 	CmdFormatBufferAndSave(ctx)
-	cmd := exec.Command("make", "run")
+
+	root, _ := ctx.Editor.Projects.FindRoot(ctx.Buf)
+
+	cmd := exec.Command("make", "build")
+	cmd.Stdin = nil // compile step: never read from the editor's tty
+	if root != "" {
+		cmd.Dir = root
+	}
+
 	stdout, err := cmd.CombinedOutput()
+	std := sanitizeTerminalOutput(string(stdout))
+
 	if err != nil {
-		ctx.Editor.LogMessage(err.Error())
-		ctx.Editor.LogMessage(string(stdout))
+		ctx.Editor.LogMessage("make build: " + err.Error())
+		if strings.TrimSpace(std) != "" {
+			ctx.Editor.LogMessage(std)
+		}
 		mbuf := ctx.Editor.BufferFindByFilePath("[Messages]", true)
 		ctx.Editor.EnsureBufferIsVisible(mbuf)
+		ctx.Editor.EchoMessage("build failed — see [Messages]")
 		return
 	}
+
 	ctx.Editor.EchoMessage("[build ok]")
 }
 
+// CmdMakeTest runs `make test` and captures its output into the
+// [make test] buffer. Unlike CmdMakeBuild, the test target is expected to
+// be non-interactive (go test, linters, etc.), so capturing through pipes
+// is safe and lets us inspect the output inside the editor.
+//
+// Output is still routed through sanitizeTerminalOutput to strip ANSI/CR
+// noise (progress bars, colored diffs) that would otherwise be rendered
+// as literal escape bytes in the buffer.
 func CmdMakeTest(ctx wig.Context) {
+	root, _ := ctx.Editor.Projects.FindRoot(ctx.Buf)
+
 	cmd := exec.Command("make", "test")
+	cmd.Stdin = nil // make test must not read from the editor's tty
+	if root != "" {
+		cmd.Dir = root
+	}
+
 	stdout, err := cmd.CombinedOutput()
-	std := string(stdout)
+	std := sanitizeTerminalOutput(string(stdout))
 	mbuf := ctx.Editor.BufferFindByFilePath("[make test]", true)
 	if err != nil || strings.Contains(std, "leak") {
 
