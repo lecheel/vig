@@ -164,6 +164,7 @@ type UiHunkDiff struct {
 	cur    int
 	scroll int
 	focus  string // "left" or "right"
+	ratio  string // "5:5", "9:1", or "1:9"
 	status string
 }
 
@@ -261,6 +262,7 @@ func CmdHunkDiffOpen(ctx wig.Context) {
 		buf:   ctx.Buf,
 		head:  head,
 		focus: "left",
+		ratio: "5:5",
 	}
 	u.refresh()
 	// Start on first hunk.
@@ -297,9 +299,11 @@ func CmdHunkDiffOpen(ctx wig.Context) {
 			"[": u.prevHunk,
 
 			"Tab": u.toggleFocus,
+			"F5":  u.toggleRatioLeft,
+			"F6":  u.toggleRatioRight,
 
-			"a": u.applyHunk,
-			"A": u.applyAll,
+			"a": u.putHunk,
+			"A": u.pullHunk,
 			"d": u.deleteLine,
 			"y": u.yank,
 			"p": u.paste,
@@ -450,6 +454,28 @@ func (u *UiHunkDiff) toggleFocus(ctx wig.Context) {
 	ctx.Editor.Redraw()
 }
 
+func (u *UiHunkDiff) toggleRatioLeft(ctx wig.Context) {
+	if u.ratio == "9:1" {
+		u.ratio = "5:5"
+		u.status = "Split 5:5"
+	} else {
+		u.ratio = "9:1"
+		u.status = "Split 9:1"
+	}
+	ctx.Editor.Redraw()
+}
+
+func (u *UiHunkDiff) toggleRatioRight(ctx wig.Context) {
+	if u.ratio == "1:9" {
+		u.ratio = "5:5"
+		u.status = "Split 5:5"
+	} else {
+		u.ratio = "1:9"
+		u.status = "Split 1:9"
+	}
+	ctx.Editor.Redraw()
+}
+
 func (u *UiHunkDiff) yank(ctx wig.Context) {
 	if u.d == nil || u.cur < 0 || u.cur >= len(u.d.Rows) {
 		return
@@ -583,12 +609,12 @@ func (u *UiHunkDiff) deleteLine(ctx wig.Context) {
 	ctx.Editor.Redraw()
 }
 
-func (u *UiHunkDiff) applyHunk(ctx wig.Context) {
+func (u *UiHunkDiff) applyHeadToWork(ctx wig.Context) bool {
 	h, ok := u.currentHunk()
 	if !ok {
 		u.status = "Cursor is not on a hunk"
 		ctx.Editor.Redraw()
-		return
+		return false
 	}
 	work := u.workLines()
 	leftStart := h.LeftFrom - 1
@@ -615,19 +641,33 @@ func (u *UiHunkDiff) applyHunk(ctx wig.Context) {
 		newLines = []string{""}
 	}
 	u.setBufferLines(ctx, newLines)
-	u.status = "Applied hunk"
-	ctx.Editor.Redraw()
+	return true
 }
 
-func (u *UiHunkDiff) applyAll(ctx wig.Context) {
-	if len(u.d.Hunks) == 0 {
-		u.status = "No hunks to apply"
+// putHunk ('a') puts the current hunk to the opposite side.
+func (u *UiHunkDiff) putHunk(ctx wig.Context) {
+	if u.focus == "left" {
+		u.status = "Cannot put to HEAD (read-only)"
 		ctx.Editor.Redraw()
 		return
 	}
-	u.setBufferLines(ctx, append([]string(nil), u.head...))
-	u.status = "Applied all hunks"
-	ctx.Editor.Redraw()
+	if u.applyHeadToWork(ctx) {
+		u.status = "Put hunk to Working"
+		ctx.Editor.Redraw()
+	}
+}
+
+// pullHunk ('A') pulls the current hunk from the opposite side.
+func (u *UiHunkDiff) pullHunk(ctx wig.Context) {
+	if u.focus == "right" {
+		u.status = "Cannot pull into HEAD (read-only)"
+		ctx.Editor.Redraw()
+		return
+	}
+	if u.applyHeadToWork(ctx) {
+		u.status = "Pulled hunk from HEAD"
+		ctx.Editor.Redraw()
+	}
 }
 
 func (u *UiHunkDiff) undo(ctx wig.Context) {
@@ -980,7 +1020,21 @@ func (u *UiHunkDiff) Render(view wig.View) {
 		numWidth = 5
 	}
 
+	ratioStr := u.ratio
+	if ratioStr == "" {
+		ratioStr = "5:5"
+	}
+
 	splitX := vw / 2
+	switch ratioStr {
+	case "9:1":
+		splitX = (vw * 9) / 10
+	case "1:9":
+		splitX = (vw * 1) / 10
+	default:
+		splitX = vw / 2
+	}
+
 	if splitX < numWidth+10 {
 		splitX = numWidth + 10
 	}
@@ -1214,9 +1268,9 @@ func (u *UiHunkDiff) Render(view wig.View) {
 	}
 	writeCellRow(view, 6, statusY, vw-6, hunkText, statusStyle)
 
-	focusText := "Focus: Working (Left) "
+	focusText := fmt.Sprintf("[%s] Focus: Working (Left) ", ratioStr)
 	if u.focus == "right" {
-		focusText = "Focus: HEAD (Right) "
+		focusText = fmt.Sprintf("[%s] Focus: HEAD (Right) ", ratioStr)
 	}
 	focusX := vw - len(focusText) - 1
 	if focusX > 35 {
@@ -1232,9 +1286,21 @@ func (u *UiHunkDiff) Render(view wig.View) {
 		key  string
 		desc string
 	}
+	f5Target := "9:1"
+	if ratioStr == "9:1" {
+		f5Target = "5:5"
+	}
+	f6Target := "1:9"
+	if ratioStr == "1:9" {
+		f6Target = "5:5"
+	}
+
 	hints := []keyHint{
 		{"Tab", "Switch"},
-		{"a", "Apply"},
+		{"F5", f5Target},
+		{"F6", f6Target},
+		{"a", "Put"},
+		{"A", "Pull"},
 		{"u", "Undo"},
 		{"y", "Yank"},
 		{"p", "Paste"},
