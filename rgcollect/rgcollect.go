@@ -513,11 +513,22 @@ func InitGrouped(ctx wig.Context, title string, locations []wig.Location) {
 	// toggles inclusion, u undoes the last apply.
 	rgInstallBrowseHandler(buf)
 
-	// Visit buffer (current window, full screen)
+	// Still visit the [rg] buffer in the active window: the existing rg
+	// key handlers resolve the cursor via wig.ContextCursorGet(ctx), which
+	// uses ctx.Buf — so ctx.Buf must be the rg buffer for j/k, Tab, Space
+	// etc. to operate on the right cursor. The RgViewWidget paints over
+	// the window's own rendering of this buffer, so the line-number /
+	// git-sign gutter is never actually visible.
 	ctx.Buf = buf
 	ctx.Editor.ActiveWindow().VisitBuffer(ctx, wig.Cursor{Line: startLine, Char: 0})
 	wig.SetVisitSource(buf)
 	wig.CmdCursorCenter(ctx)
+
+	// 100%-width overlay, leaving the echo-message row and statusline
+	// visible at the bottom. Replaces any previous RgViewWidget (e.g.
+	// when re-invoking F11 with an existing [rg] buffer).
+	InitRgViewWidget(ctx.Editor, buf)
+
 	rgRenderBrowseStatus(ctx)
 }
 
